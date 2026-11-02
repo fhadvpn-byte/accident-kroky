@@ -84,19 +84,17 @@ def _arabic_font(size):
 
 def _project_logo_path():
     root = Path(__file__).resolve().parent
-    for name in ("logo.png", "logo.jpg", "logo.jpeg", "logo.webp"):
+    for name in ("logo.png", "traffic_logo.png", "logo.jpg", "logo.jpeg", "traffic_logo.jpg", "traffic_logo.jpeg", "logo.webp"):
         candidate = root / name
         if candidate.is_file():
             return candidate
     return None
 
-def _open_logo_image(uploaded):
-    if uploaded is not None:
-        return Image.open(io.BytesIO(uploaded.getvalue())).convert("RGBA")
+def _open_fixed_logo():
     path = _project_logo_path()
-    if path is not None:
-        return Image.open(path).convert("RGBA")
-    return None
+    if path is None:
+        return None
+    return Image.open(path).convert("RGBA")
 
 def _save_upload_once(uploaded):
     try:
@@ -910,10 +908,6 @@ with st.sidebar:
         st.header("⚙️ الإعدادات الثابتة للقسم")
         dept_region = st.text_input("إدارة مرور منطقة", "إدارة مرور منطقة جازان")
         dept_branch = st.text_input("القسم / الشعبة", "قسم مرور محافظة العارضة")
-        logo_file = st.file_uploader("شعار الأمن العام / المرور (اختياري)", type=["png", "jpg", "jpeg"])
-        _resolved_logo = _open_logo_image(logo_file)
-        if _resolved_logo is not None:
-            st.image(_resolved_logo, caption="شعار القسم المستخدم في التقرير", width=140)
         if "groq_api_key_input" not in st.session_state:
             st.session_state.groq_api_key_input = os.getenv("GROQ_API_KEY") or ""
         st.text_input("مفتاح Groq", type="password", key="groq_api_key_input")
@@ -925,6 +919,7 @@ with st.sidebar:
         officer_2_rank = st.text_input("رتبة مشرف الحوادث", "رقيب أول")
         manager_name = st.text_input("اسم مدير القسم / الشعبة", "")
         manager_rank = st.text_input("رتبة المدير", "مقدم")
+_resolved_logo = _open_fixed_logo()
 _hero_logo_src = ""
 if _resolved_logo is not None:
     _hero_buf = io.BytesIO()
@@ -1653,7 +1648,8 @@ with tab5:
         f'<img src="data:image/png;base64,{sketch_b64}" style="max-width:100%; height:440px; border:1px solid #ccc;">'
         if sketch_b64 else ""
     )
-    logo_b64 = img_to_b64(_resolved_logo) if _resolved_logo is not None else ""
+    _fixed_logo_path = _project_logo_path()
+    logo_b64 = img_to_b64(Image.open(_fixed_logo_path).convert("RGBA")) if _fixed_logo_path is not None else ""
     def build_header():
         logo_html = f'<img src="data:image/png;base64,{logo_b64}" alt="شعار المرور">' if logo_b64 else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
         return f"""
