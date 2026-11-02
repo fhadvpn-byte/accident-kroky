@@ -1,1 +1,1 @@
-http://localhost:8501/
+https://accident-kroky.streamlit.app](https://accident-kroky.streamlit.app
