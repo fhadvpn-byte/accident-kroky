@@ -84,7 +84,7 @@ def _arabic_font(size):
 
 def _project_logo_path():
     root = Path(__file__).resolve().parent
-    for name in ("logo.png", "traffic_logo.png", "logo.jpg", "logo.jpeg", "traffic_logo.jpg", "traffic_logo.jpeg", "logo.webp"):
+    for name in ("traffic_logo.png", "logo.png", "traffic_logo.jpg", "logo.jpg", "logo.jpeg", "traffic_logo.jpeg", "logo.webp"):
         candidate = root / name
         if candidate.is_file():
             return candidate
@@ -1649,8 +1649,8 @@ with tab5:
         if sketch_b64 else ""
     )
     logo_b64 = ""
-    _fixed_logo_path = _project_logo_path()
-    if _fixed_logo_path is not None:
+    _fixed_logo_path = Path(__file__).resolve().parent / "traffic_logo.png"
+    if _fixed_logo_path.is_file():
         try:
             logo_b64 = img_to_b64(Image.open(_fixed_logo_path).convert("RGBA"))
         except OSError:
@@ -1663,13 +1663,13 @@ with tab5:
             <div class="header-right">
                 المملكة العربية السعودية<br>وزارة الداخلية<br>الأمن العام<br>الإدارة العامة للمرور<br>{dept_region}<br>{dept_branch}
             </div>
-            <div class="header-center">{logo_html}</div>
-            <div class="header-left">
+            <div class="header-center">
                 الرقم: ...........................<br>
                 التاريخ: ..........................<br>
                 المشفوعات: ....................<br>
                 الموضوع: .......................
             </div>
+            <div class="header-logo">{logo_html}</div>
         </div>
         """
     parties_rows = ""
@@ -1742,14 +1742,17 @@ with tab5:
             display: flex; align-items: center; justify-content: center; margin: auto;
             font-weight: bold; color: #1b4332; line-height: 1.25; text-align: center;
         }}
-        .header-center img {{ height: 85px; }}
+        .header-logo img {{ height: 92px; width: auto; max-width: 100%; object-fit: contain; }}
         .header-Title {{ text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 6px; }}
         .header-box {{
             display: flex; justify-content: space-between; align-items: center;
             border-bottom: 3px double #1b4332; padding-bottom: 10px; margin-bottom: 18px; font-size: 14px; font-weight: bold; line-height: 1.6;
         }}
-        .header-right, .header-left {{ width: 35%; }}
-        .header-center {{ width: 25%; text-align: center; }}
+        .header-right {{ width: 42%; text-align: right; }}
+        .header-center {{ width: 34%; text-align: center; }}
+        .header-logo {{
+            width: 22%; display: flex; justify-content: flex-end; align-items: center;
+        }}
         .section-badge {{
             background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
             padding: 5px 25px; font-weight: bold; font-size: 17px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
