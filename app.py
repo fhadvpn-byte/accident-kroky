@@ -604,7 +604,7 @@ try:
     SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
     pass
-st.set_page_config(page_title="نظام بَيِّنَة - تقارير الحوادث المرورية", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="نظام بينة", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
 <style>
 .main .block-container {
