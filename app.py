@@ -82,6 +82,22 @@ def _arabic_font(size):
                 continue
     return ImageFont.load_default()
 
+def _project_logo_path():
+    root = Path(__file__).resolve().parent
+    for name in ("logo.png", "logo.jpg", "logo.jpeg", "logo.webp"):
+        candidate = root / name
+        if candidate.is_file():
+            return candidate
+    return None
+
+def _open_logo_image(uploaded):
+    if uploaded is not None:
+        return Image.open(io.BytesIO(uploaded.getvalue())).convert("RGBA")
+    path = _project_logo_path()
+    if path is not None:
+        return Image.open(path).convert("RGBA")
+    return None
+
 def _save_upload_once(uploaded):
     try:
         SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
@@ -895,6 +911,9 @@ with st.sidebar:
         dept_region = st.text_input("إدارة مرور منطقة", "إدارة مرور منطقة جازان")
         dept_branch = st.text_input("القسم / الشعبة", "قسم مرور محافظة العارضة")
         logo_file = st.file_uploader("شعار الأمن العام / المرور (اختياري)", type=["png", "jpg", "jpeg"])
+        _resolved_logo = _open_logo_image(logo_file)
+        if _resolved_logo is not None:
+            st.image(_resolved_logo, caption="شعار القسم المستخدم في التقرير", width=140)
         if "groq_api_key_input" not in st.session_state:
             st.session_state.groq_api_key_input = os.getenv("GROQ_API_KEY") or ""
         st.text_input("مفتاح Groq", type="password", key="groq_api_key_input")
@@ -907,11 +926,10 @@ with st.sidebar:
         manager_name = st.text_input("اسم مدير القسم / الشعبة", "")
         manager_rank = st.text_input("رتبة المدير", "مقدم")
 _hero_logo_src = ""
-if logo_file is not None:
-    _logo_raw = logo_file.getvalue()
-    logo_file.seek(0)
-    _logo_mime = logo_file.type if logo_file.type in {"image/png", "image/jpeg"} else "image/png"
-    _hero_logo_src = f"data:{_logo_mime};base64,{base64.b64encode(_logo_raw).decode()}"
+if _resolved_logo is not None:
+    _hero_buf = io.BytesIO()
+    _resolved_logo.save(_hero_buf, format="PNG")
+    _hero_logo_src = "data:image/png;base64," + base64.b64encode(_hero_buf.getvalue()).decode()
 if _hero_logo_src:
     _hero_ring = f'<div class="bayyinah-logo-ring"><img src="{_hero_logo_src}" alt="شعار المرور"/></div>'
 else:
@@ -1635,10 +1653,7 @@ with tab5:
         f'<img src="data:image/png;base64,{sketch_b64}" style="max-width:100%; height:440px; border:1px solid #ccc;">'
         if sketch_b64 else ""
     )
-    logo_b64 = ""
-    if logo_file:
-        logo_file.seek(0)
-        logo_b64 = img_to_b64(Image.open(logo_file))
+    logo_b64 = img_to_b64(_resolved_logo) if _resolved_logo is not None else ""
     def build_header():
         logo_html = f'<img src="data:image/png;base64,{logo_b64}" alt="شعار المرور">' if logo_b64 else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
         return f"""
