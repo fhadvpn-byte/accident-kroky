@@ -823,17 +823,41 @@ st.markdown("""
         html, body,
         [data-testid="stAppViewContainer"],
         [data-testid="stMain"],
-        .main {
+        .main,
+        .block-container,
+        .main .block-container {
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            transform: none !important;
             overflow-x: hidden !important;
-            max-width: 100vw !important;
+            box-sizing: border-box !important;
         }
         .main .block-container {
-            max-width: 100vw !important;
-            width: 100vw !important;
             padding-left: 0.5rem !important;
             padding-right: 0.5rem !important;
             padding-top: 2rem !important;
-            box-sizing: border-box !important;
+        }
+        [data-testid="stSidebar"][aria-expanded="false"],
+        [data-testid="stSidebar"][data-collapsed="true"] {
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            transform: none !important;
+            overflow: hidden !important;
+        }
+        [data-testid="stSidebar"][data-collapsed="true"] [data-testid="stSidebarResizeHandle"] {
+            display: none !important;
+            width: 0 !important;
+            background: none !important;
+            box-shadow: none !important;
         }
         iframe {
             width: 100% !important;
@@ -1832,3 +1856,21 @@ with tab5:
         st.info("💡 بعد تحميل الملف وفتحه، اضغط على زر (طباعة التقرير الرسمي أو حفظه كـ PDF) في أعلى الصفحة.")
     st.subheader("معاينة حية للتقرير قبل الطباعة:")
     st.components.v1.html(full_report_html, height=850, scrolling=True)
+st.markdown("""
+<style>
+@media screen and (max-width: 768px) {
+  html body section.stSidebar[data-testid="stSidebar"][data-collapsed="true"],
+  html body section[data-testid="stSidebar"][aria-expanded="false"] {
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    overflow: hidden !important;
+  }
+}
+</style>
+""", unsafe_allow_html=True)
