@@ -605,34 +605,6 @@ try:
 except OSError:
     pass
 st.set_page_config(page_title="نظام بينة", layout="wide", initial_sidebar_state="collapsed")
-st.markdown("""
-<style>
-html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
-    overflow-x: hidden !important;
-    max-width: 100vw !important;
-}
-@media (max-width: 768px) {
-    .main .block-container {
-        padding-left: 0.5rem !important;
-        padding-right: 0.5rem !important;
-        padding-top: 2rem !important;
-        max-width: 100% !important;
-    }
-    h1 { font-size: 1.4rem !important; }
-    h2 { font-size: 1.2rem !important; }
-    h3 { font-size: 1.05rem !important; }
-    iframe, canvas, .stHtml {
-        max-width: 100% !important;
-        box-sizing: border-box !important;
-    }
-    [data-testid="stDataFrame"], [data-testid="stDataEditor"], table {
-        width: 100% !important;
-        overflow-x: auto !important;
-        display: block !important;
-    }
-}
-</style>
-""", unsafe_allow_html=True)
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
 st.markdown("""
 <style>
@@ -847,6 +819,35 @@ st.markdown("""
         border-radius: 14px;
         border: 1px solid rgba(0, 242, 254, 0.35) !important;
     }
+    @media screen and (max-width: 768px) {
+        html, body,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        .main {
+            overflow-x: hidden !important;
+            max-width: 100vw !important;
+        }
+        .main .block-container {
+            max-width: 100vw !important;
+            width: 100vw !important;
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+            padding-top: 2rem !important;
+            box-sizing: border-box !important;
+        }
+        iframe {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        .stTabs [data-baseweb="tab-list"],
+        .stTabs [role="tablist"] {
+            flex-wrap: wrap !important;
+        }
+        h1 { font-size: 1.3rem !important; }
+        h2 { font-size: 1.1rem !important; }
+        h3 { font-size: 1rem !important; }
+    }
 </style>
 """, unsafe_allow_html=True)
 if 'parties' not in st.session_state:
@@ -1024,18 +1025,22 @@ with tab4:
 <style>
   * { box-sizing: border-box; }
   body { margin: 0; background: #0a192f; color: #e2eafc; font-family: Tajawal, sans-serif; }
-  .editor { background: #0b1220; border: 1px solid rgba(43, 147, 72, 0.65); border-radius: 14px; overflow: visible; box-shadow: 0 0 16px rgba(0, 242, 254, 0.18); }
+  html, body { overflow-x: hidden; max-width: 100%; }
+  .editor { background: #0b1220; border: 1px solid rgba(43, 147, 72, 0.65); border-radius: 14px; overflow: hidden; max-width: 100%; box-shadow: 0 0 16px rgba(0, 242, 254, 0.18); }
   header { background: #2b9348; color: #fff; display: flex; gap: 8px; align-items: center; padding: 8px 12px; flex-wrap: wrap; }
   header strong { margin-left: auto; font-size: 16px; color: #fff; }
   header button { background: #ffffff; color: #14301c; border: 0; border-radius: 8px; padding: 6px 10px; font-size: 16px; cursor: pointer; font-family: inherit; font-weight: 700; }
   header button:hover { transform: scale(1.06); }
   .stage { display: flex; justify-content: center; padding: 12px 8px 4px; background: #0b1220; }
-  .canvas-wrap { background: #111; border: 1px solid #2b9348; border-radius: 8px; width: 600px; height: 550px; min-height: 550px; overflow: visible; }
+  .canvas-wrap { background: #111; border: 1px solid #2b9348; border-radius: 8px; width: 600px; height: 550px; max-width: 100%; overflow: hidden; }
   .canvas-wrap .canvas-container,
-  .canvas-wrap canvas { display: block !important; visibility: visible !important; width: 600px !important; height: 550px !important; max-height: none !important; opacity: 1 !important; }
+  .canvas-wrap canvas { display: block !important; visibility: visible !important; opacity: 1 !important; max-width: 100%; }
   .label { margin: 6px 12px 2px; color: #e2eafc; font-size: 13px; font-weight: 700; }
-  .carousel, .palette { display: flex; gap: 8px; overflow-x: auto; padding: 4px 12px 8px; }
-  .carousel button, .palette button { background: #f8f9fa; color: #0a192f; border: 2px solid #2b9348; border-radius: 12px; padding: 8px 12px; cursor: pointer; white-space: nowrap; font-family: inherit; font-weight: 700; transition: transform 0.2s ease; }
+  .carousel, .palette { display: flex; flex-wrap: wrap; gap: 5px; overflow: visible; padding: 4px 8px 8px; }
+  .carousel button, .palette button { background: #f8f9fa; color: #0a192f; border: 2px solid #2b9348; border-radius: 12px; padding: 8px 12px; cursor: pointer; font-family: inherit; font-weight: 700; transition: transform 0.2s ease; }
+  @media (max-width: 768px) {
+    .carousel button, .palette button { padding: 6px 8px; font-size: 12px; }
+  }
   .carousel button:hover, .palette button:hover { transform: scale(1.05); }
   .carousel button.active { background: #2b9348; color: #fff; border-color: #2b9348; }
   #adopt { display: block; width: calc(100% - 24px); margin: 6px 12px 12px; background: #2b9348; color: #fff; border: 0; border-radius: 10px; padding: 12px; font-size: 18px; font-weight: 700; cursor: pointer; font-family: inherit; }
@@ -1459,6 +1464,38 @@ function boot() {
   };
   document.getElementById("adopt").onclick = adopt;
   applyRoad("t");
+  fitBoard();
+  window.addEventListener("resize", fitBoard);
+}
+function fitBoard() {
+  if (!canvas) return;
+  const viewW = window.innerWidth || document.documentElement.clientWidth || 600;
+  const wrap = document.querySelector(".canvas-wrap");
+  if (viewW >= 768) {
+    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
+    canvas.setWidth(600);
+    canvas.setHeight(550);
+    if (wrap) {
+      wrap.style.width = "600px";
+      wrap.style.height = "550px";
+    }
+  } else {
+    const avail = Math.max(220, viewW - 24);
+    const scale = Math.min(1, avail / 600);
+    const w = Math.round(600 * scale);
+    const h = Math.round(550 * scale);
+    canvas.setViewportTransform([scale, 0, 0, scale, 0, 0]);
+    canvas.setWidth(w);
+    canvas.setHeight(h);
+    if (wrap) {
+      wrap.style.width = w + "px";
+      wrap.style.height = h + "px";
+      wrap.style.minHeight = "0";
+    }
+  }
+  canvas.allowTouchScrolling = false;
+  canvas.calcOffset();
+  canvas.requestRenderAll();
 }
 if (window.fabric) boot();
 else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabric.js</p>");
@@ -1632,6 +1669,21 @@ with tab5:
             padding: 15mm 18mm; box-sizing: border-box; position: relative;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
         }}
+        @media screen and (max-width: 768px) {{
+            body {{ padding: 8px; }}
+            .page {{
+                width: 100% !important;
+                min-width: unset !important;
+                padding: 10px !important;
+                box-sizing: border-box !important;
+            }}
+            table {{
+                width: 100% !important;
+                table-layout: fixed;
+                word-wrap: break-word;
+            }}
+            th, td {{ word-wrap: break-word; overflow-wrap: break-word; }}
+        }}
         .photo-annex {{ page-break-before: always; }}
         .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; }}
         .photo-card {{ width: 48%; margin-bottom: 18px; text-align: center; }}
@@ -1671,7 +1723,7 @@ with tab5:
         }}
         @media print {{
             body {{ background: white; padding: 0; }}
-            .page {{ box-shadow: none; margin: 0; width: 100%; }}
+            .page {{ box-shadow: none; margin: 0; width: 210mm; min-height: 297mm; }}
             .no-print {{ display: none !important; }}
         }}
     </style>
