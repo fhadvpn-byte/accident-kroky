@@ -605,6 +605,12 @@ try:
 except OSError:
     pass
 st.set_page_config(page_title="نظام بَيِّنَة - تقارير الحوادث المرورية", layout="wide", initial_sidebar_state="expanded")
+st.markdown("""
+<style>
+.stDataFrame, table { width: 100% !important; }
+.element-container { width: 100% !important; }
+</style>
+""", unsafe_allow_html=True)
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
 st.markdown("""
 <style>
