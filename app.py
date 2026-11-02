@@ -1663,13 +1663,13 @@ with tab5:
             <div class="header-right">
                 المملكة العربية السعودية<br>وزارة الداخلية<br>الأمن العام<br>الإدارة العامة للمرور<br>{dept_region}<br>{dept_branch}
             </div>
+            <div class="header-logo">{logo_html}</div>
             <div class="header-center">
                 الرقم: ...........................<br>
                 التاريخ: ..........................<br>
                 المشفوعات: ....................<br>
                 الموضوع: .......................
             </div>
-            <div class="header-logo">{logo_html}</div>
         </div>
         """
     parties_rows = ""
@@ -1708,26 +1708,22 @@ with tab5:
     <meta charset="UTF-8">
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700&display=swap');
-        body {{ font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0; padding: 20px; }}
+        html, body {{ height: 100%; margin: 0; }}
+        body {{
+            font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0;
+            display: flex; flex-direction: column; overflow: hidden;
+        }}
+        .report-viewport {{
+            flex: 1 1 auto; width: 100%; min-width: 0;
+            overflow: auto; -webkit-overflow-scrolling: touch;
+        }}
+        .report-sheet {{
+            width: 210mm; min-width: 750px; margin: 12px auto 20px auto;
+        }}
         .page {{
-            background: white; width: 210mm; min-height: 297mm; margin: 0 auto 20px auto;
+            background: white; width: 210mm; min-width: 750px; min-height: 297mm; margin: 0 auto 20px auto;
             padding: 15mm 18mm; box-sizing: border-box; position: relative;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
-        }}
-        @media screen and (max-width: 768px) {{
-            body {{ padding: 8px; }}
-            .page {{
-                width: 100% !important;
-                min-width: unset !important;
-                padding: 10px !important;
-                box-sizing: border-box !important;
-            }}
-            table {{
-                width: 100% !important;
-                table-layout: fixed;
-                word-wrap: break-word;
-            }}
-            th, td {{ word-wrap: break-word; overflow-wrap: break-word; }}
         }}
         .photo-annex {{ page-break-before: always; }}
         .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; }}
@@ -1742,16 +1738,21 @@ with tab5:
             display: flex; align-items: center; justify-content: center; margin: auto;
             font-weight: bold; color: #1b4332; line-height: 1.25; text-align: center;
         }}
-        .header-logo img {{ height: 110px; width: auto; max-width: 120px; object-fit: contain; }}
+        .header-logo img {{
+            height: 110px; width: auto; max-width: 120px; object-fit: contain;
+            display: block; margin: 0 auto;
+        }}
         .header-Title {{ text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 6px; }}
         .header-box {{
-            display: flex; justify-content: space-between; align-items: center;
-            border-bottom: 3px double #1b4332; padding-bottom: 10px; margin-bottom: 18px; font-size: 14px; font-weight: bold; line-height: 1.6;
+            position: relative; display: flex; justify-content: space-between; align-items: center;
+            min-height: 128px; border-bottom: 3px double #1b4332; padding-bottom: 10px;
+            margin-bottom: 18px; font-size: 14px; font-weight: bold; line-height: 1.6;
         }}
-        .header-right {{ width: 42%; text-align: right; }}
-        .header-center {{ width: 34%; text-align: center; }}
+        .header-right {{ width: 36%; text-align: right; }}
+        .header-center {{ width: 36%; text-align: center; }}
         .header-logo {{
-            width: 22%; display: flex; justify-content: flex-end; align-items: center;
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            display: flex; justify-content: center; align-items: center; margin: 0;
         }}
         .section-badge {{
             background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
@@ -1770,18 +1771,22 @@ with tab5:
             border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 16px; display: inline-block; margin-bottom: 25px;
         }}
         @media print {{
-            body {{ background: white; padding: 0; }}
-            .page {{ box-shadow: none; margin: 0; width: 210mm; min-height: 297mm; }}
+            html, body {{ height: auto; display: block; overflow: visible; background: white; padding: 0; }}
+            .report-viewport {{ overflow: visible; height: auto; }}
+            .report-sheet {{ width: auto; min-width: 0; margin: 0; }}
+            .page {{ box-shadow: none; margin: 0; width: 210mm; min-width: 0; min-height: 297mm; }}
             .no-print {{ display: none !important; }}
         }}
     </style>
     </head>
     <body>
-        <div class="no-print" style="text-align:center; margin-bottom:20px;">
+        <div class="no-print" style="text-align:center; margin:0; padding:12px;">
             <button onclick="window.print()" style="background:linear-gradient(90deg,#0e7490,#2563eb); color:white; font-family:'Tajawal'; font-size:18px; font-weight:bold; padding:12px 35px; border:1px solid #4facfe; border-radius:10px; cursor:pointer; box-shadow:0 0 14px rgba(0,242,254,0.45);">
                 🖨️ طباعة التقرير الرسمي أو حفظه كـ PDF
             </button>
         </div>
+        <div class="report-viewport">
+        <div class="report-sheet">
         <div class="page">
             {build_header()}
             <div class="section-badge">تقرير حادث مروري</div>
@@ -1863,6 +1868,8 @@ with tab5:
             <div class="page-num">4</div>
         </div>
         {photos_pages_html}
+        </div>
+        </div>
     </body>
     </html>
     """
