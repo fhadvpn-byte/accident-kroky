@@ -1742,7 +1742,7 @@ with tab5:
             display: flex; align-items: center; justify-content: center; margin: auto;
             font-weight: bold; color: #1b4332; line-height: 1.25; text-align: center;
         }}
-        .header-logo img {{ height: 92px; width: auto; max-width: 100%; object-fit: contain; }}
+        .header-logo img {{ height: 110px; width: auto; max-width: 120px; object-fit: contain; }}
         .header-Title {{ text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 6px; }}
         .header-box {{
             display: flex; justify-content: space-between; align-items: center;
