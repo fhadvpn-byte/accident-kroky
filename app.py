@@ -607,8 +607,13 @@ except OSError:
 st.set_page_config(page_title="نظام بَيِّنَة - تقارير الحوادث المرورية", layout="wide", initial_sidebar_state="expanded")
 st.markdown("""
 <style>
-.stDataFrame, table { width: 100% !important; }
-.element-container { width: 100% !important; }
+.main .block-container {
+    max-width: 100% !important;
+    padding-left: 1rem !important;
+    padding-right: 1rem !important;
+}
+table, dataframe, .stDataFrame { width: 100% !important; }
+iframe { max-width: 100% !important; }
 </style>
 """, unsafe_allow_html=True)
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
