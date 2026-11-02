@@ -94,7 +94,10 @@ def _open_fixed_logo():
     path = _project_logo_path()
     if path is None:
         return None
-    return Image.open(path).convert("RGBA")
+    try:
+        return Image.open(path).convert("RGBA")
+    except OSError:
+        return None
 
 def _save_upload_once(uploaded):
     try:
@@ -908,9 +911,6 @@ with st.sidebar:
         st.header("⚙️ الإعدادات الثابتة للقسم")
         dept_region = st.text_input("إدارة مرور منطقة", "إدارة مرور منطقة جازان")
         dept_branch = st.text_input("القسم / الشعبة", "قسم مرور محافظة العارضة")
-        if "groq_api_key_input" not in st.session_state:
-            st.session_state.groq_api_key_input = os.getenv("GROQ_API_KEY") or ""
-        st.text_input("مفتاح Groq", type="password", key="groq_api_key_input")
     with st.container(key="glow-officers"):
         st.subheader("👮‍♂️ بيانات معدي التقرير (الصفحة 3)")
         officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", "")
@@ -1648,8 +1648,13 @@ with tab5:
         f'<img src="data:image/png;base64,{sketch_b64}" style="max-width:100%; height:440px; border:1px solid #ccc;">'
         if sketch_b64 else ""
     )
+    logo_b64 = ""
     _fixed_logo_path = _project_logo_path()
-    logo_b64 = img_to_b64(Image.open(_fixed_logo_path).convert("RGBA")) if _fixed_logo_path is not None else ""
+    if _fixed_logo_path is not None:
+        try:
+            logo_b64 = img_to_b64(Image.open(_fixed_logo_path).convert("RGBA"))
+        except OSError:
+            logo_b64 = ""
     def build_header():
         logo_html = f'<img src="data:image/png;base64,{logo_b64}" alt="شعار المرور">' if logo_b64 else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
         return f"""
