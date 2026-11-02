@@ -604,7 +604,12 @@ try:
     SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
     pass
-st.set_page_config(page_title="نظام بينة", layout="wide", initial_sidebar_state="collapsed")
+st.set_page_config(
+    page_title="نظام بينة - للرصد والتقارير المرورية",
+    page_icon="🛡️",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
 st.markdown("""
 <style>
