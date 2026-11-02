@@ -1714,8 +1714,9 @@ with tab5:
             display: flex; flex-direction: column; overflow: hidden;
         }}
         .report-viewport {{
-            flex: 1 1 auto; width: 100%; min-width: 0;
+            flex: 1 1 auto; width: 100%; min-width: 0; max-width: 100%;
             overflow: auto; -webkit-overflow-scrolling: touch;
+            container-type: inline-size; container-name: report;
         }}
         .report-sheet {{
             width: 210mm; min-width: 750px; margin: 12px auto 20px auto;
@@ -1770,10 +1771,20 @@ with tab5:
             background: #2d6a4f; color: white; border: 3px solid white; outline: 3px solid #2d6a4f;
             border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 16px; display: inline-block; margin-bottom: 25px;
         }}
+        @media screen and (max-width: 768px) {{
+            html, body {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
+            .report-viewport {{ overflow-x: hidden; overflow-y: auto; }}
+            .report-sheet {{
+                width: 210mm; min-width: 210mm; max-width: none;
+                margin: 0 auto 12px auto;
+                zoom: calc(100cqw / 210mm);
+            }}
+            .page {{ width: 210mm; min-width: 210mm; max-width: none; }}
+        }}
         @media print {{
             html, body {{ height: auto; display: block; overflow: visible; background: white; padding: 0; }}
             .report-viewport {{ overflow: visible; height: auto; }}
-            .report-sheet {{ width: auto; min-width: 0; margin: 0; }}
+            .report-sheet {{ width: auto; min-width: 0; margin: 0; zoom: 1; }}
             .page {{ box-shadow: none; margin: 0; width: 210mm; min-width: 0; min-height: 297mm; }}
             .no-print {{ display: none !important; }}
         }}
