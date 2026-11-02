@@ -8,9 +8,26 @@ import os
 import json
 import hashlib
 import math
+import tempfile
 from pathlib import Path
 
-SAVED_IMAGES_DIR = Path("/agent/saved_accident_images")
+def _select_images_dir():
+    candidates = (
+        Path.cwd() / "saved_accident_images",
+        Path(tempfile.gettempdir()) / "bayyinah_images",
+    )
+    for folder in candidates:
+        try:
+            folder.mkdir(parents=True, exist_ok=True)
+            probe = folder / ".bayyinah_write_probe"
+            probe.write_bytes(b"")
+            probe.unlink()
+            return folder
+        except OSError:
+            continue
+    return candidates[-1]
+
+SAVED_IMAGES_DIR = _select_images_dir()
 ARABIC_FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Bold.ttf",
     "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
@@ -66,15 +83,21 @@ def _arabic_font(size):
     return ImageFont.load_default()
 
 def _save_upload_once(uploaded):
-    SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    try:
+        SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
     raw = uploaded.getvalue()
     digest = hashlib.sha256(raw).hexdigest()[:20]
     ext = Path(getattr(uploaded, "name", "") or "").suffix.lower()
     if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
         ext = ".jpg"
     dest = SAVED_IMAGES_DIR / f"{digest}{ext}"
-    if not dest.exists():
-        dest.write_bytes(raw)
+    try:
+        if not dest.exists():
+            dest.write_bytes(raw)
+    except OSError:
+        return dest
     return dest
 
 def persist_uploads(uploads):
@@ -577,7 +600,10 @@ def generate_ai_vision_sketch(
     return img.convert("RGB")
 
 _absorb_groq_env()
-SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+try:
+    SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+except OSError:
+    pass
 st.set_page_config(page_title="نظام بَيِّنَة - تقارير الحوادث المرورية", layout="wide", initial_sidebar_state="expanded")
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
 st.markdown("""
@@ -1423,8 +1449,11 @@ else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabri
             return False
         if not raw.startswith(b"\x89PNG"):
             return False
-        SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-        (SAVED_IMAGES_DIR / "adopted_sketch.png").write_bytes(raw)
+        try:
+            SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+            (SAVED_IMAGES_DIR / "adopted_sketch.png").write_bytes(raw)
+        except OSError:
+            return False
         return True
 
     with st.container(key="adopt-hidden"):
