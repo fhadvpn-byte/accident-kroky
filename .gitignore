@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+saved_accident_images/
+saved_logo.png
+.env
