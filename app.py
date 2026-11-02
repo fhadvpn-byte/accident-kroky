@@ -607,13 +607,30 @@ except OSError:
 st.set_page_config(page_title="نظام بينة", layout="wide", initial_sidebar_state="collapsed")
 st.markdown("""
 <style>
-.main .block-container {
-    max-width: 100% !important;
-    padding-left: 1rem !important;
-    padding-right: 1rem !important;
+html, body, [data-testid="stAppViewContainer"], [data-testid="stMain"] {
+    overflow-x: hidden !important;
+    max-width: 100vw !important;
 }
-table, dataframe, .stDataFrame { width: 100% !important; }
-iframe { max-width: 100% !important; }
+@media (max-width: 768px) {
+    .main .block-container {
+        padding-left: 0.5rem !important;
+        padding-right: 0.5rem !important;
+        padding-top: 2rem !important;
+        max-width: 100% !important;
+    }
+    h1 { font-size: 1.4rem !important; }
+    h2 { font-size: 1.2rem !important; }
+    h3 { font-size: 1.05rem !important; }
+    iframe, canvas, .stHtml {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    [data-testid="stDataFrame"], [data-testid="stDataEditor"], table {
+        width: 100% !important;
+        overflow-x: auto !important;
+        display: block !important;
+    }
+}
 </style>
 """, unsafe_allow_html=True)
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
