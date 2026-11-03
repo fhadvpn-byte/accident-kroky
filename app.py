@@ -1190,15 +1190,21 @@ function mark(obj) {
   obj.set({ selectable: false, evented: false, hoverCursor: "default", name: "road-bg", objectCaching: false });
   return obj;
 }
-const ISO = { sx: 0.544, sy: 0.887, sh: 0.45, sz: 0.85, ox: 16, oy: 38 };
-const SIDEWALK = "#d4cdc1";
+const ISO = { sx: 0.84, sy: 0.86, sh: 0.12, sz: 0.55, ox: 22, oy: 34 };
+const SIDEWALK = "#d9d1c4";
 const ASPH = "#3c434a";
 const YEL = "#f0c400";
-const ROAD_Z = 17.2;
-const ISLAND_Z = 36;
+const ROAD_Z = 1.6;
+const ISLAND_Z = 10;
 function darken(hex, amt) {
   const n = parseInt(hex.slice(1), 16);
   const ch = function(v) { return Math.max(0, Math.min(255, Math.round(v * amt))); };
+  const r = ch((n >> 16) & 255), g = ch((n >> 8) & 255), b = ch(n & 255);
+  return "#" + [r, g, b].map(function(v) { return ("0" + v.toString(16)).slice(-2); }).join("");
+}
+function lighten(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = function(v) { return Math.max(0, Math.min(255, Math.round(v + (255 - v) * amt))); };
   const r = ch((n >> 16) & 255), g = ch((n >> 8) & 255), b = ch(n & 255);
   return "#" + [r, g, b].map(function(v) { return ("0" + v.toString(16)).slice(-2); }).join("");
 }
@@ -1208,55 +1214,58 @@ function isoPoint(x, y, z) {
     y: ISO.oy + y * ISO.sy - (z || 0) * ISO.sz
   };
 }
+function tone(poly, light, mid, dark) {
+  poly.set("fill", new fabric.Gradient({
+    type: "linear",
+    coords: { x1: 0, y1: 0, x2: Math.max(poly.width || 1, 1), y2: Math.max(poly.height || 1, 1) },
+    colorStops: [
+      { offset: 0, color: light },
+      { offset: 0.48, color: mid },
+      { offset: 1, color: dark }
+    ]
+  }));
+  return poly;
+}
 function face(pts, fill) {
-  return mark(new fabric.Polygon(pts.map(function(p) {
+  const poly = mark(new fabric.Polygon(pts.map(function(p) {
     return isoPoint(p[0], p[1], p[2] || 0);
   }), { fill: fill, stroke: null, strokeWidth: 0, objectCaching: false }));
+  if (fill === ASPH) return tone(poly, "#66707a", "#343b42", "#59626b");
+  return poly;
 }
-function slabFaces(x, y, w, h, fill, z0, z1) {
-  const top = [[x, y, z1], [x + w, y, z1], [x + w, y + h, z1], [x, y + h, z1]];
-  if (z1 <= z0 + 0.05) return [face(top, fill)];
-  return [
-    face([[x, y, z0], [x, y + h, z0], [x, y + h, z1], [x, y, z1]], darken(fill, 0.62)),
-    face([[x, y + h, z0], [x + w, y + h, z0], [x + w, y + h, z1], [x, y + h, z1]], darken(fill, 0.52)),
-    face([[x + w, y, z0], [x + w, y + h, z0], [x + w, y + h, z1], [x + w, y, z1]], darken(fill, 0.74)),
-    face(top, fill)
-  ];
+function softShadow(pts) {
+  return mark(new fabric.Polygon(pts.map(function(p) {
+    const q = isoPoint(p[0], p[1], 0);
+    return { x: q.x + 5, y: q.y + 7 };
+  }), { fill: "rgba(0,0,0,0.24)", stroke: null, objectCaching: false }));
 }
 function pushAll(parts, items) {
   items.forEach(function(obj) { parts.push(obj); });
 }
 function ground() {
-  const corners = [[0, 0], [600, 0], [600, 550], [0, 550]].map(function(p) { return isoPoint(p[0], p[1], 0); });
-  const shadow = mark(new fabric.Polygon(corners.map(function(p) {
-    return { x: p.x + 8, y: p.y + 10 };
-  }), { fill: "rgba(0,0,0,0.38)", stroke: null, objectCaching: false }));
-  return [shadow].concat(slabFaces(0, 0, 600, 550, SIDEWALK, 0, 16));
+  const pts = [[0, 0], [600, 0], [600, 550], [0, 550]];
+  const top = face(pts.map(function(p) { return [p[0], p[1], 0]; }), SIDEWALK);
+  tone(top, "#f6f1e8", "#ddd4c6", "#c9bfb1");
+  return [softShadow(pts), top];
 }
 function asphalt(x, y, w, h) {
-  const z = ROAD_Z;
-  const t = Math.min(8, w / 5, h / 5);
-  return [
-    face([[x, y, z], [x + w, y, z], [x + w, y + h, z], [x, y + h, z]], ASPH),
-    face([[x, y, z], [x + w, y, z], [x + w, y + t, z], [x, y + t, z]], "#2c3238"),
-    face([[x, y + h - t, z], [x + w, y + h - t, z], [x + w, y + h, z], [x, y + h, z]], "#24292e"),
-    face([[x, y, z], [x + t, y, z], [x + t, y + h, z], [x, y + h, z]], "#343b42"),
-    face([[x + w - t, y, z], [x + w, y, z], [x + w, y + h, z], [x + w - t, y + h, z]], "#2a3036")
-  ];
+  return [face([[x, y, ROAD_Z], [x + w, y, ROAD_Z], [x + w, y + h, ROAD_Z], [x, y + h, ROAD_Z]], ASPH)];
 }
 function island(x, y, w, h) {
-  return slabFaces(x, y, w, h, "#ddd6c8", 16, ISLAND_Z);
+  const top = face([[x, y, ISLAND_Z], [x + w, y, ISLAND_Z], [x + w, y + h, ISLAND_Z], [x, y + h, ISLAND_Z]], "#e6dfd2");
+  tone(top, "#fbf7f0", "#e6dfd2", "#cfc6b6");
+  top.set({ stroke: "#b7ad9c", strokeWidth: 1 });
+  return [softShadow([[x, y], [x + w, y], [x + w, y + h], [x, y + h]]), top];
 }
 function rule(x1, y1, x2, y2, color, width, z) {
-  const a = isoPoint(x1, y1, z == null ? ROAD_Z + 0.6 : z);
-  const b = isoPoint(x2, y2, z == null ? ROAD_Z + 0.6 : z);
+  const a = isoPoint(x1, y1, z == null ? ROAD_Z + 0.4 : z);
+  const b = isoPoint(x2, y2, z == null ? ROAD_Z + 0.4 : z);
   return mark(new fabric.Line([a.x, a.y, b.x, b.y], { stroke: color, strokeWidth: width, strokeLineCap: "butt", objectCaching: false }));
 }
-function ringPoints(cx, cy, r, z, steps) {
+function ringPoints(cx, cy, r, z) {
   const pts = [];
-  const n = steps || 30;
-  for (let i = 0; i < n; i++) {
-    const t = (i / n) * Math.PI * 2;
+  for (let i = 0; i < 18; i++) {
+    const t = (i / 18) * Math.PI * 2;
     pts.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r, z]);
   }
   return pts;
@@ -1265,31 +1274,11 @@ function asphaltDisk(cx, cy, r) {
   return [face(ringPoints(cx, cy, r, ROAD_Z), ASPH)];
 }
 function islandDisk(cx, cy, r) {
-  const n = 28;
-  const bottom = ringPoints(cx, cy, r, 16, n);
-  const top = ringPoints(cx, cy, r, ISLAND_Z, n);
-  const inner = ringPoints(cx, cy, Math.max(4, r - 4), ISLAND_Z + 0.4, n);
-  const parts = [];
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    parts.push(face([
-      [bottom[i][0], bottom[i][1], 16],
-      [bottom[j][0], bottom[j][1], 16],
-      [top[j][0], top[j][1], ISLAND_Z],
-      [top[i][0], top[i][1], ISLAND_Z]
-    ], i % 2 ? "#8f877c" : "#b7afa3"));
-  }
-  parts.push(face(top, "#ddd6c8"));
-  for (let i = 0; i < n; i++) {
-    const j = (i + 1) % n;
-    parts.push(face([
-      [top[i][0], top[i][1], ISLAND_Z + 0.4],
-      [top[j][0], top[j][1], ISLAND_Z + 0.4],
-      [inner[j][0], inner[j][1], ISLAND_Z + 0.4],
-      [inner[i][0], inner[i][1], ISLAND_Z + 0.4]
-    ], YEL));
-  }
-  return parts;
+  const ring = ringPoints(cx, cy, r, ISLAND_Z);
+  const top = face(ring, "#e6dfd2");
+  tone(top, "#fbf7f0", "#e6dfd2", "#cfc6b6");
+  top.set({ stroke: YEL, strokeWidth: 3 });
+  return [softShadow(ring.map(function(p) { return [p[0], p[1]]; })), top];
 }
 function vDashes(x, y0, y1) {
   const out = [];
@@ -1509,65 +1498,56 @@ function localFace(pts, fill) {
     fill: fill, stroke: null, strokeWidth: 0, objectCaching: false
   });
 }
-function lay(parts, items) {
-  items.forEach(function(obj) { parts.push(obj); });
-}
-function prism(x, y, w, h, z0, z1, fill) {
-  return [
-    localFace([[x, y, z0], [x, y + h, z0], [x, y + h, z1], [x, y, z1]], darken(fill, 0.66)),
-    localFace([[x, y + h, z0], [x + w, y + h, z0], [x + w, y + h, z1], [x, y + h, z1]], darken(fill, 0.55)),
-    localFace([[x + w, y, z0], [x + w, y + h, z0], [x + w, y + h, z1], [x + w, y, z1]], darken(fill, 0.78)),
-    localFace([[x, y, z1], [x + w, y, z1], [x + w, y + h, z1], [x, y + h, z1]], fill)
-  ];
+function sheet(x, y, w, h, z, hex) {
+  return tone(localFace([
+    [x, y, z], [x + w, y, z], [x + w, y + h, z], [x, y + h, z]
+  ], hex), lighten(hex, 0.34), hex, darken(hex, 0.74));
 }
 function groundEllipse(cx, cy, rx, ry, fill) {
   const pts = [];
-  for (let i = 0; i < 22; i++) {
-    const t = (i / 22) * Math.PI * 2;
+  for (let i = 0; i < 14; i++) {
+    const t = (i / 14) * Math.PI * 2;
     pts.push([cx + Math.cos(t) * rx, cy + Math.sin(t) * ry, 0.2]);
   }
   return localFace(pts, fill);
 }
+function wheel(cx, cy) {
+  const c = localIso(cx, cy, 0.4);
+  return new fabric.Ellipse({
+    left: c.x, top: c.y, originX: "center", originY: "center",
+    rx: 5.2, ry: 3.4, fill: "#1c1e22", stroke: "#3d4148", strokeWidth: 1, objectCaching: false
+  });
+}
 function buildVehicle(spec) {
   const w = spec.w;
   const len = spec.len;
-  const z0 = spec.z0;
-  const z1 = spec.z1;
-  const parts = [groundEllipse(4, 8, w * 0.62, len * 0.48, "rgba(0,0,0,0.36)")];
-  [[-w * 0.48, -len * 0.34], [w * 0.48 - 8, -len * 0.34], [-w * 0.48, len * 0.30], [w * 0.48 - 8, len * 0.30]].forEach(function(p) {
-    lay(parts, prism(p[0], p[1], 8, 12, 0, 7, "#1a1a1a"));
+  const parts = [groundEllipse(4, 7, w * 0.58, len * 0.44, "rgba(0,0,0,0.30)")];
+  [[-w * 0.36, -len * 0.30], [w * 0.36, -len * 0.30], [-w * 0.36, len * 0.26], [w * 0.36, len * 0.26]].forEach(function(p) {
+    parts.push(wheel(p[0], p[1]));
   });
-  lay(parts, prism(-w / 2, -len / 2, w, len, z0, z1, spec.color));
+  parts.push(sheet(-w / 2, -len / 2, w, len, 2, spec.color));
   if (spec.cargo) {
     const c = spec.cargo;
-    lay(parts, prism(c.x, c.y, c.w, c.h, z1, z1 + c.zh, c.color));
+    parts.push(sheet(c.x, c.y, c.w, c.h, 4.5, c.color));
   }
   if (spec.cab) {
     const c = spec.cab;
-    const cabColor = c.color || darken(spec.color, 0.92);
-    const top = z1 + c.zh;
-    lay(parts, prism(c.x, c.y, c.w, c.h, z1, top, cabColor));
+    parts.push(sheet(c.x, c.y, c.w, c.h, 6, c.color || lighten(spec.color, 0.16)));
     parts.push(localFace([
-      [c.x + 3, c.y + c.h, z1 + 3],
-      [c.x + c.w - 3, c.y + c.h, z1 + 3],
-      [c.x + c.w - 3, c.y + c.h, top - 2],
-      [c.x + 3, c.y + c.h, top - 2]
+      [c.x + 3, c.y + 3, 6.4],
+      [c.x + c.w - 3, c.y + 3, 6.4],
+      [c.x + c.w - 5, c.y + 12, 6.4],
+      [c.x + 5, c.y + 12, 6.4]
     ], "#8ecae6"));
-    parts.push(localFace([
-      [c.x + c.w, c.y + 3, z1 + 3],
-      [c.x + c.w, c.y + c.h - 3, z1 + 3],
-      [c.x + c.w, c.y + c.h - 3, top - 2],
-      [c.x + c.w, c.y + 3, top - 2]
-    ], "#5fa8c7"));
   }
   return new fabric.Group(parts, { objectCaching: false });
 }
 function buildMoto() {
-  const parts = [groundEllipse(2, 5, 11, 32, "rgba(0,0,0,0.34)")];
-  lay(parts, prism(-7, -34, 14, 16, 0, 12, "#222222"));
-  lay(parts, prism(-7, 20, 14, 16, 0, 12, "#222222"));
-  lay(parts, prism(-5, -18, 10, 38, 6, 16, "#e76f51"));
-  parts.push(localFace([[-3, -8, 16], [3, -8, 16], [3, 8, 16], [-3, 8, 16]], "#9ec9de"));
+  const parts = [groundEllipse(2, 4, 10, 28, "rgba(0,0,0,0.28)")];
+  parts.push(wheel(0, -22));
+  parts.push(wheel(0, 20));
+  parts.push(sheet(-5, -16, 10, 34, 3, "#e76f51"));
+  parts.push(localFace([[-3, -6, 4], [3, -6, 4], [3, 6, 4], [-3, 6, 4]], "#b9d7e6"));
   return new fabric.Group(parts, { objectCaching: false });
 }
 function isoSkid() {
@@ -1582,25 +1562,21 @@ function isoSkid() {
 }
 function isoHit() {
   const pts = [];
-  for (let i = 0; i <= 28; i++) {
-    const t = (i / 28) * Math.PI * 2;
+  for (let i = 0; i <= 18; i++) {
+    const t = (i / 18) * Math.PI * 2;
     pts.push(localIso(Math.cos(t) * 28, Math.sin(t) * 18, 1));
   }
   return new fabric.Group([
-    groundEllipse(4, 6, 30, 20, "rgba(0,0,0,0.28)"),
+    groundEllipse(3, 5, 30, 20, "rgba(0,0,0,0.24)"),
     groundEllipse(0, 0, 26, 16, "rgba(208,0,0,0.16)"),
     new fabric.Polyline(pts, { fill: "", stroke: "#d00000", strokeWidth: 4, objectCaching: false })
   ], { objectCaching: false });
 }
 function isoArrow() {
   const flat = [[0, -42, 1], [16, -8, 1], [7, -8, 1], [7, 36, 1], [-7, 36, 1], [-7, -8, 1], [-16, -8, 1]];
-  const raised = flat.map(function(p) { return [p[0], p[1], 8]; });
   return new fabric.Group([
-    localFace(flat, "rgba(0,0,0,0.30)"),
-    localFace(raised, "#1b4332"),
-    localFace([
-      [0, -42, 1], [0, -42, 8], [16, -8, 8], [16, -8, 1]
-    ], "#123326")
+    localFace(flat, "rgba(0,0,0,0.28)"),
+    tone(localFace(flat.map(function(p) { return [p[0], p[1], 3]; }), "#1b4332"), "#2f6b4f", "#1b4332", "#0f291c")
   ], { objectCaching: false });
 }
 function badgeNumber(kind) {
