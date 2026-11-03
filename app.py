@@ -858,7 +858,8 @@ st.markdown("""
     button[kind="header"] {
         background: rgba(0, 229, 255, 0.2) !important;
         color: #00e5ff !important;
-        border: 1px solid #00e5ff !important;
+        border: 2px solid #00e5ff !important;
+        padding: 4px 8px !important;
         border-radius: 8px !important;
         box-shadow: 0 0 14px rgba(0, 229, 255, 0.85) !important;
         z-index: 999999 !important;
