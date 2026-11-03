@@ -1687,7 +1687,7 @@ with tab5:
         canvas.toBlob(function (blob) {
           URL.revokeObjectURL(url);
           if (!blob) { resolve(file); return; }
-          var base = (file.name || "photo").replace(/\\.[^.]+$/, "");
+          var base = (file.name || "photo").split(".").slice(0, -1).join(".") || "photo";
           resolve(new File([blob], base + ".jpg", {type: "image/jpeg", lastModified: Date.now()}));
         }, "image/jpeg", QUALITY);
       };
