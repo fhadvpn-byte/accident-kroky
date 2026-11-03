@@ -1924,8 +1924,13 @@ with tab5:
             }}
             .report-page {{
                 width: 100%;
-                padding: 8px;
-                zoom: 0.48;
+                box-sizing: border-box;
+                background: #fff;
+                color: #000;
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 15px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
             }}
             .header-Title {{ font-size: 14px; }}
             .header-box {{ font-size: 11px; min-height: 88px; }}
