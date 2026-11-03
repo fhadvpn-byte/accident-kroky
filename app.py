@@ -623,7 +623,7 @@ except OSError:
     pass
 def _find_bayyinah_logo():
     folder = Path(__file__).resolve().parent
-    for name in ("bayyinah_logo.png", "bayyinah_logo.jpg"):
+    for name in ("bayyinah_logo.jpg", "bayyinah_logo.png"):
         candidate = folder / name
         if not candidate.is_file():
             continue
