@@ -1630,72 +1630,78 @@ else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabri
     key_4 = st.text_input("مدلول رقم (4)", "4 - آثار الفرامل والاتجاهات")
     adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
     sketch_img = Image.open(adopted_path).convert("RGB") if adopted_path.is_file() else None
+def process_mobile_image_to_base64(uploaded_file):
+    try:
+        uploaded_file.seek(0)
+        with Image.open(uploaded_file) as source:
+            image = ImageOps.exif_transpose(source)
+            image = image.convert("RGB")
+            image.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+            buffer = io.BytesIO()
+            image.save(buffer, format="JPEG", quality=80)
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+        return f"data:image/jpeg;base64,{encoded}"
+    except Exception:
+        name = getattr(uploaded_file, "name", "") or "الصورة"
+        st.error(f"تعذر معالجة الصورة: {name}")
+        return None
+
 with tab5:
     st.subheader("📸 إرفاق صور موقع الحادث والمركبات للتقرير الرسمي")
     _max_accident_photos = 10
-    if "accident_gallery" not in st.session_state:
-        st.session_state.accident_gallery = [
-            {"id": path.stem, "name": path.name, "path": str(path)}
-            for path in list_saved_images()
-            if path.name != "adopted_sketch.png"
-        ][:_max_accident_photos]
-    if len(st.session_state.accident_gallery) > _max_accident_photos:
-        st.session_state.accident_gallery = st.session_state.accident_gallery[:_max_accident_photos]
-    if "accident_removed" not in st.session_state:
-        st.session_state.accident_removed = []
+    if "accident_photos_data" not in st.session_state:
+        st.session_state.accident_photos_data = []
+    if "processed_file_keys" not in st.session_state:
+        st.session_state.processed_file_keys = set()
     accident_photos = st.file_uploader(
-        "ارفع صور الحادث (حد أقصى 10 صور، دون تكرار)",
-        type=["png", "jpg", "jpeg"],
+        "📸 إرفاق صور الحادث (الحد الأقصى 10 صور)",
+        type=["jpg", "jpeg", "png", "webp"],
         accept_multiple_files=True,
+        key="mobile_uploader",
     )
-    current_upload_ids = []
-    removed_ids = set(st.session_state.accident_removed)
-    gallery = st.session_state.accident_gallery
+    photos_data = st.session_state.accident_photos_data
+    processed_keys = set(st.session_state.processed_file_keys)
     photo_limit_hit = False
     if accident_photos:
-        known_ids = {entry["id"] for entry in gallery}
         for item in accident_photos:
-            raw = item.getvalue()
-            digest = hashlib.sha256(raw).hexdigest()[:20]
-            current_upload_ids.append(digest)
-            if digest in removed_ids or digest in known_ids:
+            file_id = f"{item.name}_{item.size}"
+            if file_id in processed_keys:
                 continue
-            if len(gallery) >= _max_accident_photos:
+            if len(photos_data) >= _max_accident_photos:
                 photo_limit_hit = True
-                break
-            saved_path = _save_upload_once(item)
-            gallery.append({"id": digest, "name": saved_path.name, "path": str(saved_path)})
-            known_ids.add(digest)
-    st.caption(f"صور هذه الجلسة في ملحق التقرير: {len(gallery)} / {_max_accident_photos}")
+                continue
+            image_b64 = process_mobile_image_to_base64(item)
+            if not image_b64:
+                continue
+            number = len(photos_data) + 1
+            photos_data.append({
+                "id": file_id,
+                "b64": image_b64,
+                "caption": f"صورة ({number}): موقع التصادم واتجاه المركبات",
+            })
+            processed_keys.add(file_id)
+    st.session_state.accident_photos_data = photos_data
+    st.session_state.processed_file_keys = processed_keys
+    st.caption(f"صور هذه الجلسة في ملحق التقرير: {len(photos_data)} / {_max_accident_photos}")
     if photo_limit_hit:
         st.warning("الحد الأقصى 10 صور. لم تُضف الصور الزائدة، والصور الحالية تبقى في الملحق.")
-    st.session_state.accident_removed = [
-        item_id for item_id in st.session_state.accident_removed if item_id in current_upload_ids
-    ]
-    annex_items = []
     pending_remove = None
-    for row_start in range(0, len(gallery), 2):
+    for row_start in range(0, len(photos_data), 2):
         cols = st.columns(2)
-        for offset, entry in enumerate(gallery[row_start:row_start + 2]):
+        for offset, entry in enumerate(photos_data[row_start:row_start + 2]):
             number = row_start + offset + 1
-            photo_path = Path(entry["path"])
-            cap_key = f"annex_cap_{entry['name']}"
+            cap_key = f"annex_cap_{entry['id']}"
             if cap_key not in st.session_state:
-                st.session_state[cap_key] = f"صورة ({number}): موقع التصادم واتجاه المركبات"
+                st.session_state[cap_key] = entry.get("caption") or f"صورة ({number}): موقع التصادم واتجاه المركبات"
             with cols[offset]:
-                st.image(str(photo_path), width=320)
+                preview_b64 = entry["b64"].split(",", 1)[-1]
+                st.image(base64.b64decode(preview_b64), width=320)
                 if st.button("🗑️ حذف هذه الصورة", key=f"del_photo_{entry['id']}"):
                     pending_remove = entry["id"]
-                caption = st.text_input("تعليق الصورة", key=cap_key)
-            annex_items.append((photo_path, number, caption))
+                entry["caption"] = st.text_input("تعليق الصورة", key=cap_key)
     if pending_remove:
-        st.session_state.accident_gallery = [
-            entry for entry in gallery if entry["id"] != pending_remove
-        ]
-        if pending_remove not in st.session_state.accident_removed:
-            st.session_state.accident_removed.append(pending_remove)
-        annex_items = [
-            item for item in annex_items if Path(item[0]).stem != pending_remove
+        st.session_state.accident_photos_data = [
+            entry for entry in photos_data if entry["id"] != pending_remove
         ]
         st.rerun()
     
@@ -1742,12 +1748,11 @@ with tab5:
     laws_html = "".join([f"<li>{line}</li>" for line in laws_list_for_report if line.strip()])
     actions_html = "".join([f"<tr><td>{i+1}- {act}</td></tr>" for i, act in enumerate(selected_actions)])
     photo_cards = ""
-    for path, number, caption in annex_items:
-        p_b64 = img_to_b64(Image.open(path).convert("RGB"))
-        safe_caption = html.escape(caption or "")
+    for number, entry in enumerate(st.session_state.accident_photos_data, start=1):
+        safe_caption = html.escape(entry.get("caption") or "")
         photo_cards += f"""
         <div class="photo-card">
-            <img src="data:image/png;base64,{p_b64}" alt="صورة {number}">
+            <img src="{entry['b64']}" alt="صورة {number}">
             <div class="photo-meta">{number}<br>{safe_caption}</div>
         </div>
         """
