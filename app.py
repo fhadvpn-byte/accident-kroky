@@ -621,17 +621,24 @@ try:
     SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
     pass
-_bayyinah_logo_path = Path(__file__).resolve().parent / "bayyinah_logo.png"
+def _find_bayyinah_logo():
+    folder = Path(__file__).resolve().parent
+    for name in ("bayyinah_logo.png", "bayyinah_logo.jpg"):
+        candidate = folder / name
+        if not candidate.is_file():
+            continue
+        try:
+            with Image.open(candidate) as logo_image:
+                logo_image.verify()
+        except OSError:
+            continue
+        return candidate
+    return None
+
+_bayyinah_logo_path = _find_bayyinah_logo()
 
 def _bayyinah_logo_ready():
-    if not _bayyinah_logo_path.is_file():
-        return False
-    try:
-        with Image.open(_bayyinah_logo_path) as logo_image:
-            logo_image.verify()
-        return True
-    except OSError:
-        return False
+    return _bayyinah_logo_path is not None
 
 st.set_page_config(
     page_title="منظومة البَيِّنَةُ الذكية للحوادث المرورية",
@@ -975,7 +982,7 @@ if _bayyinah_logo_ready():
     try:
         with Image.open(_bayyinah_logo_path) as app_logo:
             _hero_buf = io.BytesIO()
-            app_logo.save(_hero_buf, format="PNG")
+            app_logo.convert("RGBA").save(_hero_buf, format="PNG")
             app_logo_b64 = base64.b64encode(_hero_buf.getvalue()).decode()
     except OSError:
         app_logo_b64 = ""
