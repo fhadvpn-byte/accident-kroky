@@ -679,6 +679,7 @@ st.markdown("""
         box-shadow: 0 0 18px rgba(0, 242, 254, 0.28), inset 0 0 12px rgba(79, 172, 254, 0.08);
     }
     .bayyinah-hero {
+        direction: rtl;
         display: flex;
         align-items: center;
         gap: 22px;
@@ -969,25 +970,28 @@ with st.sidebar:
         officer_2_rank = st.text_input("رتبة مشرف الحوادث", "رقيب أول")
         manager_name = st.text_input("اسم مدير القسم / الشعبة", "")
         manager_rank = st.text_input("رتبة المدير", "مقدم")
-_resolved_logo = _open_fixed_logo()
-_hero_logo_src = ""
-if _resolved_logo is not None:
-    _hero_buf = io.BytesIO()
-    _resolved_logo.save(_hero_buf, format="PNG")
-    _hero_logo_src = "data:image/png;base64," + base64.b64encode(_hero_buf.getvalue()).decode()
-if _hero_logo_src:
-    _hero_ring = f'<div class="bayyinah-logo-ring"><img src="{_hero_logo_src}" alt="شعار المرور"/></div>'
+app_logo_b64 = ""
+if _bayyinah_logo_ready():
+    try:
+        with Image.open(_bayyinah_logo_path) as app_logo:
+            _hero_buf = io.BytesIO()
+            app_logo.save(_hero_buf, format="PNG")
+            app_logo_b64 = base64.b64encode(_hero_buf.getvalue()).decode()
+    except OSError:
+        app_logo_b64 = ""
+if app_logo_b64:
+    _hero_ring = f'<div class="bayyinah-logo-ring"><img src="data:image/png;base64,{app_logo_b64}" alt="بَيِّنَة"/></div>'
 else:
-    _hero_ring = '<div class="bayyinah-logo-ring show-fallback"><span class="logo-fallback">الأمن العام<br>المرور</span></div>'
+    _hero_ring = '<div class="bayyinah-logo-ring"></div>'
 st.html(f"""
 <div class="glow-container bayyinah-hero">
   {_hero_ring}
   <div>
     <div class="bh-word">بَيِّنَة</div>
-    <div class="bh-1">⚡ منظومة الذكاء الاصطناعي السيادي</div>
+    <div class="bh-1">منظومة الذكاء الاصطناعي السيادي</div>
     <div class="bh-2">VISION 2030</div>
     <div class="bh-3">بَيِّنَة الذكي للحوادث المرورية</div>
-    <div class="bh-4">منصة التحليل الهندسي والاستدلال النظامي الذكي وفق نظام المرور السعودي</div>
+    <div class="bh-4">منصة التحليل</div>
   </div>
 </div>
 """, unsafe_allow_javascript=False)
