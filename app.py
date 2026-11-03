@@ -1660,6 +1660,80 @@ with tab5:
         accept_multiple_files=True,
         key="mobile_gallery_uploader",
     )
+    st.components.v1.html(
+        """
+<script>
+(function () {
+  var MAX = 10;
+  var EDGE = 1200;
+  var QUALITY = 0.78;
+  var doc;
+  try { doc = window.parent.document; } catch (err) { return; }
+  if (!doc || !doc.body) return;
+  function compress(file) {
+    return new Promise(function (resolve) {
+      if (!file || !file.type || file.type.indexOf("image/") !== 0) {
+        resolve(null);
+        return;
+      }
+      var url = URL.createObjectURL(file);
+      var img = new Image();
+      img.onload = function () {
+        var scale = Math.min(1, EDGE / Math.max(img.width || 1, img.height || 1));
+        var canvas = document.createElement("canvas");
+        canvas.width = Math.max(1, Math.round(img.width * scale));
+        canvas.height = Math.max(1, Math.round(img.height * scale));
+        canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob(function (blob) {
+          URL.revokeObjectURL(url);
+          if (!blob) { resolve(file); return; }
+          var base = (file.name || "photo").replace(/\\.[^.]+$/, "");
+          resolve(new File([blob], base + ".jpg", {type: "image/jpeg", lastModified: Date.now()}));
+        }, "image/jpeg", QUALITY);
+      };
+      img.onerror = function () {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+      img.src = url;
+    });
+  }
+  function bind(input) {
+    input.setAttribute("accept", "image/*");
+    if (input.dataset.bayyinahGallery === "1") return;
+    input.dataset.bayyinahGallery = "1";
+    input.addEventListener("change", function (event) {
+      if (input.dataset.bayyinahPass === "send") {
+        input.dataset.bayyinahPass = "";
+        return;
+      }
+      var files = Array.prototype.slice.call(input.files || []);
+      if (!files.length) return;
+      event.stopImmediatePropagation();
+      event.preventDefault();
+      Promise.all(files.slice(0, MAX).map(compress)).then(function (out) {
+        var transfer = new DataTransfer();
+        out.forEach(function (file) { if (file) transfer.items.add(file); });
+        input.dataset.bayyinahPass = "send";
+        input.files = transfer.files;
+        input.dispatchEvent(new Event("change", {bubbles: true}));
+      });
+    }, true);
+  }
+  function scan() {
+    var root = doc.querySelector('[class*="st-key-mobile_gallery_uploader"]') || doc;
+    root.querySelectorAll('input[type="file"]').forEach(bind);
+  }
+  if (!doc.body.dataset.bayyinahGalleryObserver) {
+    doc.body.dataset.bayyinahGalleryObserver = "1";
+    new MutationObserver(scan).observe(doc.body, {childList: true, subtree: true});
+  }
+  scan();
+})();
+</script>
+        """,
+        height=0,
+    )
     gallery_photos = st.session_state.gallery_photos
     uploaded_ids = set(st.session_state.uploaded_ids)
     photo_limit_hit = False
