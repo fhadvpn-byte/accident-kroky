@@ -1031,17 +1031,17 @@ with tab1:
     _party_columns = [
         ("الطرف", "الأطراف"),
         ("الاسم", "الاسم"),
-        ("الهوية", "الهوية"),
+        ("الهوية", "الهوية / الإقامة"),
         ("المشاركة", "نوع المشاركة"),
-        ("الحالة", "الحالة"),
-        ("التأهيل", "تأهيل القيادة"),
+        ("الحالة", "الحالة الصحية"),
+        ("التأهيل", "تأهيل للقيادة"),
     ]
     _vehicle_columns = [
         ("الطرف", "الأطراف"),
         ("نوع المركبة", "نوع المركبة"),
-        ("رقم اللوحة", "اللوحة"),
-        ("الرقم التسلسلي", "التسلسلي"),
-        ("نوع الترخيص", "الترخيص"),
+        ("رقم اللوحة", "رقم اللوحة"),
+        ("الرقم التسلسلي", "الرقم التسلسلي"),
+        ("نوع الترخيص", "نوع الترخيص"),
         ("التأمين", "التأمين"),
     ]
     st.subheader("جدول معلومات أطراف الحادث")
@@ -1053,10 +1053,10 @@ with tab1:
         column_config={
             "الطرف": st.column_config.TextColumn("الأطراف"),
             "الاسم": st.column_config.TextColumn("الاسم"),
-            "الهوية": st.column_config.TextColumn("الهوية"),
+            "الهوية": st.column_config.TextColumn("الهوية / الإقامة"),
             "المشاركة": st.column_config.SelectboxColumn("نوع المشاركة", options=["سائق", "راكب", "مشاة"]),
-            "الحالة": st.column_config.SelectboxColumn("الحالة", options=["سليم", "مصاب", "متوفي"]),
-            "التأهيل": st.column_config.TextColumn("تأهيل القيادة"),
+            "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=["سليم", "مصاب", "متوفي"]),
+            "التأهيل": st.column_config.TextColumn("تأهيل للقيادة"),
         }
     )
     st.divider()
@@ -1069,9 +1069,9 @@ with tab1:
         column_config={
             "الطرف": st.column_config.TextColumn("الأطراف"),
             "نوع المركبة": st.column_config.TextColumn("نوع المركبة"),
-            "رقم اللوحة": st.column_config.TextColumn("اللوحة"),
-            "الرقم التسلسلي": st.column_config.TextColumn("التسلسلي"),
-            "نوع الترخيص": st.column_config.SelectboxColumn("الترخيص", options=["خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
+            "رقم اللوحة": st.column_config.TextColumn("رقم اللوحة"),
+            "الرقم التسلسلي": st.column_config.TextColumn("الرقم التسلسلي"),
+            "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=["خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
             "التأمين": st.column_config.SelectboxColumn("التأمين", options=["مؤمنة", "غير مؤمنة"]),
         }
     )
