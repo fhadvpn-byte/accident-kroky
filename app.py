@@ -1145,7 +1145,7 @@ with tab4:
 <body>
 <div class="editor">
 <header>
-  <strong>كروكي بشير</strong>
+  <strong>محرر الكروكي التنظيمي</strong>
   <button type="button" id="del" title="حذف المحدد">🗑️</button>
   <button type="button" id="rr" title="تدوير يمين">↻</button>
   <button type="button" id="rl" title="تدوير يسار">↺</button>
@@ -1167,7 +1167,8 @@ const ROADS = [
   ["مزدوج بجزيرة", "dual"],
   ["مفرد مسارين", "single"],
   ["دوار", "round"],
-  ["طريق جبلي منحني", "curve"]
+  ["طريق جبلي منحني", "curve"],
+  ["يوتيرن (U-Turn)", "uturn"]
 ];
 const ITEMS = [
   ["سيدان أخضر", "sedan-green"],
@@ -1327,7 +1328,32 @@ function roadCurve() {
     mark(new fabric.Path(d, { fill: "", stroke: "#ffffff", strokeWidth: 2, strokeDashArray: [12, 10] }))
   ];
 }
-const BUILDERS = { t: roadT, cross: roadCross, dual: roadDual, single: roadSingle, round: roadRound, curve: roadCurve };
+function roadUturn() {
+  const parts = [
+    box(0, 0, 600, 550, SAND),
+    box(130, 0, 150, 550, ASPH),
+    box(320, 0, 150, 550, ASPH),
+    box(280, 200, 40, 150, ASPH),
+    mark(new fabric.Path("M 280 200 L 246 168 L 246 228 Z", { fill: ASPH })),
+    mark(new fabric.Path("M 320 200 L 354 168 L 354 228 Z", { fill: ASPH })),
+    mark(new fabric.Path("M 280 350 L 246 382 L 246 322 Z", { fill: ASPH })),
+    mark(new fabric.Path("M 320 350 L 354 382 L 354 322 Z", { fill: ASPH })),
+    rule(130, 0, 130, 550, YEL, 4),
+    rule(470, 0, 470, 550, YEL, 4),
+    rule(280, 0, 280, 168, YEL, 3),
+    rule(320, 0, 320, 168, YEL, 3),
+    rule(280, 382, 280, 550, YEL, 3),
+    rule(320, 382, 320, 550, YEL, 3),
+    mark(new fabric.Path("M 268 318 L 268 248 C 268 214, 332 214, 332 248 L 332 292", {
+      fill: "", stroke: "#ffffff", strokeWidth: 3
+    })),
+    mark(new fabric.Path("M 332 292 L 322 282 L 342 282 Z", { fill: "#ffffff" }))
+  ];
+  parts.push.apply(parts, vDashes(205, 8, 542));
+  parts.push.apply(parts, vDashes(395, 8, 542));
+  return parts;
+}
+const BUILDERS = { t: roadT, cross: roadCross, dual: roadDual, single: roadSingle, round: roadRound, curve: roadCurve, uturn: roadUturn };
 
 function applyRoad(kind) {
   currentRoad = kind;
