@@ -906,6 +906,15 @@ st.markdown("""
         h2 { font-size: 1.1rem !important; }
         h3 { font-size: 1rem !important; }
     }
+    @media print {
+        section[data-testid="stSidebar"],
+        [data-testid="stHeader"],
+        [data-testid="stToolbar"],
+        [data-testid="stSidebarCollapsedControl"],
+        .stButton, .stDownloadButton, button {
+            display: none !important;
+        }
+    }
 </style>
 """, unsafe_allow_html=True)
 if 'parties' not in st.session_state:
@@ -1722,7 +1731,7 @@ with tab5:
     photos_pages_html = ""
     if photo_cards:
         photos_pages_html = f"""
-        <div class="page photo-annex">
+        <div class="page report-page photo-annex">
             {build_header()}
             <div class="section-badge">ملحق الصور الفوتوغرافية لموقع الحادث</div>
             <div class="photo-grid">{photo_cards}</div>
@@ -1809,7 +1818,12 @@ with tab5:
             }}
             .page {{
                 width: 100%; min-width: 0; max-width: 100%;
-                padding: 10px; overflow: hidden; font-size: 12px;
+                overflow: hidden; font-size: 12px;
+            }}
+            .report-page {{
+                width: 100%;
+                padding: 8px;
+                zoom: 0.48;
             }}
             .header-Title {{ font-size: 14px; }}
             .header-box {{ font-size: 11px; min-height: 88px; }}
@@ -1824,14 +1838,26 @@ with tab5:
             th, td {{ font-size: 11px; padding: 4px 3px; }}
         }}
         @media print {{
+            @page {{ size: A4; margin: 8mm; }}
             html, body {{ height: auto; display: block; overflow: visible; background: white; padding: 0; }}
+            button, .no-print, .stButton, .stDownloadButton,
+            [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"] {{
+                display: none !important;
+            }}
             .report-viewport {{ overflow: visible; height: auto; }}
             .report-sheet {{ width: auto; min-width: 0; margin: 0; zoom: 1; }}
-            .page {{ box-shadow: none; margin: 0; width: 210mm; min-width: 0; max-width: none; min-height: 297mm; overflow: visible; font-size: 14px; }}
+            .page, .report-page {{
+                box-shadow: none; margin: 0 auto; width: 100%; max-width: 194mm; max-height: 278mm;
+                min-width: 0; min-height: 0; zoom: 1; overflow: hidden; page-break-after: always;
+            }}
+            .report-sheet > .report-page:last-child {{ page-break-after: auto; break-after: auto; }}
             .table-scroll {{ overflow: visible; max-width: none; }}
-            .table-scroll table, table {{ min-width: 0 !important; width: 100% !important; font-size: 14px; }}
+            table, .table-scroll table {{
+                width: 99.6% !important; min-width: 0 !important; border-collapse: collapse;
+                border: 1px solid #000;
+            }}
+            th, td {{ border: 1px solid #000 !important; }}
             .header-logo img {{ height: 110px; max-width: 120px; }}
-            .no-print {{ display: none !important; }}
         }}
     </style>
     </head>
@@ -1843,7 +1869,7 @@ with tab5:
         </div>
         <div class="report-viewport">
         <div class="report-sheet">
-        <div class="page">
+        <div class="page report-page">
             {build_header()}
             <div class="section-badge">تقرير حادث مروري</div>
             <div class="section-badge" style="font-size:15px;">معلومات الحادث</div>
@@ -1869,7 +1895,7 @@ with tab5:
             </table></div>
             <div class="page-num">1</div>
         </div>
-        <div class="page">
+        <div class="page report-page">
             {build_header()}
             <div class="section-badge">نتائج الحادث</div>
             <div class="box-content">نتج عن الحادث :<br>{results_html}</div>
@@ -1882,7 +1908,7 @@ with tab5:
             </div>
             <div class="page-num">2</div>
         </div>
-        <div class="page">
+        <div class="page report-page">
             {build_header()}
             <div class="table-scroll"><table>
                 <tr><th style="font-size:16px;">الحقوق الخاصة والعامة</th></tr>
@@ -1901,7 +1927,7 @@ with tab5:
             </table></div>
             <div class="page-num">3</div>
         </div>
-        <div class="page">
+        <div class="page report-page">
             {build_header()}
             <div class="section-badge">كروكي الحادث</div>
             <div style="text-align:center; font-weight:bold; font-size:18px; margin-bottom:15px;">رسم كروكي {road_name_sign}</div>
