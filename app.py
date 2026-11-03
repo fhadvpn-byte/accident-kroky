@@ -621,11 +621,23 @@ try:
     SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
     pass
+_bayyinah_logo_path = Path(__file__).resolve().parent / "bayyinah_logo.png"
+
+def _bayyinah_logo_ready():
+    if not _bayyinah_logo_path.is_file():
+        return False
+    try:
+        with Image.open(_bayyinah_logo_path) as logo_image:
+            logo_image.verify()
+        return True
+    except OSError:
+        return False
+
 st.set_page_config(
-    page_title="نظام بينة - للرصد والتقارير المرورية",
-    page_icon="🛡️",
+    page_title="منظومة البَيِّنَةُ الذكية للحوادث المرورية",
+    page_icon=str(_bayyinah_logo_path) if _bayyinah_logo_ready() else "🚨",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded"
 )
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
 st.markdown("""
@@ -907,6 +919,12 @@ if 'vehicles' not in st.session_state:
         {"الطرف": "الطرف الثاني", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "خصوصي", "التأمين": "غير مؤمنة"}
     ]
 with st.sidebar:
+    if _bayyinah_logo_ready():
+        try:
+            st.image(str(_bayyinah_logo_path), width=148)
+        except OSError:
+            pass
+    st.markdown("### بَيِّنَةُ الذكي للحوادث")
     with st.container(key="glow-dept"):
         st.header("⚙️ الإعدادات الثابتة للقسم")
         dept_region = st.text_input("إدارة مرور منطقة", "إدارة مرور منطقة جازان")
@@ -1582,22 +1600,26 @@ else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabri
     sketch_img = Image.open(adopted_path).convert("RGB") if adopted_path.is_file() else None
 with tab5:
     st.subheader("📸 إرفاق صور موقع الحادث والمركبات للتقرير الرسمي")
+    _max_accident_photos = 10
     if "accident_gallery" not in st.session_state:
         st.session_state.accident_gallery = [
             {"id": path.stem, "name": path.name, "path": str(path)}
             for path in list_saved_images()
             if path.name != "adopted_sketch.png"
-        ]
+        ][:_max_accident_photos]
+    if len(st.session_state.accident_gallery) > _max_accident_photos:
+        st.session_state.accident_gallery = st.session_state.accident_gallery[:_max_accident_photos]
     if "accident_removed" not in st.session_state:
         st.session_state.accident_removed = []
     accident_photos = st.file_uploader(
-        "ارفع صور الحادث (يمكنك تحديد عدة صور معاً)",
+        "ارفع صور الحادث (حد أقصى 10 صور، دون تكرار)",
         type=["png", "jpg", "jpeg"],
         accept_multiple_files=True,
     )
     current_upload_ids = []
     removed_ids = set(st.session_state.accident_removed)
     gallery = st.session_state.accident_gallery
+    photo_limit_hit = False
     if accident_photos:
         known_ids = {entry["id"] for entry in gallery}
         for item in accident_photos:
@@ -1606,9 +1628,15 @@ with tab5:
             current_upload_ids.append(digest)
             if digest in removed_ids or digest in known_ids:
                 continue
+            if len(gallery) >= _max_accident_photos:
+                photo_limit_hit = True
+                break
             saved_path = _save_upload_once(item)
             gallery.append({"id": digest, "name": saved_path.name, "path": str(saved_path)})
             known_ids.add(digest)
+    st.caption(f"صور هذه الجلسة في ملحق التقرير: {len(gallery)} / {_max_accident_photos}")
+    if photo_limit_hit:
+        st.warning("الحد الأقصى 10 صور. لم تُضف الصور الزائدة، والصور الحالية تبقى في الملحق.")
     st.session_state.accident_removed = [
         item_id for item_id in st.session_state.accident_removed if item_id in current_upload_ids
     ]
@@ -1771,21 +1799,38 @@ with tab5:
             background: #2d6a4f; color: white; border: 3px solid white; outline: 3px solid #2d6a4f;
             border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 16px; display: inline-block; margin-bottom: 25px;
         }}
+        .table-scroll {{ width: 100%; max-width: 100%; }}
         @media screen and (max-width: 768px) {{
             html, body {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
-            .report-viewport {{ overflow-x: hidden; overflow-y: auto; }}
+            .report-viewport {{ overflow-x: hidden; overflow-y: auto; width: 100%; max-width: 100%; }}
             .report-sheet {{
-                width: 210mm; min-width: 210mm; max-width: none;
-                margin: 0 auto 12px auto;
-                zoom: calc(100cqw / 210mm);
+                width: 100%; min-width: 0; max-width: 100%;
+                margin: 0 auto 12px auto; zoom: 1;
             }}
-            .page {{ width: 210mm; min-width: 210mm; max-width: none; }}
+            .page {{
+                width: 100%; min-width: 0; max-width: 100%;
+                padding: 10px; overflow: hidden; font-size: 12px;
+            }}
+            .header-Title {{ font-size: 14px; }}
+            .header-box {{ font-size: 11px; min-height: 88px; }}
+            .header-logo img {{ height: 64px; max-width: 70px; }}
+            .section-badge {{ font-size: 13px; padding: 4px 10px; }}
+            .box-content {{ font-size: 12px; min-height: 0; padding: 8px; }}
+            .table-scroll {{
+                width: 100%; max-width: 100%;
+                overflow-x: auto; -webkit-overflow-scrolling: touch;
+            }}
+            .table-scroll table {{ min-width: 600px; width: 600px; font-size: 11px; }}
+            th, td {{ font-size: 11px; padding: 4px 3px; }}
         }}
         @media print {{
             html, body {{ height: auto; display: block; overflow: visible; background: white; padding: 0; }}
             .report-viewport {{ overflow: visible; height: auto; }}
             .report-sheet {{ width: auto; min-width: 0; margin: 0; zoom: 1; }}
-            .page {{ box-shadow: none; margin: 0; width: 210mm; min-width: 0; min-height: 297mm; }}
+            .page {{ box-shadow: none; margin: 0; width: 210mm; min-width: 0; max-width: none; min-height: 297mm; overflow: visible; font-size: 14px; }}
+            .table-scroll {{ overflow: visible; max-width: none; }}
+            .table-scroll table, table {{ min-width: 0 !important; width: 100% !important; font-size: 14px; }}
+            .header-logo img {{ height: 110px; max-width: 120px; }}
             .no-print {{ display: none !important; }}
         }}
     </style>
@@ -1802,7 +1847,7 @@ with tab5:
             {build_header()}
             <div class="section-badge">تقرير حادث مروري</div>
             <div class="section-badge" style="font-size:15px;">معلومات الحادث</div>
-            <table>
+            <div class="table-scroll"><table>
                 <tr>
                     <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
                     <th>نوع الحادث</th><th>عدد الإصابات</th><th>عدد الوفيات</th><th>الطقس</th><th>سبب الحادث</th>
@@ -1811,17 +1856,17 @@ with tab5:
                     <td>{acc_num}</td><td>{acc_date}</td><td>{acc_time}</td><td>{acc_loc}</td>
                     <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
                 </tr>
-            </table>
+            </table></div>
             <div class="section-badge" style="font-size:15px;">معلومات أطراف الحادث</div>
-            <table>
+            <div class="table-scroll"><table>
                 <tr><th>الأطراف</th><th>الاسم</th><th>الهوية / الإقامة</th><th>نوع المشاركة</th><th>الحالة الصحية</th><th>تأهيل للقيادة</th></tr>
                 {parties_rows}
-            </table>
+            </table></div>
             <div class="section-badge" style="font-size:15px;">معلومات المركبات</div>
-            <table>
+            <div class="table-scroll"><table>
                 <tr><th>الأطراف</th><th>نوع المركبة</th><th>رقم اللوحة</th><th>الرقم التسلسلي</th><th>نوع الترخيص</th><th>التأمين</th></tr>
                 {vehicles_rows}
-            </table>
+            </table></div>
             <div class="page-num">1</div>
         </div>
         <div class="page">
@@ -1839,21 +1884,21 @@ with tab5:
         </div>
         <div class="page">
             {build_header()}
-            <table>
+            <div class="table-scroll"><table>
                 <tr><th style="font-size:16px;">الحقوق الخاصة والعامة</th></tr>
                 <tr><td style="padding:14px; font-size:16px;">{rights_status}</td></tr>
-            </table>
-            <table style="margin-top:25px;">
+            </table></div>
+            <div class="table-scroll"><table style="margin-top:25px;">
                 <tr><th style="font-size:16px;">الإجراءات المتخذة</th></tr>
                 {actions_html}
-            </table>
-            <table style="margin-top:35px;">
+            </table></div>
+            <div class="table-scroll"><table style="margin-top:35px;">
                 <tr><th colspan="3" style="font-size:16px;">معد التقرير</th></tr>
                 <tr><th>إجراء الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
                 <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
                 <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
                 <tr style="height:65px;"><td>التوقيع:</td><td>التوقيع:</td><td>التوقيع:</td></tr>
-            </table>
+            </table></div>
             <div class="page-num">3</div>
         </div>
         <div class="page">
