@@ -640,12 +640,20 @@ _bayyinah_logo_path = _find_bayyinah_logo()
 def _bayyinah_logo_ready():
     return _bayyinah_logo_path is not None
 
+_page_icon = "🚨"
+if _bayyinah_logo_ready():
+    try:
+        _page_icon = Image.open(_bayyinah_logo_path)
+    except OSError:
+        _page_icon = str(_bayyinah_logo_path)
 st.set_page_config(
     page_title="منظومة البَيِّنَةُ الذكية للحوادث المرورية",
-    page_icon=str(_bayyinah_logo_path) if _bayyinah_logo_ready() else "🚨",
+    page_icon=_page_icon,
     layout="wide",
     initial_sidebar_state="expanded"
 )
+if _bayyinah_logo_ready():
+    st.logo(str(_bayyinah_logo_path), icon_image=str(_bayyinah_logo_path), size="large")
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
 st.markdown("""
 <style>
