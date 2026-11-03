@@ -1196,6 +1196,11 @@ const ROADS = [
   ["طريق جبلي منحني", "curve"],
   ["يوتيرن (U-Turn)", "uturn"]
 ];
+const ROAD_PROPS = [
+  ["شجر", "tree"],
+  ["عمود إنارة", "lamp"],
+  ["حفرة في الطريق", "pothole"]
+];
 const ITEMS = [
   ["سيدان أخضر", "sedan-green"],
   ["سيدان أبيض", "sedan-white"],
@@ -1605,6 +1610,39 @@ function isoArrow() {
     tone(localFace(flat.map(function(p) { return [p[0], p[1], 3]; }), "#1b4332"), "#2f6b4f", "#1b4332", "#0f291c")
   ], { objectCaching: false });
 }
+function buildTree() {
+  return new fabric.Group([
+    new fabric.Ellipse({ rx: 16, ry: 6, fill: "rgba(0,0,0,0.28)", left: 3, top: 26, originX: "center", originY: "center" }),
+    new fabric.Rect({ width: 8, height: 26, fill: "#6b3e26", left: 0, top: 10, originX: "center", originY: "center", rx: 2, ry: 2 }),
+    new fabric.Circle({ radius: 18, fill: "#1b4332", left: 0, top: -6, originX: "center", originY: "center" }),
+    new fabric.Circle({ radius: 13, fill: "#2d6a4f", left: -7, top: -12, originX: "center", originY: "center" }),
+    new fabric.Circle({ radius: 9, fill: "#52b788", left: 7, top: -14, originX: "center", originY: "center" })
+  ], { objectCaching: false });
+}
+function buildLamp() {
+  return new fabric.Group([
+    new fabric.Ellipse({ rx: 12, ry: 5, fill: "rgba(0,0,0,0.28)", left: 4, top: 28, originX: "center", originY: "center" }),
+    new fabric.Rect({ width: 16, height: 5, fill: "#343a40", left: 0, top: 24, originX: "center", originY: "center", rx: 1, ry: 1 }),
+    new fabric.Rect({ width: 4, height: 42, fill: "#868e96", left: 0, top: 2, originX: "center", originY: "center" }),
+    new fabric.Rect({ width: 20, height: 4, fill: "#495057", left: 8, top: -18, originX: "center", originY: "center" }),
+    new fabric.Circle({ radius: 7, fill: "#ffd60a", stroke: "#e85d04", strokeWidth: 2, left: 16, top: -16, originX: "center", originY: "center" }),
+    new fabric.Circle({ radius: 3, fill: "#fff3bf", left: 16, top: -16, originX: "center", originY: "center" })
+  ], { objectCaching: false });
+}
+function buildPothole() {
+  return new fabric.Group([
+    new fabric.Ellipse({ rx: 24, ry: 14, fill: "rgba(0,0,0,0.28)", left: 2, top: 3, originX: "center", originY: "center" }),
+    new fabric.Ellipse({ rx: 22, ry: 13, fill: "#6c757d", left: 0, top: 0, originX: "center", originY: "center" }),
+    new fabric.Ellipse({ rx: 16, ry: 9, fill: "#212529", left: 0, top: 1, originX: "center", originY: "center" }),
+    new fabric.Ellipse({ rx: 8, ry: 4, fill: "#101214", left: -2, top: 2, originX: "center", originY: "center" }),
+    new fabric.Ellipse({ rx: 4, ry: 2, fill: "rgba(255,255,255,0.22)", left: -5, top: -3, originX: "center", originY: "center" })
+  ], { objectCaching: false });
+}
+function addRoadProp(kind, point) {
+  if (kind === "tree") place(buildTree(), point);
+  else if (kind === "lamp") place(buildLamp(), point);
+  else if (kind === "pothole") place(buildPothole(), point);
+}
 function badgeNumber(kind) {
   if (!kind || kind.charAt(0) !== "b") return 0;
   const n = Number(kind.slice(1));
@@ -1681,6 +1719,26 @@ function boot() {
     btn.onclick = function() { applyRoad(pair[1]); };
     roads.appendChild(btn);
   });
+  ROAD_PROPS.forEach(function(pair) {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.textContent = pair[0];
+    btn.draggable = true;
+    btn.style.cursor = "grab";
+    btn.onclick = function() {
+      if (btn.dataset.dragging === "1") return;
+      addRoadProp(pair[1]);
+    };
+    btn.addEventListener("dragstart", function(ev) {
+      btn.dataset.dragging = "1";
+      ev.dataTransfer.setData("text/plain", pair[1]);
+      ev.dataTransfer.effectAllowed = "copy";
+    });
+    btn.addEventListener("dragend", function() {
+      setTimeout(function() { delete btn.dataset.dragging; }, 80);
+    });
+    roads.appendChild(btn);
+  });
   const palette = document.getElementById("palette");
   ITEMS.forEach(function(pair) {
     const btn = document.createElement("button");
@@ -1712,9 +1770,11 @@ function boot() {
   board.addEventListener("drop", function(ev) {
     ev.preventDefault();
     const kind = ev.dataTransfer ? ev.dataTransfer.getData("text/plain") : "";
+    if (!canvas) return;
     const n = badgeNumber(kind);
-    if (!n || !canvas) return;
-    addBadge(n, canvas.getPointer(ev));
+    const point = canvas.getPointer(ev);
+    if (n) addBadge(n, point);
+    else if (kind === "tree" || kind === "lamp" || kind === "pothole") addRoadProp(kind, point);
   });
   document.getElementById("del").onclick = function() {
     const obj = canvas.getActiveObject();
