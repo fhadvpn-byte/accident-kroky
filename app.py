@@ -855,18 +855,22 @@ st.markdown("""
     }
     [data-testid="collapsedControl"],
     [data-testid="stSidebarCollapsedControl"],
-    button[kind="header"] {
-        background: rgba(0, 229, 255, 0.2) !important;
-        color: #00e5ff !important;
+    [data-testid="stExpandSidebarButton"],
+    [data-testid="stSidebarCollapseButton"] button,
+    [data-testid="stSidebarHeader"] button,
+    button[kind="headerNoPadding"] {
+        background-color: rgba(0, 229, 255, 0.18) !important;
         border: 2px solid #00e5ff !important;
-        padding: 4px 8px !important;
-        border-radius: 8px !important;
-        box-shadow: 0 0 14px rgba(0, 229, 255, 0.85) !important;
+        border-radius: 10px !important;
+        box-shadow: 0 0 15px #00e5ff, 0 0 25px rgba(0, 229, 255, 0.6), inset 0 0 8px rgba(0, 229, 255, 0.45) !important;
         z-index: 999999 !important;
     }
     [data-testid="collapsedControl"] svg,
     [data-testid="stSidebarCollapsedControl"] svg,
-    button[kind="header"] svg {
+    [data-testid="stExpandSidebarButton"] svg,
+    [data-testid="stSidebarCollapseButton"] button svg,
+    [data-testid="stSidebarHeader"] button svg,
+    button[kind="headerNoPadding"] svg {
         fill: #00e5ff !important;
         stroke: #00e5ff !important;
         width: 24px !important;
