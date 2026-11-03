@@ -1343,11 +1343,7 @@ function roadUturn() {
     rule(280, 0, 280, 168, YEL, 3),
     rule(320, 0, 320, 168, YEL, 3),
     rule(280, 382, 280, 550, YEL, 3),
-    rule(320, 382, 320, 550, YEL, 3),
-    mark(new fabric.Path("M 268 318 L 268 248 C 268 214, 332 214, 332 248 L 332 292", {
-      fill: "", stroke: "#ffffff", strokeWidth: 3
-    })),
-    mark(new fabric.Path("M 332 292 L 322 282 L 342 282 Z", { fill: "#ffffff" }))
+    rule(320, 382, 320, 550, YEL, 3)
   ];
   parts.push.apply(parts, vDashes(205, 8, 542));
   parts.push.apply(parts, vDashes(395, 8, 542));
