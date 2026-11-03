@@ -853,6 +853,24 @@ st.markdown("""
         border-radius: 14px;
         border: 1px solid rgba(0, 242, 254, 0.35) !important;
     }
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"],
+    button[kind="header"] {
+        background: rgba(0, 229, 255, 0.2) !important;
+        color: #00e5ff !important;
+        border: 1px solid #00e5ff !important;
+        border-radius: 8px !important;
+        box-shadow: 0 0 14px rgba(0, 229, 255, 0.85) !important;
+        z-index: 999999 !important;
+    }
+    [data-testid="collapsedControl"] svg,
+    [data-testid="stSidebarCollapsedControl"] svg,
+    button[kind="header"] svg {
+        fill: #00e5ff !important;
+        stroke: #00e5ff !important;
+        width: 24px !important;
+        height: 24px !important;
+    }
     @media screen and (max-width: 768px) {
         html, body,
         [data-testid="stAppViewContainer"],
