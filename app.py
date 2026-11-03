@@ -1028,14 +1028,35 @@ with tab1:
     
     acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", "عدم إعطاء الأفضلية والشروع في الدوران")
     st.divider()
+    _party_columns = [
+        ("الطرف", "الأطراف"),
+        ("الاسم", "الاسم"),
+        ("الهوية", "الهوية"),
+        ("المشاركة", "نوع المشاركة"),
+        ("الحالة", "الحالة"),
+        ("التأهيل", "تأهيل القيادة"),
+    ]
+    _vehicle_columns = [
+        ("الطرف", "الأطراف"),
+        ("نوع المركبة", "نوع المركبة"),
+        ("رقم اللوحة", "اللوحة"),
+        ("الرقم التسلسلي", "التسلسلي"),
+        ("نوع الترخيص", "الترخيص"),
+        ("التأمين", "التأمين"),
+    ]
     st.subheader("جدول معلومات أطراف الحادث")
     parties_df = st.data_editor(
         pd.DataFrame(st.session_state.parties),
         num_rows="dynamic",
         use_container_width=True,
+        column_order=[key for key, _label in reversed(_party_columns)],
         column_config={
+            "الطرف": st.column_config.TextColumn("الأطراف"),
+            "الاسم": st.column_config.TextColumn("الاسم"),
+            "الهوية": st.column_config.TextColumn("الهوية"),
             "المشاركة": st.column_config.SelectboxColumn("نوع المشاركة", options=["سائق", "راكب", "مشاة"]),
-            "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=["سليم", "مصاب", "متوفي"]),
+            "الحالة": st.column_config.SelectboxColumn("الحالة", options=["سليم", "مصاب", "متوفي"]),
+            "التأهيل": st.column_config.TextColumn("تأهيل القيادة"),
         }
     )
     st.divider()
@@ -1044,8 +1065,13 @@ with tab1:
         pd.DataFrame(st.session_state.vehicles),
         num_rows="dynamic",
         use_container_width=True,
+        column_order=[key for key, _label in reversed(_vehicle_columns)],
         column_config={
-            "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=["خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
+            "الطرف": st.column_config.TextColumn("الأطراف"),
+            "نوع المركبة": st.column_config.TextColumn("نوع المركبة"),
+            "رقم اللوحة": st.column_config.TextColumn("اللوحة"),
+            "الرقم التسلسلي": st.column_config.TextColumn("التسلسلي"),
+            "نوع الترخيص": st.column_config.SelectboxColumn("الترخيص", options=["خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
             "التأمين": st.column_config.SelectboxColumn("التأمين", options=["مؤمنة", "غير مؤمنة"]),
         }
     )
@@ -1978,12 +2004,14 @@ with tab5:
             </div>
         </div>
         """
+    parties_head = "".join(f"<th>{label}</th>" for _key, label in _party_columns)
+    vehicles_head = "".join(f"<th>{label}</th>" for _key, label in _vehicle_columns)
     parties_rows = ""
     for _, row in parties_df.iterrows():
-        parties_rows += f"<tr><td>{row['الطرف']}</td><td>{row['الاسم']}</td><td>{row['الهوية']}</td><td>{row['المشاركة']}</td><td>{row['الحالة']}</td><td>{row['التأهيل']}</td></tr>"
+        parties_rows += "<tr>" + "".join(f"<td>{row.get(key, '')}</td>" for key, _label in _party_columns) + "</tr>"
     vehicles_rows = ""
     for _, row in vehicles_df.iterrows():
-        vehicles_rows += f"<tr><td>{row['الطرف']}</td><td>{row['نوع المركبة']}</td><td>{row['رقم اللوحة']}</td><td>{row['الرقم التسلسلي']}</td><td>{row['نوع الترخيص']}</td><td>{row['التأمين']}</td></tr>"
+        vehicles_rows += "<tr>" + "".join(f"<td>{row.get(key, '')}</td>" for key, _label in _vehicle_columns) + "</tr>"
     results_html = "<br>".join([line for line in acc_results.split("\n") if line.strip()])
     laws_html = "".join([f"<li>{line}</li>" for line in laws_list_for_report if line.strip()])
     actions_html = "".join([f"<tr><td>{i+1}- {act}</td></tr>" for i, act in enumerate(selected_actions)])
@@ -2158,12 +2186,12 @@ with tab5:
             </table></div>
             <div class="section-badge" style="font-size:15px;">معلومات أطراف الحادث</div>
             <div class="table-scroll"><table>
-                <tr><th>الأطراف</th><th>الاسم</th><th>الهوية / الإقامة</th><th>نوع المشاركة</th><th>الحالة الصحية</th><th>تأهيل للقيادة</th></tr>
+                <tr>{parties_head}</tr>
                 {parties_rows}
             </table></div>
             <div class="section-badge" style="font-size:15px;">معلومات المركبات</div>
             <div class="table-scroll"><table>
-                <tr><th>الأطراف</th><th>نوع المركبة</th><th>رقم اللوحة</th><th>الرقم التسلسلي</th><th>نوع الترخيص</th><th>التأمين</th></tr>
+                <tr>{vehicles_head}</tr>
                 {vehicles_rows}
             </table></div>
             <div class="page-num">1</div>
