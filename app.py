@@ -1650,10 +1650,17 @@ else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabri
     if adopted_submitted:
         _store_adopted_sketch(adopted_payload)
     road_name_sign = st.text_input("اسم الطريق الرئيسي", "طريق العارضة العام - جازان")
-    key_1 = st.text_input("مدلول رقم (1)", f"1 - {road_name_sign}")
-    key_2 = st.text_input("مدلول رقم (2)", "2 - اتجاه سير المركبة الأولى")
-    key_3 = st.text_input("مدلول رقم (3)", "3 - نقطة الاصطدام")
-    key_4 = st.text_input("مدلول رقم (4)", "4 - آثار الفرامل والاتجاهات")
+    _legend_defaults = [
+        f"1 - {road_name_sign}",
+        "2 - اتجاه سير المركبة الأولى",
+        "3 - نقطة الاصطدام",
+        "4 - آثار الفرامل والاتجاهات",
+    ]
+    _legend_defaults.extend(f"{number} - " for number in range(5, 11))
+    legend_keys = [
+        st.text_input(f"مدلول رقم ({number})", default, key=f"legend_key_{number}")
+        for number, default in enumerate(_legend_defaults, start=1)
+    ]
     adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
     sketch_img = Image.open(adopted_path).convert("RGB") if adopted_path.is_file() else None
 def convert_gallery_image(uploaded_file):
@@ -2075,10 +2082,7 @@ with tab5:
                 </div>
             </div>
             <div style="margin-top:30px; font-weight:bold; font-size:16px; line-height:2; padding-right:30px;">
-                <div>{key_1}</div>
-                <div>{key_2}</div>
-                <div>{key_3}</div>
-                <div>{key_4}</div>
+                {"".join(f"<div>{line}</div>" for line in legend_keys)}
             </div>
             <div class="page-num">4</div>
         </div>
