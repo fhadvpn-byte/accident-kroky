@@ -1187,24 +1187,110 @@ let canvas;
 let currentRoad = "t";
 
 function mark(obj) {
-  obj.set({ selectable: false, evented: false, hoverCursor: "default", name: "road-bg" });
+  obj.set({ selectable: false, evented: false, hoverCursor: "default", name: "road-bg", objectCaching: false });
   return obj;
 }
-function box(x, y, w, h, fill) {
-  return mark(new fabric.Rect({ left: x, top: y, width: w, height: h, fill: fill }));
-}
-function rule(x1, y1, x2, y2, color, width) {
-  return mark(new fabric.Line([x1, y1, x2, y2], { stroke: color, strokeWidth: width }));
-}
-function disk(x, y, r, fill, stroke, sw) {
-  return mark(new fabric.Circle({
-    left: x, top: y, radius: r, fill: fill, stroke: stroke || null, strokeWidth: sw || 0,
-    originX: "center", originY: "center"
-  }));
-}
-const SAND = "#dfd3c3";
-const ASPH = "#343a40";
+const ISO = { sx: 0.544, sy: 0.887, sh: 0.45, sz: 0.85, ox: 16, oy: 38 };
+const SIDEWALK = "#d4cdc1";
+const ASPH = "#3c434a";
 const YEL = "#f0c400";
+const ROAD_Z = 17.2;
+const ISLAND_Z = 36;
+function darken(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  const ch = function(v) { return Math.max(0, Math.min(255, Math.round(v * amt))); };
+  const r = ch((n >> 16) & 255), g = ch((n >> 8) & 255), b = ch(n & 255);
+  return "#" + [r, g, b].map(function(v) { return ("0" + v.toString(16)).slice(-2); }).join("");
+}
+function isoPoint(x, y, z) {
+  return {
+    x: ISO.ox + x * ISO.sx + y * ISO.sh,
+    y: ISO.oy + y * ISO.sy - (z || 0) * ISO.sz
+  };
+}
+function face(pts, fill) {
+  return mark(new fabric.Polygon(pts.map(function(p) {
+    return isoPoint(p[0], p[1], p[2] || 0);
+  }), { fill: fill, stroke: null, strokeWidth: 0, objectCaching: false }));
+}
+function slabFaces(x, y, w, h, fill, z0, z1) {
+  const top = [[x, y, z1], [x + w, y, z1], [x + w, y + h, z1], [x, y + h, z1]];
+  if (z1 <= z0 + 0.05) return [face(top, fill)];
+  return [
+    face([[x, y, z0], [x, y + h, z0], [x, y + h, z1], [x, y, z1]], darken(fill, 0.62)),
+    face([[x, y + h, z0], [x + w, y + h, z0], [x + w, y + h, z1], [x, y + h, z1]], darken(fill, 0.52)),
+    face([[x + w, y, z0], [x + w, y + h, z0], [x + w, y + h, z1], [x + w, y, z1]], darken(fill, 0.74)),
+    face(top, fill)
+  ];
+}
+function pushAll(parts, items) {
+  items.forEach(function(obj) { parts.push(obj); });
+}
+function ground() {
+  const corners = [[0, 0], [600, 0], [600, 550], [0, 550]].map(function(p) { return isoPoint(p[0], p[1], 0); });
+  const shadow = mark(new fabric.Polygon(corners.map(function(p) {
+    return { x: p.x + 8, y: p.y + 10 };
+  }), { fill: "rgba(0,0,0,0.38)", stroke: null, objectCaching: false }));
+  return [shadow].concat(slabFaces(0, 0, 600, 550, SIDEWALK, 0, 16));
+}
+function asphalt(x, y, w, h) {
+  const z = ROAD_Z;
+  const t = Math.min(8, w / 5, h / 5);
+  return [
+    face([[x, y, z], [x + w, y, z], [x + w, y + h, z], [x, y + h, z]], ASPH),
+    face([[x, y, z], [x + w, y, z], [x + w, y + t, z], [x, y + t, z]], "#2c3238"),
+    face([[x, y + h - t, z], [x + w, y + h - t, z], [x + w, y + h, z], [x, y + h, z]], "#24292e"),
+    face([[x, y, z], [x + t, y, z], [x + t, y + h, z], [x, y + h, z]], "#343b42"),
+    face([[x + w - t, y, z], [x + w, y, z], [x + w, y + h, z], [x + w - t, y + h, z]], "#2a3036")
+  ];
+}
+function island(x, y, w, h) {
+  return slabFaces(x, y, w, h, "#ddd6c8", 16, ISLAND_Z);
+}
+function rule(x1, y1, x2, y2, color, width, z) {
+  const a = isoPoint(x1, y1, z == null ? ROAD_Z + 0.6 : z);
+  const b = isoPoint(x2, y2, z == null ? ROAD_Z + 0.6 : z);
+  return mark(new fabric.Line([a.x, a.y, b.x, b.y], { stroke: color, strokeWidth: width, strokeLineCap: "butt", objectCaching: false }));
+}
+function ringPoints(cx, cy, r, z, steps) {
+  const pts = [];
+  const n = steps || 30;
+  for (let i = 0; i < n; i++) {
+    const t = (i / n) * Math.PI * 2;
+    pts.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r, z]);
+  }
+  return pts;
+}
+function asphaltDisk(cx, cy, r) {
+  return [face(ringPoints(cx, cy, r, ROAD_Z), ASPH)];
+}
+function islandDisk(cx, cy, r) {
+  const n = 28;
+  const bottom = ringPoints(cx, cy, r, 16, n);
+  const top = ringPoints(cx, cy, r, ISLAND_Z, n);
+  const inner = ringPoints(cx, cy, Math.max(4, r - 4), ISLAND_Z + 0.4, n);
+  const parts = [];
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    parts.push(face([
+      [bottom[i][0], bottom[i][1], 16],
+      [bottom[j][0], bottom[j][1], 16],
+      [top[j][0], top[j][1], ISLAND_Z],
+      [top[i][0], top[i][1], ISLAND_Z]
+    ], i % 2 ? "#8f877c" : "#b7afa3"));
+  }
+  parts.push(face(top, "#ddd6c8"));
+  for (let i = 0; i < n; i++) {
+    const j = (i + 1) % n;
+    parts.push(face([
+      [top[i][0], top[i][1], ISLAND_Z + 0.4],
+      [top[j][0], top[j][1], ISLAND_Z + 0.4],
+      [inner[j][0], inner[j][1], ISLAND_Z + 0.4],
+      [inner[i][0], inner[i][1], ISLAND_Z + 0.4]
+    ], YEL));
+  }
+  return parts;
+}
 function vDashes(x, y0, y1) {
   const out = [];
   for (let y = y0; y < y1 - 2; y += 18) out.push(rule(x, y, x, Math.min(y1, y + 10), "#ffffff", 2));
@@ -1216,21 +1302,20 @@ function hDashes(y, x0, x1) {
   return out;
 }
 function roadT() {
-  const parts = [
-    box(0, 0, 600, 550, SAND),
-    box(168, 0, 264, 550, ASPH),
-    box(0, 178, 168, 194, ASPH),
-    box(18, 262, 110, 26, SAND),
-    rule(168, 0, 168, 178, YEL, 4),
-    rule(168, 372, 168, 550, YEL, 4),
-    rule(432, 0, 432, 550, YEL, 4),
-    rule(292, 0, 292, 550, YEL, 3),
-    rule(304, 0, 304, 550, YEL, 3),
-    rule(0, 178, 168, 178, YEL, 4),
-    rule(0, 372, 168, 372, YEL, 4),
-    rule(18, 262, 128, 262, YEL, 3),
-    rule(18, 288, 128, 288, YEL, 3)
-  ];
+  const parts = [];
+  pushAll(parts, ground());
+  pushAll(parts, asphalt(168, 0, 264, 550));
+  pushAll(parts, asphalt(0, 178, 168, 194));
+  pushAll(parts, island(18, 262, 110, 26));
+  parts.push(rule(168, 0, 168, 178, YEL, 4));
+  parts.push(rule(168, 372, 168, 550, YEL, 4));
+  parts.push(rule(432, 0, 432, 550, YEL, 4));
+  parts.push(rule(292, 0, 292, 550, YEL, 3));
+  parts.push(rule(304, 0, 304, 550, YEL, 3));
+  parts.push(rule(0, 178, 168, 178, YEL, 4));
+  parts.push(rule(0, 372, 168, 372, YEL, 4));
+  parts.push(rule(18, 262, 128, 262, YEL, 3, ISLAND_Z + 0.6));
+  parts.push(rule(18, 288, 128, 288, YEL, 3, ISLAND_Z + 0.6));
   parts.push.apply(parts, vDashes(230, 8, 170));
   parts.push.apply(parts, vDashes(230, 380, 542));
   parts.push.apply(parts, vDashes(368, 8, 170));
@@ -1240,29 +1325,28 @@ function roadT() {
   return parts;
 }
 function roadCross() {
-  const parts = [
-    box(0, 0, 600, 550, SAND),
-    box(168, 0, 264, 550, ASPH),
-    box(0, 178, 600, 194, ASPH),
-    box(18, 262, 110, 26, SAND),
-    box(472, 262, 110, 26, SAND),
-    rule(168, 0, 168, 178, YEL, 4),
-    rule(168, 372, 168, 550, YEL, 4),
-    rule(432, 0, 432, 178, YEL, 4),
-    rule(432, 372, 432, 550, YEL, 4),
-    rule(292, 0, 292, 178, YEL, 3),
-    rule(304, 0, 304, 178, YEL, 3),
-    rule(292, 372, 292, 550, YEL, 3),
-    rule(304, 372, 304, 550, YEL, 3),
-    rule(0, 178, 168, 178, YEL, 4),
-    rule(432, 178, 600, 178, YEL, 4),
-    rule(0, 372, 168, 372, YEL, 4),
-    rule(432, 372, 600, 372, YEL, 4),
-    rule(18, 262, 128, 262, YEL, 3),
-    rule(18, 288, 128, 288, YEL, 3),
-    rule(472, 262, 582, 262, YEL, 3),
-    rule(472, 288, 582, 288, YEL, 3)
-  ];
+  const parts = [];
+  pushAll(parts, ground());
+  pushAll(parts, asphalt(168, 0, 264, 550));
+  pushAll(parts, asphalt(0, 178, 600, 194));
+  pushAll(parts, island(18, 262, 110, 26));
+  pushAll(parts, island(472, 262, 110, 26));
+  parts.push(rule(168, 0, 168, 178, YEL, 4));
+  parts.push(rule(168, 372, 168, 550, YEL, 4));
+  parts.push(rule(432, 0, 432, 178, YEL, 4));
+  parts.push(rule(432, 372, 432, 550, YEL, 4));
+  parts.push(rule(292, 0, 292, 178, YEL, 3));
+  parts.push(rule(304, 0, 304, 178, YEL, 3));
+  parts.push(rule(292, 372, 292, 550, YEL, 3));
+  parts.push(rule(304, 372, 304, 550, YEL, 3));
+  parts.push(rule(0, 178, 168, 178, YEL, 4));
+  parts.push(rule(432, 178, 600, 178, YEL, 4));
+  parts.push(rule(0, 372, 168, 372, YEL, 4));
+  parts.push(rule(432, 372, 600, 372, YEL, 4));
+  parts.push(rule(18, 262, 128, 262, YEL, 3, ISLAND_Z + 0.6));
+  parts.push(rule(18, 288, 128, 288, YEL, 3, ISLAND_Z + 0.6));
+  parts.push(rule(472, 262, 582, 262, YEL, 3, ISLAND_Z + 0.6));
+  parts.push(rule(472, 288, 582, 288, YEL, 3, ISLAND_Z + 0.6));
   parts.push.apply(parts, vDashes(230, 8, 170));
   parts.push.apply(parts, vDashes(230, 380, 542));
   parts.push.apply(parts, vDashes(368, 8, 170));
@@ -1274,77 +1358,116 @@ function roadCross() {
   return parts;
 }
 function roadDual() {
-  const parts = [
-    box(0, 0, 600, 550, SAND),
-    box(120, 0, 360, 550, ASPH),
-    box(282, 0, 36, 550, SAND),
-    rule(120, 0, 120, 550, YEL, 4),
-    rule(480, 0, 480, 550, YEL, 4),
-    rule(282, 0, 282, 550, YEL, 3),
-    rule(318, 0, 318, 550, YEL, 3)
-  ];
+  const parts = [];
+  pushAll(parts, ground());
+  pushAll(parts, asphalt(120, 0, 360, 550));
+  pushAll(parts, island(282, 0, 36, 550));
+  parts.push(rule(120, 0, 120, 550, YEL, 4));
+  parts.push(rule(480, 0, 480, 550, YEL, 4));
+  parts.push(rule(282, 0, 282, 550, YEL, 3, ISLAND_Z + 0.6));
+  parts.push(rule(318, 0, 318, 550, YEL, 3, ISLAND_Z + 0.6));
   parts.push.apply(parts, vDashes(201, 8, 542));
   parts.push.apply(parts, vDashes(399, 8, 542));
   return parts;
 }
 function roadSingle() {
-  const parts = [
-    box(0, 0, 600, 550, SAND),
-    box(190, 0, 220, 550, ASPH),
-    rule(190, 0, 190, 550, YEL, 4),
-    rule(410, 0, 410, 550, YEL, 4)
-  ];
+  const parts = [];
+  pushAll(parts, ground());
+  pushAll(parts, asphalt(190, 0, 220, 550));
+  parts.push(rule(190, 0, 190, 550, YEL, 4));
+  parts.push(rule(410, 0, 410, 550, YEL, 4));
   parts.push.apply(parts, vDashes(300, 8, 542));
   return parts;
 }
 function roadRound() {
-  const parts = [
-    box(0, 0, 600, 550, SAND),
-    box(250, 0, 100, 550, ASPH),
-    box(0, 225, 600, 100, ASPH),
-    disk(300, 275, 118, ASPH),
-    disk(300, 275, 54, SAND, YEL, 4),
-    rule(250, 0, 250, 160, YEL, 4),
-    rule(350, 0, 350, 160, YEL, 4),
-    rule(250, 390, 250, 550, YEL, 4),
-    rule(350, 390, 350, 550, YEL, 4),
-    rule(0, 225, 180, 225, YEL, 4),
-    rule(0, 325, 180, 325, YEL, 4),
-    rule(420, 225, 600, 225, YEL, 4),
-    rule(420, 325, 600, 325, YEL, 4)
-  ];
+  const parts = [];
+  pushAll(parts, ground());
+  pushAll(parts, asphalt(250, 0, 100, 550));
+  pushAll(parts, asphalt(0, 225, 600, 100));
+  pushAll(parts, asphaltDisk(300, 275, 118));
+  pushAll(parts, islandDisk(300, 275, 54));
+  parts.push(rule(250, 0, 250, 160, YEL, 4));
+  parts.push(rule(350, 0, 350, 160, YEL, 4));
+  parts.push(rule(250, 390, 250, 550, YEL, 4));
+  parts.push(rule(350, 390, 350, 550, YEL, 4));
+  parts.push(rule(0, 225, 180, 225, YEL, 4));
+  parts.push(rule(0, 325, 180, 325, YEL, 4));
+  parts.push(rule(420, 225, 600, 225, YEL, 4));
+  parts.push(rule(420, 325, 600, 325, YEL, 4));
   parts.push.apply(parts, vDashes(300, 8, 150));
   parts.push.apply(parts, vDashes(300, 400, 542));
   parts.push.apply(parts, hDashes(275, 8, 170));
   parts.push.apply(parts, hDashes(275, 430, 592));
   return parts;
 }
-function roadCurve() {
-  const d = "M 150 8 C 230 130, 120 230, 270 330 S 430 470, 470 544";
-  return [
-    box(0, 0, 600, 550, SAND),
-    mark(new fabric.Path(d, { fill: "", stroke: YEL, strokeWidth: 118, strokeLineCap: "butt" })),
-    mark(new fabric.Path(d, { fill: "", stroke: ASPH, strokeWidth: 104, strokeLineCap: "butt" })),
-    mark(new fabric.Path(d, { fill: "", stroke: "#ffffff", strokeWidth: 2, strokeDashArray: [12, 10] }))
+function sampleCurve() {
+  function cubic(a, b, c, d, t) {
+    const u = 1 - t;
+    return [
+      u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * c[0] + t * t * t * d[0],
+      u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * c[1] + t * t * t * d[1]
+    ];
+  }
+  const spans = [
+    [[150, 8], [230, 130], [120, 230], [270, 330]],
+    [[270, 330], [420, 430], [430, 470], [470, 544]]
   ];
+  const samples = [];
+  spans.forEach(function(s, si) {
+    const start = si === 0 ? 0 : 1;
+    for (let i = start; i <= 18; i++) samples.push(cubic(s[0], s[1], s[2], s[3], i / 18));
+  });
+  return samples;
+}
+function roadCurve() {
+  const samples = sampleCurve();
+  const left = [];
+  const right = [];
+  const half = 54;
+  for (let i = 0; i < samples.length; i++) {
+    const p0 = samples[Math.max(0, i - 1)];
+    const p1 = samples[Math.min(samples.length - 1, i + 1)];
+    let dx = p1[0] - p0[0];
+    let dy = p1[1] - p0[1];
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    dx /= len;
+    dy /= len;
+    left.push([samples[i][0] - dy * half, samples[i][1] + dx * half]);
+    right.push([samples[i][0] + dy * half, samples[i][1] - dx * half]);
+  }
+  const ribbon = left.concat(right.slice().reverse()).map(function(p) { return [p[0], p[1], ROAD_Z]; });
+  const parts = [];
+  pushAll(parts, ground());
+  parts.push(face(ribbon, ASPH));
+  for (let i = 0; i < left.length - 1; i++) {
+    parts.push(rule(left[i][0], left[i][1], left[i + 1][0], left[i + 1][1], YEL, 3));
+    parts.push(rule(right[i][0], right[i][1], right[i + 1][0], right[i + 1][1], YEL, 3));
+    if (i % 2 === 0) {
+      const a = samples[i];
+      const b = samples[Math.min(samples.length - 1, i + 1)];
+      parts.push(rule(a[0], a[1], b[0], b[1], "#ffffff", 2));
+    }
+  }
+  return parts;
 }
 function roadUturn() {
-  const parts = [
-    box(0, 0, 600, 550, SAND),
-    box(130, 0, 150, 550, ASPH),
-    box(320, 0, 150, 550, ASPH),
-    box(280, 200, 40, 150, ASPH),
-    mark(new fabric.Path("M 280 200 L 246 168 L 246 228 Z", { fill: ASPH })),
-    mark(new fabric.Path("M 320 200 L 354 168 L 354 228 Z", { fill: ASPH })),
-    mark(new fabric.Path("M 280 350 L 246 382 L 246 322 Z", { fill: ASPH })),
-    mark(new fabric.Path("M 320 350 L 354 382 L 354 322 Z", { fill: ASPH })),
-    rule(130, 0, 130, 550, YEL, 4),
-    rule(470, 0, 470, 550, YEL, 4),
-    rule(280, 0, 280, 168, YEL, 3),
-    rule(320, 0, 320, 168, YEL, 3),
-    rule(280, 382, 280, 550, YEL, 3),
-    rule(320, 382, 320, 550, YEL, 3)
-  ];
+  const parts = [];
+  pushAll(parts, ground());
+  pushAll(parts, asphalt(130, 0, 150, 550));
+  pushAll(parts, asphalt(320, 0, 150, 550));
+  pushAll(parts, asphalt(280, 200, 40, 150));
+  parts.push(face([[280, 200, ROAD_Z], [246, 168, ROAD_Z], [246, 228, ROAD_Z]], ASPH));
+  parts.push(face([[320, 200, ROAD_Z], [354, 168, ROAD_Z], [354, 228, ROAD_Z]], ASPH));
+  parts.push(face([[280, 350, ROAD_Z], [246, 382, ROAD_Z], [246, 322, ROAD_Z]], ASPH));
+  parts.push(face([[320, 350, ROAD_Z], [354, 382, ROAD_Z], [354, 322, ROAD_Z]], ASPH));
+  pushAll(parts, island(280, 0, 40, 168));
+  pushAll(parts, island(280, 382, 40, 168));
+  parts.push(rule(130, 0, 130, 550, YEL, 4));
+  parts.push(rule(470, 0, 470, 550, YEL, 4));
+  parts.push(rule(280, 0, 280, 168, YEL, 3, ISLAND_Z + 0.6));
+  parts.push(rule(320, 0, 320, 168, YEL, 3, ISLAND_Z + 0.6));
+  parts.push(rule(280, 382, 280, 550, YEL, 3, ISLAND_Z + 0.6));
+  parts.push(rule(320, 382, 320, 550, YEL, 3, ISLAND_Z + 0.6));
   parts.push.apply(parts, vDashes(205, 8, 542));
   parts.push.apply(parts, vDashes(395, 8, 542));
   return parts;
@@ -1375,99 +1498,110 @@ function place(obj, point) {
   canvas.setActiveObject(obj);
   canvas.requestRenderAll();
 }
-function sedan(fill) {
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="76" viewBox="0 0 36 76">' +
-    '<path d="M13 7 C16 3 20 3 23 7 C28 9 31 13 31 18 L30 58 C30 67 25 72 18 72 C11 72 6 67 6 58 L5 18 C5 13 8 9 13 7 Z" fill="' + fill + '" stroke="#1c1c1c" stroke-width="0.8"/>' +
-    '<path d="M18 8 L18 16" stroke="#222" stroke-width="0.5" fill="none"/>' +
-    '<path d="M13 15 H23" stroke="#222" stroke-width="0.45" fill="none" opacity="0.7"/>' +
-    '<path d="M10 9 L14.2 14.2 L12.4 14.2 L9 10.2 Z" fill="#fff4d6" stroke="#8a8a8a" stroke-width="0.3"/>' +
-    '<path d="M26 9 L21.8 14.2 L23.6 14.2 L27 10.2 Z" fill="#fff4d6" stroke="#8a8a8a" stroke-width="0.3"/>' +
-    '<path d="M11 18 L25 18 L23.4 29 L12.6 29 Z" fill="#1d2d44"/>' +
-    '<rect x="12" y="30.5" width="12" height="15" rx="1.4" fill="' + fill + '" stroke="#222" stroke-width="0.45"/>' +
-    '<path d="M7.6 31 L12 31.6 L12 45 L8.2 43.2 Z" fill="#1d2d44"/>' +
-    '<path d="M28.4 31 L24 31.6 L24 45 L27.8 43.2 Z" fill="#1d2d44"/>' +
-    '<path d="M12.2 47 C14.4 54 21.6 54 23.8 47 C21.4 51.2 14.6 51.2 12.2 47 Z" fill="#1d2d44"/>' +
-    '<rect x="1.2" y="20" width="5.2" height="3.2" rx="1" fill="#2b2b2b"/>' +
-    '<rect x="29.6" y="20" width="5.2" height="3.2" rx="1" fill="#2b2b2b"/>' +
-    '<rect x="4.2" y="14" width="2.8" height="8" rx="1" fill="#111"/>' +
-    '<rect x="29" y="14" width="2.8" height="8" rx="1" fill="#111"/>' +
-    '<rect x="4.2" y="54" width="2.8" height="8" rx="1" fill="#111"/>' +
-    '<rect x="29" y="54" width="2.8" height="8" rx="1" fill="#111"/>' +
-    '</svg>';
+function localIso(x, y, z) {
+  return {
+    x: x * ISO.sx + y * ISO.sh,
+    y: y * ISO.sy - (z || 0) * ISO.sz
+  };
 }
-function suvSvg() {
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="44" height="80" viewBox="0 0 44 80">' +
-    '<path d="M14 8 C18 3 26 3 30 8 C35 10 38 15 38 20 L37 60 C37 70 31 76 22 76 C13 76 7 70 7 60 L6 20 C6 15 9 10 14 8 Z" fill="#6b705c" stroke="#1c1c1c" stroke-width="0.8"/>' +
-    '<path d="M22 9 L22 17" stroke="#222" stroke-width="0.5" fill="none"/>' +
-    '<path d="M16 16 H28" stroke="#222" stroke-width="0.45" fill="none" opacity="0.7"/>' +
-    '<path d="M12 10 L17 15.5 L15 15.5 L10.6 11.2 Z" fill="#fff4d6" stroke="#8a8a8a" stroke-width="0.3"/>' +
-    '<path d="M32 10 L27 15.5 L29 15.5 L33.4 11.2 Z" fill="#fff4d6" stroke="#8a8a8a" stroke-width="0.3"/>' +
-    '<path d="M13 19 L31 19 L29 31 L15 31 Z" fill="#1d2d44"/>' +
-    '<rect x="15" y="32" width="14" height="16" rx="1.5" fill="#6b705c" stroke="#222" stroke-width="0.45"/>' +
-    '<path d="M9 32 L15 33 L15 48 L9.6 46 Z" fill="#1d2d44"/>' +
-    '<path d="M35 32 L29 33 L29 48 L34.4 46 Z" fill="#1d2d44"/>' +
-    '<path d="M15 50 C18 57 26 57 29 50 C26 54 18 54 15 50 Z" fill="#1d2d44"/>' +
-    '<circle cx="22" cy="68" r="4.3" fill="#222" stroke="#111" stroke-width="0.6"/>' +
-    '<circle cx="22" cy="68" r="1.7" fill="#6b705c"/>' +
-    '<rect x="2" y="22" width="6" height="3.4" rx="1" fill="#2b2b2b"/>' +
-    '<rect x="36" y="22" width="6" height="3.4" rx="1" fill="#2b2b2b"/>' +
-    '<rect x="5" y="15" width="3.2" height="9" rx="1" fill="#111"/>' +
-    '<rect x="35.8" y="15" width="3.2" height="9" rx="1" fill="#111"/>' +
-    '<rect x="5" y="52" width="3.2" height="9" rx="1" fill="#111"/>' +
-    '<rect x="35.8" y="52" width="3.2" height="9" rx="1" fill="#111"/>' +
-    '</svg>';
-}
-function pickupSvg() {
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="40" height="86" viewBox="0 0 40 86">' +
-    '<path d="M12 6 C16 2 24 2 28 6 C32 8 34 12 34 16 L34 78 C34 82 30 84 20 84 C10 82 6 82 6 78 L6 16 C6 12 8 8 12 6 Z" fill="#f8f9fa" stroke="#222" stroke-width="0.8"/>' +
-    '<path d="M20 7 L20 14" stroke="#333" stroke-width="0.5" fill="none"/>' +
-    '<path d="M11 9 L15.5 14 L13.8 14 L10 10.2 Z" fill="#fff4d6" stroke="#888" stroke-width="0.3"/>' +
-    '<path d="M29 9 L24.5 14 L26.2 14 L30 10.2 Z" fill="#fff4d6" stroke="#888" stroke-width="0.3"/>' +
-    '<path d="M11 16 L29 16 L27 26 L13 26 Z" fill="#1d2d44"/>' +
-    '<rect x="12" y="27" width="16" height="16" rx="1.2" fill="#f8f9fa" stroke="#333" stroke-width="0.4"/>' +
-    '<path d="M8 28 L12 28.5 L12 42 L8.4 40.5 Z" fill="#1d2d44"/>' +
-    '<path d="M32 28 L28 28.5 L28 42 L31.6 40.5 Z" fill="#1d2d44"/>' +
-    '<path d="M13 43 C16 48 24 48 27 43 C24 46 16 46 13 43 Z" fill="#1d2d44"/>' +
-    '<rect x="9" y="50" width="22" height="28" rx="1.5" fill="#e9ecef" stroke="#666" stroke-width="0.6"/>' +
-    '<path d="M11 56 H29 M11 62 H29 M11 68 H29 M11 74 H29" stroke="#8d99ae" stroke-width="0.7" fill="none"/>' +
-    '<rect x="1" y="18" width="5.4" height="3.2" rx="1" fill="#2b2b2b"/>' +
-    '<rect x="33.6" y="18" width="5.4" height="3.2" rx="1" fill="#2b2b2b"/>' +
-    '<rect x="4" y="12" width="3" height="8" rx="1" fill="#111"/>' +
-    '<rect x="33" y="12" width="3" height="8" rx="1" fill="#111"/>' +
-    '<rect x="4" y="64" width="3" height="8" rx="1" fill="#111"/>' +
-    '<rect x="33" y="64" width="3" height="8" rx="1" fill="#111"/>' +
-    '</svg>';
-}
-function truckSvg() {
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="108" viewBox="0 0 42 108">' +
-    '<path d="M12 4 C16 1 26 1 30 4 C34 6 36 10 36 14 L36 40 L6 40 L6 14 C6 10 8 6 12 4 Z" fill="#ced4da" stroke="#222" stroke-width="0.8"/>' +
-    '<path d="M11 8 L16 13 L14.2 13 L10 9 Z" fill="#fff4d6" stroke="#888" stroke-width="0.3"/>' +
-    '<path d="M31 8 L26 13 L27.8 13 L32 9 Z" fill="#fff4d6" stroke="#888" stroke-width="0.3"/>' +
-    '<path d="M10 15 L32 15 L30 28 L12 28 Z" fill="#1d2d44"/>' +
-    '<path d="M8 22 L12 22.4 L12 34 L8.5 32.5 Z" fill="#1d2d44"/>' +
-    '<path d="M34 22 L30 22.4 L30 34 L33.5 32.5 Z" fill="#1d2d44"/>' +
-    '<rect x="7" y="46" width="28" height="56" rx="2" fill="#6c757d" stroke="#222" stroke-width="0.8"/>' +
-    '<path d="M12 50 V98 M18 50 V98 M24 50 V98 M30 50 V98" stroke="#495057" stroke-width="0.7" fill="none"/>' +
-    '<rect x="2" y="16" width="5" height="3" rx="1" fill="#222"/>' +
-    '<rect x="35" y="16" width="5" height="3" rx="1" fill="#222"/>' +
-    '<rect x="4" y="30" width="4" height="8" rx="1" fill="#111"/>' +
-    '<rect x="34" y="30" width="4" height="8" rx="1" fill="#111"/>' +
-    '<rect x="4" y="78" width="4" height="10" rx="1" fill="#111"/>' +
-    '<rect x="34" y="78" width="4" height="10" rx="1" fill="#111"/>' +
-    '</svg>';
-}
-function motoSvg() {
-  return '<svg xmlns="http://www.w3.org/2000/svg" width="36" height="90" viewBox="0 0 36 90">' +
-    '<circle cx="18" cy="16" r="12" fill="#111"/>' +
-    '<circle cx="18" cy="74" r="12" fill="#111"/>' +
-    '<rect x="12" y="24" width="12" height="42" rx="4" fill="#e76f51" stroke="#111"/>' +
-    '</svg>';
-}
-function addSvg(svg) {
-  fabric.loadSVGFromString(svg, function(objects, options) {
-    const item = fabric.util.groupSVGElements(objects, options);
-    place(item);
+function localFace(pts, fill) {
+  return new fabric.Polygon(pts.map(function(p) { return localIso(p[0], p[1], p[2] || 0); }), {
+    fill: fill, stroke: null, strokeWidth: 0, objectCaching: false
   });
+}
+function lay(parts, items) {
+  items.forEach(function(obj) { parts.push(obj); });
+}
+function prism(x, y, w, h, z0, z1, fill) {
+  return [
+    localFace([[x, y, z0], [x, y + h, z0], [x, y + h, z1], [x, y, z1]], darken(fill, 0.66)),
+    localFace([[x, y + h, z0], [x + w, y + h, z0], [x + w, y + h, z1], [x, y + h, z1]], darken(fill, 0.55)),
+    localFace([[x + w, y, z0], [x + w, y + h, z0], [x + w, y + h, z1], [x + w, y, z1]], darken(fill, 0.78)),
+    localFace([[x, y, z1], [x + w, y, z1], [x + w, y + h, z1], [x, y + h, z1]], fill)
+  ];
+}
+function groundEllipse(cx, cy, rx, ry, fill) {
+  const pts = [];
+  for (let i = 0; i < 22; i++) {
+    const t = (i / 22) * Math.PI * 2;
+    pts.push([cx + Math.cos(t) * rx, cy + Math.sin(t) * ry, 0.2]);
+  }
+  return localFace(pts, fill);
+}
+function buildVehicle(spec) {
+  const w = spec.w;
+  const len = spec.len;
+  const z0 = spec.z0;
+  const z1 = spec.z1;
+  const parts = [groundEllipse(4, 8, w * 0.62, len * 0.48, "rgba(0,0,0,0.36)")];
+  [[-w * 0.48, -len * 0.34], [w * 0.48 - 8, -len * 0.34], [-w * 0.48, len * 0.30], [w * 0.48 - 8, len * 0.30]].forEach(function(p) {
+    lay(parts, prism(p[0], p[1], 8, 12, 0, 7, "#1a1a1a"));
+  });
+  lay(parts, prism(-w / 2, -len / 2, w, len, z0, z1, spec.color));
+  if (spec.cargo) {
+    const c = spec.cargo;
+    lay(parts, prism(c.x, c.y, c.w, c.h, z1, z1 + c.zh, c.color));
+  }
+  if (spec.cab) {
+    const c = spec.cab;
+    const cabColor = c.color || darken(spec.color, 0.92);
+    const top = z1 + c.zh;
+    lay(parts, prism(c.x, c.y, c.w, c.h, z1, top, cabColor));
+    parts.push(localFace([
+      [c.x + 3, c.y + c.h, z1 + 3],
+      [c.x + c.w - 3, c.y + c.h, z1 + 3],
+      [c.x + c.w - 3, c.y + c.h, top - 2],
+      [c.x + 3, c.y + c.h, top - 2]
+    ], "#8ecae6"));
+    parts.push(localFace([
+      [c.x + c.w, c.y + 3, z1 + 3],
+      [c.x + c.w, c.y + c.h - 3, z1 + 3],
+      [c.x + c.w, c.y + c.h - 3, top - 2],
+      [c.x + c.w, c.y + 3, top - 2]
+    ], "#5fa8c7"));
+  }
+  return new fabric.Group(parts, { objectCaching: false });
+}
+function buildMoto() {
+  const parts = [groundEllipse(2, 5, 11, 32, "rgba(0,0,0,0.34)")];
+  lay(parts, prism(-7, -34, 14, 16, 0, 12, "#222222"));
+  lay(parts, prism(-7, 20, 14, 16, 0, 12, "#222222"));
+  lay(parts, prism(-5, -18, 10, 38, 6, 16, "#e76f51"));
+  parts.push(localFace([[-3, -8, 16], [3, -8, 16], [3, 8, 16], [-3, 8, 16]], "#9ec9de"));
+  return new fabric.Group(parts, { objectCaching: false });
+}
+function isoSkid() {
+  const a = localIso(-8, -48, 0.8);
+  const b = localIso(-8, 48, 0.8);
+  const c = localIso(8, -48, 0.8);
+  const d = localIso(8, 48, 0.8);
+  return new fabric.Group([
+    new fabric.Line([a.x, a.y, b.x, b.y], { stroke: "#1a1a1a", strokeWidth: 5, strokeLineCap: "round" }),
+    new fabric.Line([c.x, c.y, d.x, d.y], { stroke: "#1a1a1a", strokeWidth: 5, strokeLineCap: "round" })
+  ], { objectCaching: false });
+}
+function isoHit() {
+  const pts = [];
+  for (let i = 0; i <= 28; i++) {
+    const t = (i / 28) * Math.PI * 2;
+    pts.push(localIso(Math.cos(t) * 28, Math.sin(t) * 18, 1));
+  }
+  return new fabric.Group([
+    groundEllipse(4, 6, 30, 20, "rgba(0,0,0,0.28)"),
+    groundEllipse(0, 0, 26, 16, "rgba(208,0,0,0.16)"),
+    new fabric.Polyline(pts, { fill: "", stroke: "#d00000", strokeWidth: 4, objectCaching: false })
+  ], { objectCaching: false });
+}
+function isoArrow() {
+  const flat = [[0, -42, 1], [16, -8, 1], [7, -8, 1], [7, 36, 1], [-7, 36, 1], [-7, -8, 1], [-16, -8, 1]];
+  const raised = flat.map(function(p) { return [p[0], p[1], 8]; });
+  return new fabric.Group([
+    localFace(flat, "rgba(0,0,0,0.30)"),
+    localFace(raised, "#1b4332"),
+    localFace([
+      [0, -42, 1], [0, -42, 8], [16, -8, 8], [16, -8, 1]
+    ], "#123326")
+  ], { objectCaching: false });
 }
 function badgeNumber(kind) {
   if (!kind || kind.charAt(0) !== "b") return 0;
@@ -1486,22 +1620,16 @@ function addNorth() {
   place(new fabric.Group([plate, tri, text]));
 }
 function addItem(kind, point) {
-  if (kind === "sedan-green") addSvg(sedan("#38b000"));
-  else if (kind === "sedan-white") addSvg(sedan("#f8f9fa"));
-  else if (kind === "suv") addSvg(suvSvg());
-  else if (kind === "pickup") addSvg(pickupSvg());
-  else if (kind === "truck") addSvg(truckSvg());
-  else if (kind === "moto") addSvg(motoSvg());
-  else if (kind === "skid") {
-    place(new fabric.Group([
-      new fabric.Line([0, 0, 0, 100], { stroke: "#111111", strokeWidth: 5 }),
-      new fabric.Line([22, 0, 22, 100], { stroke: "#111111", strokeWidth: 5 })
-    ]));
-  } else if (kind === "hit") {
-    place(new fabric.Circle({ radius: 28, fill: "rgba(208,0,0,0.08)", stroke: "#d00000", strokeWidth: 4, strokeDashArray: [8, 6] }));
-  } else if (kind === "arrow") {
-    place(new fabric.Path("M 16 0 L 32 26 L 22 26 L 22 72 L 10 72 L 10 26 L 0 26 Z", { fill: "#1b4332" }));
-  } else if (badgeNumber(kind)) addBadge(badgeNumber(kind), point);
+  if (kind === "sedan-green") place(buildVehicle({ w: 30, len: 64, z0: 6, z1: 14, color: "#2f9e44", cab: { x: -11, y: -18, w: 22, h: 28, zh: 10 } }));
+  else if (kind === "sedan-white") place(buildVehicle({ w: 30, len: 64, z0: 6, z1: 14, color: "#f4f6f8", cab: { x: -11, y: -18, w: 22, h: 28, zh: 10 } }));
+  else if (kind === "suv") place(buildVehicle({ w: 36, len: 68, z0: 7, z1: 18, color: "#6b705c", cab: { x: -14, y: -20, w: 28, h: 32, zh: 12 } }));
+  else if (kind === "pickup") place(buildVehicle({ w: 32, len: 76, z0: 6, z1: 14, color: "#f4f6f8", cab: { x: -12, y: -36, w: 24, h: 28, zh: 11 }, cargo: { x: -13, y: -4, w: 26, h: 36, zh: 8, color: "#d5dbe2" } }));
+  else if (kind === "truck") place(buildVehicle({ w: 34, len: 96, z0: 6, z1: 16, color: "#d5dbe3", cab: { x: -13, y: -46, w: 26, h: 30, zh: 12, color: "#e4e9ee" }, cargo: { x: -15, y: -12, w: 30, h: 56, zh: 18, color: "#6c757d" } }));
+  else if (kind === "moto") place(buildMoto());
+  else if (kind === "skid") place(isoSkid());
+  else if (kind === "hit") place(isoHit());
+  else if (kind === "arrow") place(isoArrow());
+  else if (badgeNumber(kind)) addBadge(badgeNumber(kind), point);
   else if (kind === "north") addNorth();
 }
 function rotateActive(delta) {
@@ -1540,7 +1668,7 @@ function boot() {
   fabric.Object.prototype.hasRotatingPoint = true;
   fabric.Object.prototype.rotatingPointOffset = 22;
   canvas = new fabric.Canvas("c", {
-    width: 600, height: 550, backgroundColor: "#dfd3c3", preserveObjectStacking: true, selection: true
+    width: 600, height: 550, backgroundColor: "#1a2420", preserveObjectStacking: true, selection: true
   });
   const roads = document.getElementById("roads");
   ROADS.forEach(function(pair) {
