@@ -1179,10 +1179,10 @@ const ITEMS = [
   ["دراجة", "moto"],
   ["آثار فرامل", "skid"],
   ["نقطة اصطدام", "hit"],
-  ["سهم اتجاه", "arrow"],
-  ["1", "b1"], ["2", "b2"], ["3", "b3"], ["4", "b4"],
-  ["شمال", "north"]
+  ["سهم اتجاه", "arrow"]
 ];
+for (let badge = 1; badge <= 10; badge += 1) ITEMS.push([String(badge), "b" + badge]);
+ITEMS.push(["شمال", "north"]);
 let canvas;
 let currentRoad = "t";
 
@@ -1364,9 +1364,9 @@ function applyRoad(kind) {
   });
   canvas.requestRenderAll();
 }
-function place(obj) {
+function place(obj, point) {
   obj.set({
-    left: 300, top: 275, originX: "center", originY: "center",
+    left: point ? point.x : 300, top: point ? point.y : 275, originX: "center", originY: "center",
     cornerColor: "#38b000", borderColor: "#38b000", transparentCorners: false,
     cornerSize: 9, borderScaleFactor: 2, hasRotatingPoint: true,
     rotatingPointOffset: 22, centeredRotation: true
@@ -1469,10 +1469,15 @@ function addSvg(svg) {
     place(item);
   });
 }
-function addBadge(num) {
+function badgeNumber(kind) {
+  if (!kind || kind.charAt(0) !== "b") return 0;
+  const n = Number(kind.slice(1));
+  return n >= 1 && n <= 10 && String(n) === kind.slice(1) ? n : 0;
+}
+function addBadge(num, point) {
   const circle = new fabric.Circle({ radius: 16, fill: "#ffffff", stroke: "#9b2226", strokeWidth: 3, originX: "center", originY: "center" });
   const text = new fabric.Text(String(num), { fontSize: 18, fill: "#9b2226", originX: "center", originY: "center", fontFamily: "Tajawal, sans-serif" });
-  place(new fabric.Group([circle, text]));
+  place(new fabric.Group([circle, text]), point);
 }
 function addNorth() {
   const plate = new fabric.Rect({ width: 54, height: 54, fill: "#ffffff", stroke: "#1b4332", strokeWidth: 2, originX: "center", originY: "center" });
@@ -1480,7 +1485,7 @@ function addNorth() {
   const text = new fabric.Text("شمال", { fontSize: 14, fill: "#1b4332", left: 0, top: 12, originX: "center", originY: "center", fontFamily: "Tajawal, sans-serif" });
   place(new fabric.Group([plate, tri, text]));
 }
-function addItem(kind) {
+function addItem(kind, point) {
   if (kind === "sedan-green") addSvg(sedan("#38b000"));
   else if (kind === "sedan-white") addSvg(sedan("#f8f9fa"));
   else if (kind === "suv") addSvg(suvSvg());
@@ -1496,10 +1501,7 @@ function addItem(kind) {
     place(new fabric.Circle({ radius: 28, fill: "rgba(208,0,0,0.08)", stroke: "#d00000", strokeWidth: 4, strokeDashArray: [8, 6] }));
   } else if (kind === "arrow") {
     place(new fabric.Path("M 16 0 L 32 26 L 22 26 L 22 72 L 10 72 L 10 26 L 0 26 Z", { fill: "#1b4332" }));
-  } else if (kind === "b1") addBadge(1);
-  else if (kind === "b2") addBadge(2);
-  else if (kind === "b3") addBadge(3);
-  else if (kind === "b4") addBadge(4);
+  } else if (badgeNumber(kind)) addBadge(badgeNumber(kind), point);
   else if (kind === "north") addNorth();
 }
 function rotateActive(delta) {
@@ -1554,8 +1556,35 @@ function boot() {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.textContent = pair[0];
-    btn.onclick = function() { addItem(pair[1]); };
+    btn.onclick = function() {
+      if (btn.dataset.dragging === "1") return;
+      addItem(pair[1]);
+    };
+    if (badgeNumber(pair[1])) {
+      btn.draggable = true;
+      btn.addEventListener("dragstart", function(ev) {
+        btn.dataset.dragging = "1";
+        ev.dataTransfer.setData("text/plain", pair[1]);
+        ev.dataTransfer.effectAllowed = "copy";
+      });
+      btn.addEventListener("dragend", function() {
+        setTimeout(function() { delete btn.dataset.dragging; }, 80);
+      });
+      btn.style.cursor = "grab";
+    }
     palette.appendChild(btn);
+  });
+  const board = document.querySelector(".canvas-wrap");
+  board.addEventListener("dragover", function(ev) {
+    ev.preventDefault();
+    if (ev.dataTransfer) ev.dataTransfer.dropEffect = "copy";
+  });
+  board.addEventListener("drop", function(ev) {
+    ev.preventDefault();
+    const kind = ev.dataTransfer ? ev.dataTransfer.getData("text/plain") : "";
+    const n = badgeNumber(kind);
+    if (!n || !canvas) return;
+    addBadge(n, canvas.getPointer(ev));
   });
   document.getElementById("del").onclick = function() {
     const obj = canvas.getActiveObject();
