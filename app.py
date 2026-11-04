@@ -2357,8 +2357,24 @@ with tab5:
         )
     with col_btn2:
         st.info("💡 بعد تحميل الملف وفتحه، اضغط على زر (طباعة التقرير الرسمي أو حفظه كـ PDF) في أعلى الصفحة.")
+    report_fullscreen = st.toggle("🔲 وضع ملء الشاشة (إخفاء القائمة الجانبية)", value=True)
+    if report_fullscreen:
+        st.markdown(
+            """
+            <style>
+            section[data-testid="stSidebar"] {
+                display: none !important;
+            }
+            .main .block-container {
+                max-width: 100% !important;
+                padding: 1rem !important;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True,
+        )
     st.subheader("معاينة حية للتقرير قبل الطباعة:")
-    st.components.v1.html(full_report_html, height=850, scrolling=True)
+    st.components.v1.html(full_report_html, height=3100, scrolling=False)
 st.markdown("""
 <style>
 @media screen and (max-width: 768px) {
