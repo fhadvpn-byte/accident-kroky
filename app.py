@@ -1071,42 +1071,16 @@ with st.sidebar:
     st.markdown("### بَيِّنَةُ الذكي للحوادث")
     with st.container(key="glow-dept"):
         st.header("⚙️ الإعدادات الثابتة للقسم")
-        dept_region = st.text_input("إدارة مرور منطقة", "إدارة مرور منطقة جازان")
-        dept_branch = st.text_input("القسم / الشعبة", "قسم مرور محافظة العارضة")
-    st.divider()
-    st.components.v1.html(
-        """
-<div dir="rtl" style="direction:rtl;text-align:right;font-family:Tajawal,sans-serif;">
-  <button id="bayyinah-install" type="button" style="width:100%;padding:8px 10px;border:0;border-radius:8px;background:#1b4332;color:#fff;font-weight:700;cursor:pointer;">📲 تثبيت التطبيق بالجوال</button>
-  <p id="bayyinah-install-note" style="display:none;margin:6px 0 0;font-size:13px;line-height:1.4;"></p>
-</div>
-<script>
-document.getElementById("bayyinah-install").addEventListener("click", function () {
-  var parentWin = window.parent;
-  var promptEvent = parentWin && parentWin.deferredPrompt;
-  var note = document.getElementById("bayyinah-install-note");
-  if (promptEvent && typeof promptEvent.prompt === "function") {
-    promptEvent.prompt();
-    if (note) note.style.display = "none";
-    return;
-  }
-  if (note) {
-    note.textContent = "التثبيت المباشر غير متاح حالياً";
-    note.style.display = "block";
-  }
-});
-</script>
-        """,
-        height=78,
-    )
+        dept_region = st.text_input("إدارة مرور منطقة", "")
+        dept_branch = st.text_input("القسم / الشعبة", "")
     with st.container(key="glow-officers"):
         st.subheader("👮‍♂️ بيانات معدي التقرير (الصفحة 3)")
         officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", "")
-        officer_1_rank = st.text_input("رتبة مباشر الحوادث", "رقيب")
-        officer_2_name = st.text_input("اسم مشرف الحوادث", "فهد أحمد مجرشي")
-        officer_2_rank = st.text_input("رتبة مشرف الحوادث", "رقيب أول")
+        officer_1_rank = st.text_input("رتبة مباشر الحوادث", "")
+        officer_2_name = st.text_input("اسم مشرف الحوادث", "")
+        officer_2_rank = st.text_input("رتبة مشرف الحوادث", "")
         manager_name = st.text_input("اسم مدير القسم / الشعبة", "")
-        manager_rank = st.text_input("رتبة المدير", "مقدم")
+        manager_rank = st.text_input("رتبة المدير", "")
 app_logo_b64 = ""
 if _bayyinah_logo_ready():
     try:
