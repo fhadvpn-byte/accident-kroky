@@ -640,14 +640,15 @@ _bayyinah_logo_path = _find_bayyinah_logo()
 def _bayyinah_logo_ready():
     return _bayyinah_logo_path is not None
 
+_ui_icon_path = Path(__file__).resolve().parent / "bayyinah_logo.jpg"
 _page_icon = "🚨"
-if _bayyinah_logo_ready():
+if _ui_icon_path.is_file():
     try:
-        _page_icon = Image.open(_bayyinah_logo_path)
+        _page_icon = Image.open(_ui_icon_path)
     except OSError:
-        _page_icon = str(_bayyinah_logo_path)
+        _page_icon = str(_ui_icon_path)
 st.set_page_config(
-    page_title="منظومة البَيِّنَةُ الذكية للحوادث المرورية",
+    page_title="منظومة بينة الذكي للحوادث المرورية",
     page_icon=_page_icon,
     layout="wide",
     initial_sidebar_state="expanded"
@@ -669,6 +670,13 @@ st.markdown("""
     [data-testid="stSidebarContent"] {
         background: #0a192f !important;
         color: #e2eafc;
+    }
+    section[data-testid="stSidebar"] {
+        display: flex !important;
+    }
+    .main .block-container {
+        max-width: 100% !important;
+        width: 100% !important;
     }
     [data-testid="stHeader"] {
         background: #0a192f !important;
@@ -2181,10 +2189,13 @@ with tab5:
         }}
         .table-scroll {{ width: 100%; max-width: 100%; }}
         @media screen {{
-            .report-sheet {{ width: 100%; min-width: 0; max-width: 100%; }}
-            .report-viewport {{ overflow-x: hidden; max-width: 100%; }}
+            html, body, .report-viewport {{ overflow: hidden; }}
+            .report-sheet {{
+                width: 100%; min-width: 0; max-width: 850px; margin-left: auto; margin-right: auto;
+            }}
+            .report-viewport {{ max-width: 100%; }}
             .page, .report-page, .a4-page {{
-                width: 100%; min-width: 0; max-width: 100%;
+                width: 100%; min-width: 0; max-width: 850px;
                 min-height: 0; height: auto; overflow: hidden; box-sizing: border-box;
             }}
             .table-scroll {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
@@ -2197,13 +2208,13 @@ with tab5:
         }}
         @media screen and (max-width: 768px) {{
             html, body {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
-            .report-viewport {{ overflow-x: hidden; overflow-y: auto; width: 100%; max-width: 100%; }}
+            .report-viewport {{ overflow: hidden; width: 100%; max-width: 100%; }}
             .report-sheet {{
-                width: 100%; min-width: 0; max-width: 100%;
+                width: 100%; min-width: 0; max-width: 850px;
                 margin: 0 auto 12px auto; zoom: 1;
             }}
             .page, .report-page, .a4-page {{
-                width: 100%; min-width: 0; max-width: 100%;
+                width: 100%; min-width: 0; max-width: 850px;
                 min-height: 0; height: auto; overflow: hidden; font-size: 12px;
             }}
             .report-page {{
@@ -2253,6 +2264,22 @@ with tab5:
             .header-logo img {{ height: 110px; max-width: 120px; }}
         }}
     </style>
+    <script>
+    function fitReportFrame() {{
+      var bar = document.querySelector(".no-print");
+      var sheet = document.querySelector(".report-sheet");
+      var height = 16;
+      if (bar) height += bar.offsetHeight;
+      if (sheet) height += sheet.scrollHeight;
+      else height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+      if (window.frameElement) window.frameElement.style.height = Math.ceil(height) + "px";
+    }}
+    window.addEventListener("load", fitReportFrame);
+    window.addEventListener("resize", fitReportFrame);
+    document.addEventListener("load", fitReportFrame, true);
+    setTimeout(fitReportFrame, 60);
+    setTimeout(fitReportFrame, 400);
+    </script>
     </head>
     <body>
         <div class="no-print" style="text-align:center; margin:0; padding:12px;">
@@ -2363,10 +2390,11 @@ with tab5:
             """
             <style>
             section[data-testid="stSidebar"] {
-                display: none !important;
+                display: flex !important;
             }
             .main .block-container {
                 max-width: 100% !important;
+                width: 100% !important;
                 padding: 1rem !important;
             }
             </style>
@@ -2374,45 +2402,7 @@ with tab5:
             unsafe_allow_html=True,
         )
     st.subheader("معاينة حية للتقرير قبل الطباعة:")
-    st.components.v1.html(full_report_html, height=3100, scrolling=False)
-st.components.v1.html(
-    """
-<script>
-(function () {
-  var doc;
-  try {
-    doc = window.parent.document;
-  } catch (err) {
-    return;
-  }
-  if (!doc || !doc.body) return;
-  function tabText() {
-    var selected = doc.querySelector('[data-testid="stTab"][aria-selected="true"]');
-    if (!selected) selected = doc.querySelector('[role="tab"][aria-selected="true"]');
-    return selected ? (selected.innerText || selected.textContent || "") : "";
-  }
-  function syncSidebar() {
-    var sidebar = doc.querySelector('section[data-testid="stSidebar"]');
-    if (!sidebar) return;
-    var text = tabText();
-    if (text.indexOf("PDF") !== -1 || text.indexOf("التنسيق والطباعة") !== -1) {
-      sidebar.style.display = "none";
-    } else {
-      sidebar.style.display = "";
-    }
-  }
-  if (window.parent.__bayyinahTabWatch) {
-    try { window.parent.__bayyinahTabWatch.disconnect(); } catch (err) {}
-  }
-  syncSidebar();
-  var observer = new MutationObserver(syncSidebar);
-  observer.observe(doc.body, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
-  window.parent.__bayyinahTabWatch = observer;
-})();
-</script>
-    """,
-    height=0,
-)
+    st.components.v1.html(full_report_html, height=850, scrolling=False)
 st.markdown("""
 <style>
 @media screen and (max-width: 768px) {
