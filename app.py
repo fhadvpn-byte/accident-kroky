@@ -63,6 +63,28 @@ def gregorian_to_hijri_str(gregorian_date):
 def get_today_hijri():
     return gregorian_to_hijri_str(date.today())
 
+def _blank_parties():
+    return [
+        {"الطرف": "الطرف الأول", "الاسم": "", "الهوية": "", "المشاركة": "", "الحالة": "", "التأهيل": ""},
+        {"الطرف": "الطرف الثاني", "الاسم": "", "الهوية": "", "المشاركة": "", "الحالة": "", "التأهيل": ""},
+    ]
+
+def _blank_vehicles():
+    return [
+        {"الطرف": "الطرف الأول", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "", "التأمين": ""},
+        {"الطرف": "الطرف الثاني", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "", "التأمين": ""},
+    ]
+
+def _reset_new_accident():
+    for key in list(st.session_state.keys()):
+        del st.session_state[key]
+    try:
+        adopted = SAVED_IMAGES_DIR / "adopted_sketch.png"
+        if adopted.is_file():
+            adopted.unlink()
+    except OSError:
+        pass
+
 _HIJRI_MONTH_LABELS = (
     "01 - محرم",
     "02 - صفر",
@@ -1053,16 +1075,13 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 if 'parties' not in st.session_state:
-    st.session_state.parties = [
-        {"الطرف": "الطرف الأول", "الاسم": "", "الهوية": "", "المشاركة": "سائق", "الحالة": "مصاب", "التأهيل": "مؤهل"},
-        {"الطرف": "الطرف الثاني", "الاسم": "", "الهوية": "", "المشاركة": "سائق", "الحالة": "متوفي", "التأهيل": "مؤهل"}
-    ]
+    st.session_state.parties = _blank_parties()
 if 'vehicles' not in st.session_state:
-    st.session_state.vehicles = [
-        {"الطرف": "الطرف الأول", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "خصوصي", "التأمين": "مؤمنة"},
-        {"الطرف": "الطرف الثاني", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "خصوصي", "التأمين": "غير مؤمنة"}
-    ]
+    st.session_state.vehicles = _blank_vehicles()
 with st.sidebar:
+    if st.button("🔄 حادث جديد", type="primary", width="stretch", key="new_accident_btn"):
+        _reset_new_accident()
+        st.rerun()
     if _bayyinah_logo_ready():
         try:
             st.image(str(_bayyinah_logo_path), width=148)
@@ -1071,16 +1090,16 @@ with st.sidebar:
     st.markdown("### بَيِّنَةُ الذكي للحوادث")
     with st.container(key="glow-dept"):
         st.header("⚙️ الإعدادات الثابتة للقسم")
-        dept_region = st.text_input("إدارة مرور منطقة", "")
-        dept_branch = st.text_input("القسم / الشعبة", "")
+        dept_region = st.text_input("إدارة مرور منطقة", value="")
+        dept_branch = st.text_input("القسم / الشعبة", value="")
     with st.container(key="glow-officers"):
         st.subheader("👮‍♂️ بيانات معدي التقرير (الصفحة 3)")
-        officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", "")
-        officer_1_rank = st.text_input("رتبة مباشر الحوادث", "")
-        officer_2_name = st.text_input("اسم مشرف الحوادث", "")
-        officer_2_rank = st.text_input("رتبة مشرف الحوادث", "")
-        manager_name = st.text_input("اسم مدير القسم / الشعبة", "")
-        manager_rank = st.text_input("رتبة المدير", "")
+        officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", value="")
+        officer_1_rank = st.text_input("رتبة مباشر الحوادث", value="")
+        officer_2_name = st.text_input("اسم مشرف الحوادث", value="")
+        officer_2_rank = st.text_input("رتبة مشرف الحوادث", value="")
+        manager_name = st.text_input("اسم مدير القسم / الشعبة", value="")
+        manager_rank = st.text_input("رتبة المدير", value="")
 app_logo_b64 = ""
 if _bayyinah_logo_ready():
     try:
@@ -1117,19 +1136,22 @@ with tab1:
     st.subheader("معلومات الحادث الأساسية")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        acc_num = st.text_input("رقم الحادث", "6004894074")
+        acc_num = st.text_input("رقم الحادث", value="")
         if "hijri_date" not in st.session_state:
-            st.session_state.hijri_date = get_today_hijri()
+            st.session_state.hijri_date = ""
         if st.session_state.get("acc_date_override"):
             st.session_state.hijri_date = st.session_state.pop("acc_date_override")
             st.session_state.hijri_parts_sync = True
-        if st.session_state.pop("hijri_parts_sync", False) or "hijri_month_label" not in st.session_state:
+        if st.session_state.hijri_date and (
+            st.session_state.pop("hijri_parts_sync", False) or "hijri_month_label" not in st.session_state
+        ):
             _picked_year, _picked_month, _ = _hijri_picker_state(st.session_state.hijri_date)
             st.session_state.hijri_year_label = _picked_year
             st.session_state.hijri_month_label = _picked_month
         st.markdown("تاريخ الحادث (هجري)")
+        _hijri_label = st.session_state.hijri_date or "—"
         with st.popover(
-            f"📅 {st.session_state.hijri_date} (اضغط لاختيار التاريخ)",
+            f"📅 {_hijri_label} (اضغط لاختيار التاريخ)",
             use_container_width=True,
         ):
             if st.button("🔄 ضبط على تاريخ اليوم الهجري تلقائياً", key="hijri_today_btn", use_container_width=True):
@@ -1137,9 +1159,9 @@ with tab1:
                 st.session_state.hijri_parts_sync = True
                 st.rerun()
             st.divider()
-            sel_month_label = st.selectbox("الشهر", _HIJRI_MONTH_LABELS, key="hijri_month_label")
-            sel_y = st.selectbox("السنة", _HIJRI_YEAR_LABELS, key="hijri_year_label")
-            sel_m = sel_month_label[:2]
+            sel_month_label = st.selectbox("الشهر", _HIJRI_MONTH_LABELS, key="hijri_month_label", index=None, placeholder="اختر الشهر")
+            sel_y = st.selectbox("السنة", _HIJRI_YEAR_LABELS, key="hijri_year_label", index=None, placeholder="اختر السنة")
+            sel_m = (sel_month_label or "")[:2]
             st.markdown("اضغط على رقم اليوم لاعتماده فوراً")
             _stored = str(st.session_state.hijri_date).split("/")
             _stored_y = _stored[0] if len(_stored) == 3 else ""
@@ -1149,7 +1171,7 @@ with tab1:
                 _day_cols = st.columns(6)
                 for _col_index, _day_col in enumerate(_day_cols):
                     _day = f"{_row * 6 + _col_index + 1:02d}"
-                    _chosen = _stored_y == sel_y and _stored_m == sel_m and _stored_d == _day
+                    _chosen = bool(sel_y) and bool(sel_m) and _stored_y == sel_y and _stored_m == sel_m and _stored_d == _day
                     with _day_col:
                         if st.button(
                             _day,
@@ -1157,26 +1179,37 @@ with tab1:
                             type="primary" if _chosen else "secondary",
                             use_container_width=True,
                         ):
-                            st.session_state.hijri_date = f"{sel_y}/{sel_m}/{_day}"
-                            st.rerun()
+                            if sel_y and sel_m:
+                                st.session_state.hijri_date = f"{sel_y}/{sel_m}/{_day}"
+                                st.rerun()
         accident_date = st.session_state.hijri_date
         acc_date = accident_date
     with col2:
-        accident_time = st.text_input("الوقت", value="4:50 مساءً")
+        accident_time = st.text_input("الوقت", value="")
         acc_time = accident_time
         if "acc_loc_value" not in st.session_state:
-            st.session_state.acc_loc_value = "العارضة"
+            st.session_state.acc_loc_value = ""
         if st.session_state.get("acc_loc_override"):
             st.session_state.acc_loc_value = st.session_state.pop("acc_loc_override")
         acc_loc = st.text_input("موقع الحادث", key="acc_loc_value")
     with col3:
-        acc_type = st.selectbox("نوع الحادث", ["تصادم مركبتين", "دهس مشاة", "انقلاب", "تصادم متعدد", "اصطدام بجسم ثابت"])
-        acc_weather = st.selectbox("الطقس", ["صحو", "غائم", "ممطر", "غبار / عوالق ترابية", "ضباب"])
+        acc_type = st.selectbox(
+            "نوع الحادث",
+            ["تصادم مركبتين", "دهس مشاة", "انقلاب", "تصادم متعدد", "اصطدام بجسم ثابت"],
+            index=None,
+            placeholder="اختر نوع الحادث",
+        ) or ""
+        acc_weather = st.selectbox(
+            "الطقس",
+            ["صحو", "غائم", "ممطر", "غبار / عوالق ترابية", "ضباب"],
+            index=None,
+            placeholder="اختر الطقس",
+        ) or ""
     with col4:
-        acc_injuries = st.number_input("عدد الإصابات", min_value=0, value=1)
-        acc_deaths = st.number_input("عدد الوفيات", min_value=0, value=1)
+        acc_injuries = st.number_input("عدد الإصابات", min_value=0, value=0)
+        acc_deaths = st.number_input("عدد الوفيات", min_value=0, value=0)
     
-    acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", "عدم إعطاء الأفضلية والشروع في الدوران")
+    acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", value="")
     st.divider()
     _party_columns = [
         ("الطرف", "الأطراف"),
@@ -1204,8 +1237,8 @@ with tab1:
             "الطرف": st.column_config.TextColumn("الأطراف"),
             "الاسم": st.column_config.TextColumn("الاسم"),
             "الهوية": st.column_config.TextColumn("الهوية / الإقامة"),
-            "المشاركة": st.column_config.SelectboxColumn("نوع المشاركة", options=["سائق", "راكب", "مشاة"]),
-            "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=["سليم", "مصاب", "متوفي"]),
+            "المشاركة": st.column_config.SelectboxColumn("نوع المشاركة", options=["", "سائق", "راكب", "مشاة"]),
+            "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=["", "سليم", "مصاب", "متوفي"]),
             "التأهيل": st.column_config.TextColumn("تأهيل للقيادة"),
         }
     )
@@ -1221,8 +1254,8 @@ with tab1:
             "نوع المركبة": st.column_config.TextColumn("نوع المركبة"),
             "رقم اللوحة": st.column_config.TextColumn("رقم اللوحة"),
             "الرقم التسلسلي": st.column_config.TextColumn("الرقم التسلسلي"),
-            "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=["خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
-            "التأمين": st.column_config.SelectboxColumn("التأمين", options=["مؤمنة", "غير مؤمنة"]),
+            "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=["", "خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
+            "التأمين": st.column_config.SelectboxColumn("التأمين", options=["", "مؤمنة", "غير مؤمنة"]),
         }
     )
 with tab2:
@@ -1243,22 +1276,16 @@ with tab2:
     selected_law_keys = st.multiselect(
         "اختر المواد النظامية وفروعها المطبقة على الحادث:",
         options=list(traffic_law_dict.keys()),
-        default=["المادة (50/2/24/4) - الشروع في الدوران (يوتيرن)", "جدول (4) فقرة (14) - أفضلية الدوران"]
+        default=[],
     )
     laws_list_for_report = []
     for key in selected_law_keys:
         desc = traffic_law_dict[key]
         laws_list_for_report.append(f"{key}: {desc}")
-    default_results = "1- وفاة السائق الثاني ومرافقيه\n2- إصابة السائق الأول\n3- تلفيات جسيمة بالمركبات"
-    acc_results = st.text_area("نتائج الحادث (نقاط مرقمة)", value=default_results, height=90)
+    acc_results = st.text_area("نتائج الحادث (نقاط مرقمة)", value="", height=90)
     
-    default_desc = (
-        "بالوصول لموقع الحادث وتتبع الآثار على الطبيعة اتضح لنا أن المركبة الأولى كانت قادمة باتجاه السير النظامي "
-        "والمركبة الثانية قامت بالشروع في الاستدارة والدوران للخلف (يوتيرن) دون التأكد من خلو الطريق، "
-        "مما أدى لاصطدام مقدمة الأولى بالجانب الأيمن للثانية، ونقطة الاصطدام بمسار المركبة الأولى الصحيح."
-    )
     if "acc_how_text" not in st.session_state:
-        st.session_state.acc_how_text = default_desc
+        st.session_state.acc_how_text = ""
     if st.session_state.get("acc_how_override"):
         st.session_state.acc_how_text = st.session_state.pop("acc_how_override")
     acc_how = st.text_area("كيفية وقوع الحادث (الصياغة الفنية الدقيقة)", key="acc_how_text", height=120)
@@ -1267,12 +1294,17 @@ with tab2:
     
     col_r1, col_r2 = st.columns(2)
     with col_r1:
-        resp_summary = st.text_input("صدر قرار الإدانة", value="تقع مسؤولية الحادث بنسبة ١٠٠٪ على الطرف الثاني")
+        resp_summary = st.text_input("صدر قرار الإدانة", value="")
     with col_r2:
         custom_laws = st.text_area("المواد النظامية المعتمدة للتقرير:", value="\n".join(laws_list_for_report), height=120)
 with tab3:
     st.subheader("الحقوق والإجراءات المتخذة")
-    rights_status = st.selectbox("الحقوق الخاصة والعامة", ["لا زالت قائمة", "انتهت بالتنازل", "محالة للمحكمة المختصة"])
+    rights_status = st.selectbox(
+        "الحقوق الخاصة والعامة",
+        ["لا زالت قائمة", "انتهت بالتنازل", "محالة للمحكمة المختصة"],
+        index=None,
+        placeholder="اختر الحالة",
+    ) or ""
     
     default_actions = [
         "تم مباشرة الحادث فور تلقي البلاغ",
@@ -1281,8 +1313,8 @@ with tab3:
         "تم تفتيش المركبات بشكل دقيق",
         "تم تسجيل الحادث وتصويره"
     ]
-    selected_actions = st.multiselect("الإجراءات المتخذة:", default_actions, default=default_actions)
-    extra_action = st.text_input("إجراء إضافي خاص:")
+    selected_actions = st.multiselect("الإجراءات المتخذة:", default_actions, default=[])
+    extra_action = st.text_input("إجراء إضافي خاص:", value="")
     if extra_action:
         selected_actions.append(extra_action)
 with tab4:
@@ -2018,17 +2050,10 @@ else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabri
             adopted_submitted = st.form_submit_button("حفظ", key="adopt_submit")
     if adopted_submitted:
         _store_adopted_sketch(adopted_payload)
-    road_name_sign = st.text_input("اسم الطريق الرئيسي", "طريق العارضة العام - جازان")
-    _legend_defaults = [
-        f"1 - {road_name_sign}",
-        "2 - اتجاه سير المركبة الأولى",
-        "3 - نقطة الاصطدام",
-        "4 - آثار الفرامل والاتجاهات",
-    ]
-    _legend_defaults.extend(f"{number} - " for number in range(5, 11))
+    road_name_sign = st.text_input("اسم الطريق الرئيسي", value="")
     legend_keys = [
-        st.text_input(f"مدلول رقم ({number})", default, key=f"legend_key_{number}")
-        for number, default in enumerate(_legend_defaults, start=1)
+        st.text_input(f"مدلول رقم ({number})", value="", key=f"legend_key_{number}")
+        for number in range(1, 11)
     ]
     adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
     sketch_img = Image.open(adopted_path).convert("RGB") if adopted_path.is_file() else None
@@ -2154,7 +2179,7 @@ with tab5:
             gallery_photos.append({
                 "id": uid,
                 "b64": image_b64,
-                "caption": f"صورة ({number}): موقع التصادم واتجاه المركبات",
+                "caption": "",
             })
             uploaded_ids.add(uid)
     st.session_state.gallery_photos = gallery_photos
@@ -2168,7 +2193,7 @@ with tab5:
             number = row_start + offset + 1
             cap_key = f"annex_cap_{entry['id']}"
             if cap_key not in st.session_state:
-                st.session_state[cap_key] = entry.get("caption") or f"صورة ({number}): موقع التصادم واتجاه المركبات"
+                st.session_state[cap_key] = entry.get("caption") or ""
             with cols[offset]:
                 preview_b64 = entry["b64"].split(",", 1)[-1]
                 st.image(base64.b64decode(preview_b64), width=320)
