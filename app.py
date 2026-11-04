@@ -2180,6 +2180,21 @@ with tab5:
             border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 16px; display: inline-block; margin-bottom: 25px;
         }}
         .table-scroll {{ width: 100%; max-width: 100%; }}
+        @media screen {{
+            .report-sheet {{ width: 100%; min-width: 0; max-width: 100%; }}
+            .report-viewport {{ overflow-x: hidden; max-width: 100%; }}
+            .page, .report-page, .a4-page {{
+                width: 100%; min-width: 0; max-width: 100%;
+                min-height: 0; height: auto; overflow: hidden; box-sizing: border-box;
+            }}
+            .table-scroll {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
+            table, .table-scroll table {{
+                table-layout: fixed; width: 100%; min-width: 0; max-width: 100%;
+            }}
+            th, td {{
+                white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+            }}
+        }}
         @media screen and (max-width: 768px) {{
             html, body {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
             .report-viewport {{ overflow-x: hidden; overflow-y: auto; width: 100%; max-width: 100%; }}
@@ -2187,12 +2202,11 @@ with tab5:
                 width: 100%; min-width: 0; max-width: 100%;
                 margin: 0 auto 12px auto; zoom: 1;
             }}
-            .page {{
+            .page, .report-page, .a4-page {{
                 width: 100%; min-width: 0; max-width: 100%;
-                overflow: hidden; font-size: 12px;
+                min-height: 0; height: auto; overflow: hidden; font-size: 12px;
             }}
             .report-page {{
-                width: 100%;
                 box-sizing: border-box;
                 background: #fff;
                 color: #000;
@@ -2206,12 +2220,14 @@ with tab5:
             .header-logo img {{ height: 64px; max-width: 70px; }}
             .section-badge {{ font-size: 13px; padding: 4px 10px; }}
             .box-content {{ font-size: 12px; min-height: 0; padding: 8px; }}
-            .table-scroll {{
-                width: 100%; max-width: 100%;
-                overflow-x: auto; -webkit-overflow-scrolling: touch;
+            .table-scroll {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
+            table, .table-scroll table {{
+                table-layout: fixed; width: 100%; min-width: 0; max-width: 100%; font-size: 11px;
             }}
-            .table-scroll table {{ min-width: 600px; width: 600px; font-size: 11px; }}
-            th, td {{ font-size: 11px; padding: 4px 3px; }}
+            th, td {{
+                font-size: 11px; padding: 4px 3px;
+                white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+            }}
         }}
         @media print {{
             @page {{ size: A4; margin: 8mm; }}
@@ -2222,9 +2238,10 @@ with tab5:
             }}
             .report-viewport {{ overflow: visible; height: auto; }}
             .report-sheet {{ width: auto; min-width: 0; margin: 0; zoom: 1; }}
-            .page, .report-page {{
-                box-shadow: none; margin: 0 auto; width: 100%; max-width: 194mm; max-height: 278mm;
-                min-width: 0; min-height: 0; zoom: 1; overflow: hidden; page-break-after: always;
+            .page, .report-page, .a4-page {{
+                box-shadow: none; margin: 0 auto; zoom: 1; overflow: hidden;
+                width: 210mm; height: 297mm; max-width: 210mm; max-height: 297mm;
+                min-width: 0; min-height: 297mm; page-break-after: always;
             }}
             .report-sheet > .report-page:last-child {{ page-break-after: auto; break-after: auto; }}
             .table-scroll {{ overflow: visible; max-width: none; }}
