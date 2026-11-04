@@ -716,7 +716,15 @@ st.components.v1.html(
   } catch (err) {
     return;
   }
-  if (!parentWin || parentWin.__bayyinahInstallBound) return;
+  if (!parentWin || !parentWin.document || !parentWin.document.head) return;
+  if (!parentWin.document.querySelector('link[rel="manifest"][data-bayyinah-manifest]')) {
+    var link = parentWin.document.createElement("link");
+    link.rel = "manifest";
+    link.href = new parentWin.URL("manifest.json", parentWin.location.href).href;
+    link.setAttribute("data-bayyinah-manifest", "1");
+    parentWin.document.head.appendChild(link);
+  }
+  if (parentWin.__bayyinahInstallBound) return;
   parentWin.__bayyinahInstallBound = true;
   parentWin.addEventListener("beforeinstallprompt", function (event) {
     event.preventDefault();
@@ -1060,13 +1068,11 @@ with st.sidebar:
         dept_region = st.text_input("إدارة مرور منطقة", "إدارة مرور منطقة جازان")
         dept_branch = st.text_input("القسم / الشعبة", "قسم مرور محافظة العارضة")
     st.divider()
-    with st.popover("📲 تثبيت التطبيق بالجوال", use_container_width=True):
-        st.markdown("#### تثبيت منظومة بينة على شاشة جوالك")
-        st.components.v1.html(
-            """
+    st.components.v1.html(
+        """
 <div dir="rtl" style="direction:rtl;text-align:right;font-family:Tajawal,sans-serif;">
-  <button id="bayyinah-install" type="button" style="width:100%;padding:8px 10px;border:0;border-radius:8px;background:#1b4332;color:#fff;font-weight:700;cursor:pointer;">📥 اضغط هنا للتثبيت المباشر</button>
-  <p id="bayyinah-install-note" style="display:none;margin:8px 0 0;font-size:13px;line-height:1.5;"></p>
+  <button id="bayyinah-install" type="button" style="width:100%;padding:8px 10px;border:0;border-radius:8px;background:#1b4332;color:#fff;font-weight:700;cursor:pointer;">📲 تثبيت التطبيق بالجوال</button>
+  <p id="bayyinah-install-note" style="display:none;margin:6px 0 0;font-size:13px;line-height:1.4;"></p>
 </div>
 <script>
 document.getElementById("bayyinah-install").addEventListener("click", function () {
@@ -1079,21 +1085,14 @@ document.getElementById("bayyinah-install").addEventListener("click", function (
     return;
   }
   if (note) {
-    note.textContent = "لإتمام التثبيت اضغط أيقونة المنزل بجانب الرابط أو من قائمة المتصفح «الإضافة إلى الشاشة الرئيسية»";
+    note.textContent = "التثبيت المباشر غير متاح حالياً";
     note.style.display = "block";
   }
 });
 </script>
-            """,
-            height=115,
-        )
-        st.markdown(
-            "<div dir='rtl' style='direction:rtl;text-align:right;'>"
-            "<div>أندرويد: أيقونة المنزل بجانب الرابط، أو الإضافة إلى الشاشة من قائمة المتصفح.</div>"
-            "<div>آيفون: مشاركة ثم إضافة إلى الشاشة الرئيسية.</div>"
-            "</div>",
-            unsafe_allow_html=True,
-        )
+        """,
+        height=78,
+    )
     with st.container(key="glow-officers"):
         st.subheader("👮‍♂️ بيانات معدي التقرير (الصفحة 3)")
         officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", "")

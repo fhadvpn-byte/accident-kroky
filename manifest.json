@@ -1,0 +1,20 @@
+{
+  "name": "منظومة بينة الذكي للحوادث المرورية",
+  "short_name": "بينة",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b192c",
+  "theme_color": "#00e5ff",
+  "icons": [
+    {
+      "src": "bayyinah_logo.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg"
+    },
+    {
+      "src": "bayyinah_logo.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg"
+    }
+  ]
+}
