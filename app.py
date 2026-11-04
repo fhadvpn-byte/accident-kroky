@@ -2375,6 +2375,44 @@ with tab5:
         )
     st.subheader("معاينة حية للتقرير قبل الطباعة:")
     st.components.v1.html(full_report_html, height=3100, scrolling=False)
+st.components.v1.html(
+    """
+<script>
+(function () {
+  var doc;
+  try {
+    doc = window.parent.document;
+  } catch (err) {
+    return;
+  }
+  if (!doc || !doc.body) return;
+  function tabText() {
+    var selected = doc.querySelector('[data-testid="stTab"][aria-selected="true"]');
+    if (!selected) selected = doc.querySelector('[role="tab"][aria-selected="true"]');
+    return selected ? (selected.innerText || selected.textContent || "") : "";
+  }
+  function syncSidebar() {
+    var sidebar = doc.querySelector('section[data-testid="stSidebar"]');
+    if (!sidebar) return;
+    var text = tabText();
+    if (text.indexOf("PDF") !== -1 || text.indexOf("التنسيق والطباعة") !== -1) {
+      sidebar.style.display = "none";
+    } else {
+      sidebar.style.display = "";
+    }
+  }
+  if (window.parent.__bayyinahTabWatch) {
+    try { window.parent.__bayyinahTabWatch.disconnect(); } catch (err) {}
+  }
+  syncSidebar();
+  var observer = new MutationObserver(syncSidebar);
+  observer.observe(doc.body, { subtree: true, attributes: true, attributeFilter: ["aria-selected"] });
+  window.parent.__bayyinahTabWatch = observer;
+})();
+</script>
+    """,
+    height=0,
+)
 st.markdown("""
 <style>
 @media screen and (max-width: 768px) {
