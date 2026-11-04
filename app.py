@@ -92,16 +92,6 @@ def _hijri_picker_state(value):
         day = "01"
     return year, _HIJRI_MONTH_LABELS[int(month) - 1], f"{int(day):02d}"
 
-def _accident_time_choices():
-    choices = []
-    for period in ("صباحاً", "مساءً"):
-        for hour in (12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
-            for minute in range(0, 60, 5):
-                choices.append(f"{hour}:{minute:02d} {period}")
-    return choices
-
-_ACCIDENT_TIME_CHOICES = _accident_time_choices()
-
 def _absorb_groq_env():
     if os.getenv("GROQ_API_KEY"):
         return
@@ -1137,9 +1127,8 @@ with tab1:
         accident_date = st.session_state.hijri_date
         acc_date = accident_date
     with col2:
-        if "acc_time_value" not in st.session_state or st.session_state.acc_time_value not in _ACCIDENT_TIME_CHOICES:
-            st.session_state.acc_time_value = "4:50 مساءً"
-        acc_time = st.selectbox("الوقت", _ACCIDENT_TIME_CHOICES, key="acc_time_value")
+        accident_time = st.text_input("الوقت", value="4:50 مساءً")
+        acc_time = accident_time
         if "acc_loc_value" not in st.session_state:
             st.session_state.acc_loc_value = "العارضة"
         if st.session_state.get("acc_loc_override"):
