@@ -9,6 +9,7 @@ import json
 import hashlib
 import math
 import tempfile
+from datetime import date
 from pathlib import Path
 
 def _select_images_dir():
@@ -38,6 +39,48 @@ GROQ_VISION_MODELS = (
     "llama-3.2-90b-vision-preview",
     "llama-3.2-11b-vision-preview",
 )
+
+def gregorian_to_hijri_str(gregorian_date):
+    year = int(gregorian_date.year)
+    month = int(gregorian_date.month)
+    day = int(gregorian_date.day)
+    if month < 3:
+        year -= 1
+        month += 12
+    century = math.floor(year / 100)
+    gregorian_shift = 2 - century + math.floor(century / 4)
+    julian_day = math.floor(365.25 * (year + 4716)) + math.floor(30.6001 * (month + 1)) + day + gregorian_shift - 1524
+    lunar = julian_day - 1948440 + 10632
+    cycles = math.floor((lunar - 1) / 10631)
+    lunar = lunar - 10631 * cycles + 354
+    jump = (math.floor((10985 - lunar) / 5316) * math.floor((50 * lunar) / 17719)) + (math.floor(lunar / 5670) * math.floor((43 * lunar) / 15238))
+    lunar = lunar - (math.floor((30 - jump) / 15) * math.floor((17719 * jump) / 50)) - (math.floor(jump / 16) * math.floor((15238 * jump) / 43)) + 29
+    hijri_month = math.floor((24 * lunar) / 709)
+    hijri_day = lunar - math.floor((709 * hijri_month) / 24)
+    hijri_year = 30 * cycles + jump - 30
+    return f"{int(hijri_year):04d}/{int(hijri_month):02d}/{int(hijri_day):02d}"
+
+def _accident_time_choices():
+    choices = []
+    for period in ("صباحاً", "مساءً"):
+        for hour in (12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11):
+            for minute in range(0, 60, 5):
+                choices.append(f"{hour}:{minute:02d} {period}")
+    return choices
+
+_ACCIDENT_TIME_CHOICES = _accident_time_choices()
+
+def _hijri_picker_parts(value, years, months, days):
+    year, month, day = "1448", "04", "21"
+    parts = str(value).split("/")
+    if len(parts) == 3:
+        if parts[0] in years:
+            year = parts[0]
+        if parts[1] in months:
+            month = parts[1]
+        if parts[2] in days:
+            day = parts[2]
+    return year, month, day
 
 def _absorb_groq_env():
     if os.getenv("GROQ_API_KEY"):
@@ -1030,13 +1073,43 @@ with tab1:
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         acc_num = st.text_input("رقم الحادث", "6004894074")
-        if "acc_date_value" not in st.session_state:
-            st.session_state.acc_date_value = "1448/04/21"
+        if "hijri_date" not in st.session_state:
+            st.session_state.hijri_date = "1448/04/21"
         if st.session_state.get("acc_date_override"):
-            st.session_state.acc_date_value = st.session_state.pop("acc_date_override")
-        acc_date = st.text_input("تاريخ الحادث (هجري)", key="acc_date_value")
+            st.session_state.hijri_date = st.session_state.pop("acc_date_override")
+            st.session_state.hijri_parts_sync = True
+        _hijri_days = [f"{number:02d}" for number in range(1, 31)]
+        _hijri_months = [f"{number:02d}" for number in range(1, 13)]
+        _hijri_years = [str(number) for number in range(1447, 1451)]
+        if st.session_state.pop("hijri_parts_sync", False) or "hijri_year_pick" not in st.session_state:
+            _picked_year, _picked_month, _picked_day = _hijri_picker_parts(
+                st.session_state.hijri_date, _hijri_years, _hijri_months, _hijri_days
+            )
+            st.session_state.hijri_year_pick = _picked_year
+            st.session_state.hijri_month_pick = _picked_month
+            st.session_state.hijri_day_pick = _picked_day
+        st.markdown("تاريخ الحادث (هجري)")
+        with st.popover(f"{st.session_state.hijri_date}\nاضغط لاختيار التاريخ", use_container_width=True):
+            gregorian_pick = st.date_input("التاريخ الميلادي", value=date.today(), key="gregorian_accident_pick")
+            if st.button("✅ اعتماد تاريخ التقويم بالهجري", key="adopt_hijri_calendar", use_container_width=True):
+                st.session_state.hijri_date = gregorian_to_hijri_str(gregorian_pick)
+                st.session_state.hijri_parts_sync = True
+                st.rerun()
+            st.divider()
+            st.selectbox("اليوم", _hijri_days, key="hijri_day_pick")
+            st.selectbox("الشهر", _hijri_months, key="hijri_month_pick")
+            st.selectbox("السنة", _hijri_years, key="hijri_year_pick")
+            if st.button("📌 تثبيت التاريخ الهجري", key="pin_hijri_date", use_container_width=True):
+                st.session_state.hijri_date = (
+                    f"{st.session_state.hijri_year_pick}/{st.session_state.hijri_month_pick}/{st.session_state.hijri_day_pick}"
+                )
+                st.rerun()
+        accident_date = st.session_state.hijri_date
+        acc_date = accident_date
     with col2:
-        acc_time = st.text_input("الوقت", "4:50 مساءً")
+        if "acc_time_value" not in st.session_state or st.session_state.acc_time_value not in _ACCIDENT_TIME_CHOICES:
+            st.session_state.acc_time_value = "4:50 مساءً"
+        acc_time = st.selectbox("الوقت", _ACCIDENT_TIME_CHOICES, key="acc_time_value")
         if "acc_loc_value" not in st.session_state:
             st.session_state.acc_loc_value = "العارضة"
         if st.session_state.get("acc_loc_override"):
