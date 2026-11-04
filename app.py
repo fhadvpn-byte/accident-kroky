@@ -60,6 +60,38 @@ def gregorian_to_hijri_str(gregorian_date):
     hijri_year = 30 * cycles + jump - 30
     return f"{int(hijri_year):04d}/{int(hijri_month):02d}/{int(hijri_day):02d}"
 
+def get_today_hijri():
+    return gregorian_to_hijri_str(date.today())
+
+_HIJRI_MONTH_LABELS = (
+    "01 - محرم",
+    "02 - صفر",
+    "03 - ربيع الأول",
+    "04 - ربيع الثاني",
+    "05 - جمادى الأولى",
+    "06 - جمادى الآخرة",
+    "07 - رجب",
+    "08 - شعبان",
+    "09 - رمضان",
+    "10 - شوال",
+    "11 - ذو القعدة",
+    "12 - ذو الحجة",
+)
+_HIJRI_YEAR_LABELS = ("1446", "1447", "1448", "1449", "1450")
+
+def _hijri_picker_state(value):
+    parts = str(value).split("/")
+    year, month, day = "1448", "01", "01"
+    if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
+        year, month, day = parts[0], f"{int(parts[1]):02d}", f"{int(parts[2]):02d}"
+    if year not in _HIJRI_YEAR_LABELS:
+        year = "1448"
+    if not month.isdigit() or not 1 <= int(month) <= 12:
+        month = "01"
+    if not day.isdigit() or not 1 <= int(day) <= 30:
+        day = "01"
+    return year, _HIJRI_MONTH_LABELS[int(month) - 1], f"{int(day):02d}"
+
 def _accident_time_choices():
     choices = []
     for period in ("صباحاً", "مساءً"):
@@ -69,18 +101,6 @@ def _accident_time_choices():
     return choices
 
 _ACCIDENT_TIME_CHOICES = _accident_time_choices()
-
-def _hijri_picker_parts(value, years, months, days):
-    year, month, day = "1448", "04", "21"
-    parts = str(value).split("/")
-    if len(parts) == 3:
-        if parts[0] in years:
-            year = parts[0]
-        if parts[1] in months:
-            month = parts[1]
-        if parts[2] in days:
-            day = parts[2]
-    return year, month, day
 
 def _absorb_groq_env():
     if os.getenv("GROQ_API_KEY"):
@@ -1074,36 +1094,46 @@ with tab1:
     with col1:
         acc_num = st.text_input("رقم الحادث", "6004894074")
         if "hijri_date" not in st.session_state:
-            st.session_state.hijri_date = "1448/04/21"
+            st.session_state.hijri_date = get_today_hijri()
         if st.session_state.get("acc_date_override"):
             st.session_state.hijri_date = st.session_state.pop("acc_date_override")
             st.session_state.hijri_parts_sync = True
-        _hijri_days = [f"{number:02d}" for number in range(1, 31)]
-        _hijri_months = [f"{number:02d}" for number in range(1, 13)]
-        _hijri_years = [str(number) for number in range(1447, 1451)]
-        if st.session_state.pop("hijri_parts_sync", False) or "hijri_year_pick" not in st.session_state:
-            _picked_year, _picked_month, _picked_day = _hijri_picker_parts(
-                st.session_state.hijri_date, _hijri_years, _hijri_months, _hijri_days
-            )
-            st.session_state.hijri_year_pick = _picked_year
-            st.session_state.hijri_month_pick = _picked_month
-            st.session_state.hijri_day_pick = _picked_day
+        if st.session_state.pop("hijri_parts_sync", False) or "hijri_month_label" not in st.session_state:
+            _picked_year, _picked_month, _ = _hijri_picker_state(st.session_state.hijri_date)
+            st.session_state.hijri_year_label = _picked_year
+            st.session_state.hijri_month_label = _picked_month
         st.markdown("تاريخ الحادث (هجري)")
-        with st.popover(f"{st.session_state.hijri_date}\nاضغط لاختيار التاريخ", use_container_width=True):
-            gregorian_pick = st.date_input("التاريخ الميلادي", value=date.today(), key="gregorian_accident_pick")
-            if st.button("✅ اعتماد تاريخ التقويم بالهجري", key="adopt_hijri_calendar", use_container_width=True):
-                st.session_state.hijri_date = gregorian_to_hijri_str(gregorian_pick)
+        with st.popover(
+            f"📅 {st.session_state.hijri_date} (اضغط لاختيار التاريخ)",
+            use_container_width=True,
+        ):
+            if st.button("🔄 ضبط على تاريخ اليوم الهجري تلقائياً", key="hijri_today_btn", use_container_width=True):
+                st.session_state.hijri_date = get_today_hijri()
                 st.session_state.hijri_parts_sync = True
                 st.rerun()
             st.divider()
-            st.selectbox("اليوم", _hijri_days, key="hijri_day_pick")
-            st.selectbox("الشهر", _hijri_months, key="hijri_month_pick")
-            st.selectbox("السنة", _hijri_years, key="hijri_year_pick")
-            if st.button("📌 تثبيت التاريخ الهجري", key="pin_hijri_date", use_container_width=True):
-                st.session_state.hijri_date = (
-                    f"{st.session_state.hijri_year_pick}/{st.session_state.hijri_month_pick}/{st.session_state.hijri_day_pick}"
-                )
-                st.rerun()
+            sel_month_label = st.selectbox("الشهر", _HIJRI_MONTH_LABELS, key="hijri_month_label")
+            sel_y = st.selectbox("السنة", _HIJRI_YEAR_LABELS, key="hijri_year_label")
+            sel_m = sel_month_label[:2]
+            st.markdown("اضغط على رقم اليوم لاعتماده فوراً")
+            _stored = str(st.session_state.hijri_date).split("/")
+            _stored_y = _stored[0] if len(_stored) == 3 else ""
+            _stored_m = _stored[1] if len(_stored) == 3 else ""
+            _stored_d = _stored[2] if len(_stored) == 3 else ""
+            for _row in range(5):
+                _day_cols = st.columns(6)
+                for _col_index, _day_col in enumerate(_day_cols):
+                    _day = f"{_row * 6 + _col_index + 1:02d}"
+                    _chosen = _stored_y == sel_y and _stored_m == sel_m and _stored_d == _day
+                    with _day_col:
+                        if st.button(
+                            _day,
+                            key=f"hijri_day_btn_{_day}",
+                            type="primary" if _chosen else "secondary",
+                            use_container_width=True,
+                        ):
+                            st.session_state.hijri_date = f"{sel_y}/{sel_m}/{_day}"
+                            st.rerun()
         accident_date = st.session_state.hijri_date
         acc_date = accident_date
     with col2:
