@@ -706,6 +706,27 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+st.components.v1.html(
+    """
+<script>
+(function () {
+  var parentWin;
+  try {
+    parentWin = window.parent;
+  } catch (err) {
+    return;
+  }
+  if (!parentWin || parentWin.__bayyinahInstallBound) return;
+  parentWin.__bayyinahInstallBound = true;
+  parentWin.addEventListener("beforeinstallprompt", function (event) {
+    event.preventDefault();
+    parentWin.deferredPrompt = event;
+  });
+})();
+</script>
+    """,
+    height=0,
+)
 if _bayyinah_logo_ready():
     st.logo(str(_bayyinah_logo_path), icon_image=str(_bayyinah_logo_path), size="large")
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
@@ -1038,6 +1059,41 @@ with st.sidebar:
         st.header("⚙️ الإعدادات الثابتة للقسم")
         dept_region = st.text_input("إدارة مرور منطقة", "إدارة مرور منطقة جازان")
         dept_branch = st.text_input("القسم / الشعبة", "قسم مرور محافظة العارضة")
+    st.divider()
+    with st.popover("📲 تثبيت التطبيق بالجوال", use_container_width=True):
+        st.markdown("#### تثبيت منظومة بينة على شاشة جوالك")
+        st.components.v1.html(
+            """
+<div dir="rtl" style="direction:rtl;text-align:right;font-family:Tajawal,sans-serif;">
+  <button id="bayyinah-install" type="button" style="width:100%;padding:8px 10px;border:0;border-radius:8px;background:#1b4332;color:#fff;font-weight:700;cursor:pointer;">📥 اضغط هنا للتثبيت المباشر</button>
+  <p id="bayyinah-install-note" style="display:none;margin:8px 0 0;font-size:13px;line-height:1.5;"></p>
+</div>
+<script>
+document.getElementById("bayyinah-install").addEventListener("click", function () {
+  var parentWin = window.parent;
+  var promptEvent = parentWin && parentWin.deferredPrompt;
+  var note = document.getElementById("bayyinah-install-note");
+  if (promptEvent && typeof promptEvent.prompt === "function") {
+    promptEvent.prompt();
+    if (note) note.style.display = "none";
+    return;
+  }
+  if (note) {
+    note.textContent = "لإتمام التثبيت اضغط أيقونة المنزل بجانب الرابط أو من قائمة المتصفح «الإضافة إلى الشاشة الرئيسية»";
+    note.style.display = "block";
+  }
+});
+</script>
+            """,
+            height=115,
+        )
+        st.markdown(
+            "<div dir='rtl' style='direction:rtl;text-align:right;'>"
+            "<div>أندرويد: أيقونة المنزل بجانب الرابط، أو الإضافة إلى الشاشة من قائمة المتصفح.</div>"
+            "<div>آيفون: مشاركة ثم إضافة إلى الشاشة الرئيسية.</div>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     with st.container(key="glow-officers"):
         st.subheader("👮‍♂️ بيانات معدي التقرير (الصفحة 3)")
         officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", "")
