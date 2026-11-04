@@ -724,6 +724,12 @@ st.components.v1.html(
     link.setAttribute("data-bayyinah-manifest", "1");
     parentWin.document.head.appendChild(link);
   }
+  if ("serviceWorker" in parentWin.navigator && !parentWin.__bayyinahSwRegistered) {
+    parentWin.__bayyinahSwRegistered = true;
+    parentWin.navigator.serviceWorker
+      .register(new parentWin.URL("sw.js", parentWin.location.href).href)
+      .catch(function () {});
+  }
   if (parentWin.__bayyinahInstallBound) return;
   parentWin.__bayyinahInstallBound = true;
   parentWin.addEventListener("beforeinstallprompt", function (event) {
