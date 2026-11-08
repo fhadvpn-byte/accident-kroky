@@ -9,7 +9,8 @@ import json
 import hashlib
 import math
 import tempfile
-from datetime import date
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 
 def _select_images_dir():
@@ -75,7 +76,298 @@ def _blank_vehicles():
         {"الطرف": "الطرف الثاني", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "", "التأمين": ""},
     ]
 
+DRAFT_FILE_PATH = "bayyinah_autosave_draft.json"
+DEFAULT_REPORT_STATE = {
+    "accident_results": "",
+    "technical_description": "",
+    "legal_opinion": "",
+    "selected_articles": [],
+    "accident_nature": "حادث مروري اعتيادي",
+    "rights_status": "اختر الحالة",
+    "extra_procedure": "",
+    "has_video": "لا يوجد مقطع فيديو",
+    "video_source": "كاميرا مراقبة أمنية (CCTV)",
+    "video_clarity": "واضح وموثق بختم زمني (تاريخ ووقت)",
+    "video_timestamp": "",
+    "video_findings": [],
+    "video_custom_notes": "",
+    "video_injected_text": "",
+    "confirm_clear": False,
+    "last_saved_time": "لم يتم الحفظ بعد",
+}
+
+def init_and_load_state():
+    if "state_initialized" in st.session_state:
+        return
+    if os.path.exists(DRAFT_FILE_PATH):
+        try:
+            with open(DRAFT_FILE_PATH, "r", encoding="utf-8") as draft_file:
+                saved_data = json.load(draft_file)
+            for key, default_val in DEFAULT_REPORT_STATE.items():
+                st.session_state[key] = saved_data.get(key, default_val)
+        except (OSError, json.JSONDecodeError, TypeError):
+            for key, default_val in DEFAULT_REPORT_STATE.items():
+                st.session_state.setdefault(key, default_val)
+    else:
+        for key, default_val in DEFAULT_REPORT_STATE.items():
+            st.session_state.setdefault(key, default_val)
+    if not isinstance(st.session_state.get("selected_articles"), list):
+        st.session_state.selected_articles = []
+    if not isinstance(st.session_state.get("video_findings"), list):
+        st.session_state.video_findings = []
+    for text_key in ("accident_results", "technical_description", "legal_opinion", "extra_procedure", "video_timestamp", "video_custom_notes"):
+        if not isinstance(st.session_state.get(text_key), str):
+            st.session_state[text_key] = ""
+    st.session_state.law_selection_sig = tuple(st.session_state.get("selected_articles") or [])
+    st.session_state["state_initialized"] = True
+
+def save_current_work():
+    data_to_save = {}
+    for key in DEFAULT_REPORT_STATE:
+        if key in st.session_state and key != "confirm_clear":
+            data_to_save[key] = st.session_state[key]
+    now_str = datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d | %I:%M:%S %p")
+    data_to_save["last_saved_time"] = now_str
+    st.session_state["last_saved_time"] = now_str
+    try:
+        with open(DRAFT_FILE_PATH, "w", encoding="utf-8") as draft_file:
+            json.dump(data_to_save, draft_file, ensure_ascii=False, indent=2)
+        return True
+    except OSError as error:
+        st.error(f"حدث خطأ أثناء حفظ المسودة: {error}")
+        return False
+
+def clear_all_work():
+    if os.path.exists(DRAFT_FILE_PATH):
+        try:
+            os.remove(DRAFT_FILE_PATH)
+        except OSError:
+            pass
+    for key, default_val in DEFAULT_REPORT_STATE.items():
+        st.session_state[key] = default_val
+    st.session_state.law_selection_sig = ()
+    st.session_state["confirm_clear"] = False
+
+def inject_bayyinah_blue_styles():
+    st.markdown("""
+    <style>
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="textarea"] > div,
+    .stTextInput input,
+    .stTextArea textarea,
+    .stSelectbox div[role="button"],
+    .stMultiSelect div[role="button"] {
+        background: linear-gradient(135deg, rgba(8, 56, 114, 0.88), rgba(4, 38, 84, 0.92)) !important;
+        color: #ffffff !important;
+        border: 1.5px solid #00d2ff !important;
+        border-radius: 10px !important;
+        box-shadow: 0 0 10px rgba(0, 210, 255, 0.2) !important;
+    }
+    .save-bar-container,
+    [class*="st-key-save-bar"] {
+        background: linear-gradient(90deg, rgba(5, 45, 95, 0.95), rgba(10, 75, 145, 0.95));
+        border: 1px solid #00e1ff;
+        border-radius: 12px;
+        padding: 12px 18px;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 15px rgba(0, 225, 255, 0.25);
+        direction: rtl;
+    }
+    .video-evidence-box,
+    [class*="st-key-video-evidence"] {
+        background: linear-gradient(135deg, rgba(6, 52, 108, 0.9), rgba(3, 33, 74, 0.95));
+        border: 1.5px solid #00d4ff;
+        border-radius: 14px;
+        padding: 16px;
+        margin: 15px 0;
+        box-shadow: 0 0 18px rgba(0, 212, 255, 0.22);
+        direction: rtl;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+def render_save_and_clear_toolbar():
+    with st.container(key="save-bar"):
+        col_status, col_save, col_clear = st.columns([3, 1.5, 1.5])
+        with col_status:
+            st.markdown(
+                f"**🛡️ نظام حماية البيانات النشط:** آخر حفظ للعمل: `{st.session_state.get('last_saved_time', 'لم يتم الحفظ بعد')}`"
+            )
+        with col_save:
+            if st.button("💾 حفظ العمل الحالي", width="stretch", type="primary"):
+                if save_current_work():
+                    st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
+        with col_clear:
+            if not st.session_state.get("confirm_clear", False):
+                if st.button("🗑️ مسح جميع الحقول", width="stretch"):
+                    st.session_state["confirm_clear"] = True
+                    st.rerun()
+            else:
+                sub_c1, sub_c2 = st.columns(2)
+                with sub_c1:
+                    if st.button("⚠️ تأكيد المسح", width="stretch"):
+                        clear_all_work()
+                        st.toast("تم مسح البيانات وبدء تقرير جديد", icon="🔄")
+                        st.rerun()
+                with sub_c2:
+                    if st.button("إلغاء", width="stretch"):
+                        st.session_state["confirm_clear"] = False
+                        st.rerun()
+
+def build_video_legal_paragraph():
+    if st.session_state.get("has_video") != "نعم - يوجد توثيق مرئي (مقطع فيديو)":
+        return "", ""
+    source = st.session_state.get("video_source", "")
+    clarity = st.session_state.get("video_clarity", "")
+    timestamp = str(st.session_state.get("video_timestamp", "")).strip()
+    findings = st.session_state.get("video_findings", [])
+    custom_notes = str(st.session_state.get("video_custom_notes", "")).strip()
+    time_clause = f" والموثق زمنياً عند ({timestamp})" if timestamp else ""
+    findings_clause = "، ".join(findings) if findings else "رصد آلية وحركة المركبات لحظة وقوع الحادث"
+    notes_clause = f"؛ كما أظهر التسجيل أن ({custom_notes})" if custom_notes else ""
+    tech_video_paragraph = (
+        f"وقد تعززت المعاينة الفنية بالاطلاع على التسجيل المرئي (مقطع فيديو) المستخرج من ({source}) "
+        f"وهو ({clarity}){time_clause}، حيث أظهر المقطع بوضوح: {findings_clause}{notes_clause}."
+    )
+    legal_video_paragraph = (
+        f"🎥 حُجية القرينة الرقمية والمرئية: استناداً إلى التسجيل المرئي المرفق والمستخرج من ({source}) "
+        f"({clarity}){time_clause}، والذي يُعد قرينة فنية ومادية قاطعة تعضد محضر الاستدلال والمعاينة الميدانية، "
+        f"فقد ثبت يقيناً من خلال تفريغ المقطع: ({findings_clause}){notes_clause}؛ "
+        f"وعليه بُني تحديد المسؤولية النظامية ونسب الخطأ استناداً للدليل المرئي الموثق."
+    )
+    return tech_video_paragraph, legal_video_paragraph
+
+def inject_video_into_opinion_and_description():
+    tech_add, legal_add = build_video_legal_paragraph()
+    if not legal_add:
+        return
+    current_tech = str(st.session_state.get("technical_description", "")).strip()
+    tech_marker = "وقد تعززت المعاينة الفنية بالاطلاع على التسجيل المرئي"
+    if tech_marker in current_tech:
+        base_tech = current_tech.split(tech_marker)[0].strip()
+        st.session_state["technical_description"] = f"{base_tech}\n\n{tech_add}".strip() if base_tech else tech_add
+    elif tech_add not in current_tech:
+        st.session_state["technical_description"] = f"{current_tech}\n\n{tech_add}".strip() if current_tech else tech_add
+    current_legal = str(st.session_state.get("legal_opinion", "")).strip()
+    if "🎥 حُجية القرينة الرقمية والمرئية:" not in current_legal:
+        st.session_state["legal_opinion"] = f"{current_legal}\n\n{legal_add}".strip() if current_legal else legal_add
+    else:
+        base_legal = current_legal.split("🎥 حُجية القرينة الرقمية والمرئية:")[0].strip()
+        st.session_state["legal_opinion"] = f"{base_legal}\n\n{legal_add}".strip() if base_legal else legal_add
+    st.session_state["video_injected_text"] = legal_add
+    save_current_work()
+
+def render_video_evidence_engine():
+    with st.container(key="video-evidence"):
+        st.subheader("🎥 محرك القرائن الرقمية والتوثيق المرئي (مقطع الفيديو)")
+        has_video = st.radio(
+            "هل يتوفر مقطع فيديو يوثق الحادث؟",
+            options=["لا يوجد مقطع فيديو", "نعم - يوجد توثيق مرئي (مقطع فيديو)"],
+            key="has_video",
+            horizontal=True,
+            on_change=save_current_work,
+        )
+        if has_video == "لا يوجد مقطع فيديو":
+            st.info("ℹ️ لا يوجد تسجيل مرئي مرفق؛ يعتمد التقرير الفني والمسؤولية النظامية على الآثار المادية، والمعاينة الميدانية، وأقوال الأطراف.")
+        else:
+            source_options = [
+                "كاميرا مراقبة أمنية (CCTV)",
+                "كاميرا مركبة (داش كام - Dashcam)",
+                "كاميرا منشأة تجارية / خاصة محيطة",
+                "كاميرات الرصد الآلي / المدن الذكية",
+                "تصوير هاتف محمول موثق",
+            ]
+            clarity_options = [
+                "واضح وموثق بختم زمني (تاريخ ووقت)",
+                "واضح الدقة (بدون ختم زمني ظاهر)",
+                "متوسط الوضوح ولكن يُظهر آلية الاصطدام",
+                "زاوية بعيدة تُظهر اتجاهات المركبات فقط",
+            ]
+            finding_options = [
+                "رصد لحظة الاصطدام وزاوية الدخول بدقة",
+                "ثبوت انحراف المركبة المتسببة بشكل مفاجئ على مسار الطرف الآخر",
+                "تجاوز السرعة النظامية وعدم ظهور إضاءة المكابح قبل الاصطدام",
+                "ثبوت قطع الإشارة الضوئية الحمراء بالصوت والصورة",
+                "ثبوت السير عكس اتجاه الحركة المرورية",
+                "رصد قرائن تدل على تعمد الصدم أو المطاردة والمضايقة (شبهة جنائية)",
+                "رصد هروب المركبة المتسببة من مسرح الحادث عقب الاصطدام مباشرة",
+                "ثبوت هوية السائق الفعلي وقت الاصطدام قبل محاولة الاستبدال",
+                "تأكيد التوقف النظامي للمركبة المتضررة قبل تعرضها للصدم",
+            ]
+            if st.session_state.get("video_source") not in source_options:
+                st.session_state.video_source = source_options[0]
+            if st.session_state.get("video_clarity") not in clarity_options:
+                st.session_state.video_clarity = clarity_options[0]
+            stored_findings = st.session_state.get("video_findings")
+            if not isinstance(stored_findings, list):
+                stored_findings = []
+            st.session_state.video_findings = [item for item in stored_findings if item in finding_options]
+            col_v1, col_v2, col_v3 = st.columns(3)
+            with col_v1:
+                st.selectbox(
+                    "مصدر مقطع الفيديو",
+                    options=source_options,
+                    key="video_source",
+                    on_change=save_current_work,
+                )
+            with col_v2:
+                st.selectbox(
+                    "درجة وضوح المقطع والختم الزمني",
+                    options=clarity_options,
+                    key="video_clarity",
+                    on_change=save_current_work,
+                )
+            with col_v3:
+                st.text_input(
+                    "وقت اللقطة في الفيديو (مثال: الدقيقة 01:24 أو 14:35:10)",
+                    placeholder="اختياري: 00:45 / الساعة 10:15 م",
+                    key="video_timestamp",
+                    on_change=save_current_work,
+                )
+            st.multiselect(
+                "المشاهدات الفنية المستخلصة من مقطع الفيديو (تُدرج في الرأي والمسؤولية):",
+                options=finding_options,
+                key="video_findings",
+                on_change=save_current_work,
+            )
+            st.text_area(
+                "تفاصيل إضافية رصدها باحث الحوادث في مقطع الفيديو:",
+                placeholder="اكتب أي تفصيل دقيق ظهر في الفيديو (مثل: لون المركبة، حركة المشاة، حالة الطريق أثناء التصوير...)",
+                key="video_custom_notes",
+                height=80,
+                on_change=save_current_work,
+            )
+            uploaded_video = st.file_uploader(
+                "📎 إرفاق ملف الفيديو للمعاينة المباشرة (MP4, MOV, AVI) - اختياري:",
+                type=["mp4", "mov", "avi", "mkv"],
+            )
+            if uploaded_video is not None:
+                with st.expander("▶️ عرض ومعاينة مقطع الفيديو المرفق", expanded=False):
+                    st.video(uploaded_video)
+            col_btn1, col_btn2 = st.columns([2, 1])
+            with col_btn1:
+                if st.button(
+                    "⚡ إدراج وتحديث معلومات الفيديو في (الرأي والمسؤولية النظامية) و(كيفية وقوع الحادث)",
+                    width="stretch",
+                    type="primary",
+                ):
+                    inject_video_into_opinion_and_description()
+                    st.toast("تم دمج قرينة الفيديو في الرأي والمسؤولية النظامية وحفظ المسودة", icon="🎥")
+            with col_btn2:
+                if st.button("🧹 إزالة فقرة الفيديو من الرأي النظامي", width="stretch"):
+                    current_legal = st.session_state.get("legal_opinion", "")
+                    if "🎥 حُجية القرينة الرقمية والمرئية:" in current_legal:
+                        st.session_state["legal_opinion"] = current_legal.split("🎥 حُجية القرينة الرقمية والمرئية:")[0].strip()
+                        save_current_work()
+                        st.toast("تمت إزالة فقرة الفيديو من الرأي النظامي", icon="ℹ️")
+
 def _reset_new_accident():
+    if os.path.exists(DRAFT_FILE_PATH):
+        try:
+            os.remove(DRAFT_FILE_PATH)
+        except OSError:
+            pass
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     try:
@@ -1207,6 +1499,8 @@ st.markdown("""
     }
 </style>
 """, unsafe_allow_html=True)
+init_and_load_state()
+inject_bayyinah_blue_styles()
 if 'parties' not in st.session_state:
     st.session_state.parties = _blank_parties()
 if 'vehicles' not in st.session_state:
@@ -1258,6 +1552,7 @@ st.html(f"""
   </div>
 </div>
 """, unsafe_allow_javascript=False)
+render_save_and_clear_toolbar()
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "1️⃣ الصفحة (1): البيانات والأطراف",
     "2️⃣ الصفحة (2): الوصف ومواد المرور (حسم)",
@@ -1799,43 +2094,66 @@ def generate_accident_report_fields(selected_article_ids):
 
 with tab2:
     st.subheader("📚 محرك المواد النظامية وفروعها")
-    if "acc_how_text" not in st.session_state:
-        st.session_state.acc_how_text = ""
     if st.session_state.get("acc_how_override"):
-        st.session_state.acc_how_text = st.session_state.pop("acc_how_override")
-    st.session_state.setdefault("acc_results_text", "")
-    st.session_state.setdefault("legal_opinion_text", "")
+        st.session_state.technical_description = st.session_state.pop("acc_how_override")
+    valid_article_ids = [article["id"] for article in TRAFFIC_LAW_ARTICLES]
+    stored_articles = st.session_state.get("selected_articles")
+    if not isinstance(stored_articles, list):
+        stored_articles = []
+    st.session_state.selected_articles = [article_id for article_id in stored_articles if article_id in TRAFFIC_LAW_BY_ID]
     selected_law_ids = st.multiselect(
         "اختر المواد النظامية وفروعها المطبقة على الحادث:",
-        options=[article["id"] for article in TRAFFIC_LAW_ARTICLES],
+        options=valid_article_ids,
         format_func=lambda article_id: TRAFFIC_LAW_BY_ID[article_id]["label"],
-        key="selected_law_ids",
+        key="selected_articles",
+        on_change=save_current_work,
     )
     generated_fields = generate_accident_report_fields(selected_law_ids)
     selection_signature = tuple(selected_law_ids)
     previous_signature = st.session_state.get("law_selection_sig")
     if previous_signature != selection_signature and not (previous_signature is None and not selected_law_ids):
         st.session_state.law_selection_sig = selection_signature
-        st.session_state.acc_results_text = generated_fields["resultsText"]
-        st.session_state.acc_how_text = generated_fields["technicalDraftText"]
-        st.session_state.legal_opinion_text = generated_fields["legalOpinionText"]
+        st.session_state.accident_results = generated_fields["resultsText"]
+        st.session_state.technical_description = generated_fields["technicalDraftText"]
+        st.session_state.legal_opinion = generated_fields["legalOpinionText"]
+        if st.session_state.get("has_video") == "نعم - يوجد توثيق مرئي (مقطع فيديو)":
+            inject_video_into_opinion_and_description()
+        else:
+            save_current_work()
     if generated_fields["hasCriminalSuspicion"]:
         st.warning("تشمل المواد المختارة شقاً جنائياً أو شبه جنائي، وتُحال إلى الشرطة أو النيابة.")
-    acc_results = st.text_area("نتائج الحادث (نقاط مرقمة)", key="acc_results_text", height=90)
-    acc_how = st.text_area("كيفية وقوع الحادث (الصياغة الفنية الدقيقة)", key="acc_how_text", height=120)
-    st.divider()
+    render_video_evidence_engine()
+    acc_results = st.text_area(
+        "نتائج الحادث (نقاط مرقمة)",
+        key="accident_results",
+        height=110,
+        on_change=save_current_work,
+    )
+    acc_how = st.text_area(
+        "كيفية وقوع الحادث (الصياغة الفنية الدقيقة)",
+        key="technical_description",
+        height=140,
+        on_change=save_current_work,
+    )
     st.subheader("الرأي والمسؤولية النظامية")
-    col_r1, col_r2 = st.columns(2)
-    with col_r1:
-        resp_summary = st.text_input("صدر قرار الإدانة", value="")
-    with col_r2:
-        custom_laws = st.text_area("المواد النظامية المعتمدة للتقرير:", key="legal_opinion_text", height=160)
+    resp_summary = st.text_input("صدر قرار الإدانة", value="")
+    custom_laws = st.text_area(
+        "الرأي والمسؤولية النظامية (يشمل المواد النظامية وقرينة الفيديو إن وجدت)",
+        key="legal_opinion",
+        height=160,
+        on_change=save_current_work,
+    )
 with tab3:
     st.subheader("الحقوق والإجراءات المتخذة")
+    nature_options = ["حادث مروري اعتيادي", "حادث مروري مقترن بشق جنائي / أمني"]
+    if st.session_state.get("accident_nature") not in nature_options:
+        st.session_state.accident_nature = nature_options[0]
     accident_nature = st.radio(
         "طبيعة وتصنيف الحادث:",
-        ["حادث مروري اعتيادي", "حادث مروري مقترن بشق جنائي / أمني"],
+        nature_options,
         horizontal=True,
+        key="accident_nature",
+        on_change=save_current_work,
     )
     rights_options = [
         "اختر الحالة",
@@ -1844,7 +2162,14 @@ with tab3:
         "قيام الحق العام والخاص مع وجود شق جنائي (إحالة للشرطة والنيابة)",
         "وفاة الطرف المتسبب (استكمال الإجراءات النظامية والجنائية)",
     ]
-    rights_status = st.selectbox("الحقوق الخاصة والعامة", rights_options)
+    if st.session_state.get("rights_status") not in rights_options:
+        st.session_state.rights_status = rights_options[0]
+    rights_status = st.selectbox(
+        "الحقوق الخاصة والعامة",
+        rights_options,
+        key="rights_status",
+        on_change=save_current_work,
+    )
     base_procedures = [
         "معاينة الموقع ورسم الكروكي",
         "إسعاف المصابين للمستشفى",
@@ -1892,7 +2217,11 @@ with tab3:
                 "نتيجة تفتيش المركبة:",
                 ["لم يتم العثور على ممنوعات", "تم العثور على ممنوعات (يرفق بمحضر الضبط)"],
             )
-    extra_procedure = st.text_input("إجراء إضافي خاص:")
+    extra_procedure = st.text_input(
+        "إجراء إضافي خاص:",
+        key="extra_procedure",
+        on_change=save_current_work,
+    )
     selected_actions = list(taken_procedures)
     if extra_procedure:
         selected_actions.append(extra_procedure)
