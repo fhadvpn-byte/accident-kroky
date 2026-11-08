@@ -1299,56 +1299,70 @@ with tab2:
         custom_laws = st.text_area("المواد النظامية المعتمدة للتقرير:", value="\n".join(laws_list_for_report), height=120)
 with tab3:
     st.subheader("الحقوق والإجراءات المتخذة")
-    accident_class = st.radio(
-        "طبيعة وتصنيف الحادث",
+    accident_nature = st.radio(
+        "طبيعة وتصنيف الحادث:",
         ["حادث مروري اعتيادي", "حادث مروري مقترن بشق جنائي / أمني"],
         horizontal=True,
     )
-    is_criminal_case = "جنائي" in (accident_class or "")
-    rights_status = st.selectbox(
-        "الحقوق",
-        [
-            "قيام الحق الخاص فقط (تنازل أو صلح)",
-            "قيام الحق العام والخاص (مخالفة مرورية موجبة للتوقيف)",
-            "قيام الحق العام والخاص مع وجود شق جنائي (إحالة للشرطة والنيابة)",
-            "وفاة الطرف المتسبب (استكمال الإجراءات النظامية والجنائية)",
-        ],
-        index=None,
-        placeholder="اختر الحالة",
-    ) or ""
-    action_options = [
+    rights_options = [
+        "اختر الحالة",
+        "قيام الحق الخاص فقط (تنازل أو صلح)",
+        "قيام الحق العام والخاص (مخالفة مرورية موجبة للتوقيف)",
+        "قيام الحق العام والخاص مع وجود شق جنائي (إحالة للشرطة والنيابة)",
+        "وفاة الطرف المتسبب (استكمال الإجراءات النظامية والجنائية)",
+    ]
+    rights_status = st.selectbox("الحقوق الخاصة والعامة", rights_options)
+    base_procedures = [
         "معاينة الموقع ورسم الكروكي",
         "إسعاف المصابين للمستشفى",
         "رفع المركبات من الموقع",
     ]
-    if is_criminal_case:
-        action_options.extend([
-            "استدعاء الأدلة الجنائية",
-            "استدعاء الشرطة",
-            "تعيين خفارة وتشديد الحراسة",
-            "التعميم للعمليات بالمركبات الهاربة",
-            "تفتيش المركبة",
-            "إثبات صدم متعمد لدورية ومقاومة رجال الأمن",
-            "إثبات استخدام السلاح الرسمي",
-        ])
-    if "procedure_actions" in st.session_state:
-        st.session_state.procedure_actions = [
-            item for item in st.session_state.procedure_actions if item in action_options
+    criminal_procedures = [
+        "استدعاء الأدلة الجنائية للموقع والمستشفى",
+        "استدعاء الشرطة لاستلام الشق الجنائي",
+        "تعيين خفارة وتشديد الحراسة على المصاب بالمستشفى",
+        "التعميم للعمليات بالمركبات الهاربة والمساندة",
+        "تفتيش المركبة للتأكد من عدم وجود ممنوعات",
+        "إثبات حالة صدم متعمد لدورية رسمية ومقاومة رجال الأمن",
+        "إثبات استخدام السلاح الرسمي (طلقات تحذيرية / إعطاب)",
+    ]
+    available_procedures = base_procedures + criminal_procedures if "جنائي" in accident_nature else base_procedures
+    if "taken_procedures" in st.session_state:
+        st.session_state.taken_procedures = [
+            item for item in st.session_state.taken_procedures if item in available_procedures
         ]
-    selected_actions = st.multiselect("الإجراءات", action_options, key="procedure_actions")
-    security_agency = ""
-    fleeing_vehicles = ""
-    gunfire = ""
-    vehicle_search = ""
-    if is_criminal_case:
-        st.markdown("**تفاصيل الشق الجنائي والأمني**")
-        security_agency = st.text_input("الجهة الأمنية المباشرة", value="")
-        fleeing_vehicles = st.text_area("بيانات المركبات الهاربة", value="")
-        gunfire = st.radio("هل تم إطلاق نار", ["لا", "نعم"], horizontal=True)
-        vehicle_search = st.text_area("نتيجة تفتيش المركبة", value="")
-    extra_action = st.text_input("إجراء إضافي خاص", value="")
-    if extra_action:
-        selected_actions = [*selected_actions, extra_action]
+    taken_procedures = st.multiselect(
+        "الإجراءات المتخذة:",
+        options=available_procedures,
+        placeholder="Choose options",
+        key="taken_procedures",
+    )
+    participating_agency = ""
+    escaped_vehicles = ""
+    shots_fired = ""
+    contraband_found = ""
+    if "جنائي" in accident_nature:
+        st.markdown("#### 🚨 تفاصيل الشق الجنائي والأمني")
+        col1, col2 = st.columns(2)
+        with col1:
+            participating_agency = st.text_input(
+                "الجهة الأمنية المباشرة (مثل: الأفواج الأمنية / الدوريات):",
+                placeholder="مثال: سرية المهام - الفوج الأول",
+            )
+            escaped_vehicles = st.text_input("بيانات المركبات الهاربة أو المعترضة (إن وجدت):")
+        with col2:
+            shots_fired = st.selectbox(
+                "هل تم إطلاق نار أثناء المطاردة؟",
+                ["لا", "نعم - طلقات تحذيرية فقط", "نعم - طلقات تحذيرية ومباشرة لإعطاب المركبة"],
+            )
+            contraband_found = st.selectbox(
+                "نتيجة تفتيش المركبة:",
+                ["لم يتم العثور على ممنوعات", "تم العثور على ممنوعات (يرفق بمحضر الضبط)"],
+            )
+    extra_procedure = st.text_input("إجراء إضافي خاص:")
+    selected_actions = list(taken_procedures)
+    if extra_procedure:
+        selected_actions.append(extra_procedure)
 with tab4:
     st.subheader("🎨 محرر الكروكي التفاعلي (Fabric.js)")
     _fabric_html = r'''
@@ -2285,14 +2299,14 @@ with tab5:
         f"<tr><td>{i+1}- {html.escape(str(act))}</td></tr>" for i, act in enumerate(selected_actions)
     )
     criminal_details_html = ""
-    if "جنائي" in (accident_class or ""):
+    if "جنائي" in (accident_nature or ""):
         criminal_details_html = f"""
             <div class="table-scroll"><table style="margin-top:25px;">
                 <tr><th style="font-size:16px;">تفاصيل الشق الجنائي والأمني</th></tr>
-                <tr><td style="padding:14px; font-size:16px; text-align:right;">الجهة الأمنية المباشرة: {html.escape(security_agency)}</td></tr>
-                <tr><td style="padding:14px; font-size:16px; text-align:right;">بيانات المركبات الهاربة: {html.escape(fleeing_vehicles).replace(chr(10), "<br>")}</td></tr>
-                <tr><td style="padding:14px; font-size:16px; text-align:right;">هل تم إطلاق نار: {html.escape(gunfire)}</td></tr>
-                <tr><td style="padding:14px; font-size:16px; text-align:right;">نتيجة تفتيش المركبة: {html.escape(vehicle_search).replace(chr(10), "<br>")}</td></tr>
+                <tr><td style="padding:14px; font-size:16px; text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
+                <tr><td style="padding:14px; font-size:16px; text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
+                <tr><td style="padding:14px; font-size:16px; text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
+                <tr><td style="padding:14px; font-size:16px; text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
             </table></div>
         """
     photo_cards = ""
@@ -2529,11 +2543,11 @@ with tab5:
             {build_header()}
             <div class="table-scroll"><table>
                 <tr><th style="font-size:16px;">طبيعة وتصنيف الحادث</th></tr>
-                <tr><td style="padding:14px; font-size:16px;">{html.escape(accident_class or "")}</td></tr>
+                <tr><td style="padding:14px; font-size:16px;">{html.escape(accident_nature or "")}</td></tr>
             </table></div>
             <div class="table-scroll"><table style="margin-top:25px;">
-                <tr><th style="font-size:16px;">الحقوق</th></tr>
-                <tr><td style="padding:14px; font-size:16px;">{html.escape(rights_status)}</td></tr>
+                <tr><th style="font-size:16px;">الحقوق الخاصة والعامة</th></tr>
+                <tr><td style="padding:14px; font-size:16px;">{html.escape("" if rights_status == "اختر الحالة" else rights_status)}</td></tr>
             </table></div>
             <div class="table-scroll"><table style="margin-top:25px;">
                 <tr><th style="font-size:16px;">الإجراءات المتخذة</th></tr>
