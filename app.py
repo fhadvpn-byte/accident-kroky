@@ -1622,6 +1622,48 @@ TRAFFIC_LAW_ARTICLES = [
 ]
 TRAFFIC_LAW_BY_ID = {article["id"]: article for article in TRAFFIC_LAW_ARTICLES}
 
+def generate_accident_report_fields(selected_article_ids):
+    selected_ids = set(selected_article_ids or [])
+    selected_articles = [article for article in TRAFFIC_LAW_ARTICLES if article["id"] in selected_ids]
+    if not selected_articles:
+        return {
+            "resultsText": "",
+            "technicalDraftText": "",
+            "legalOpinionText": "",
+            "hasCriminalSuspicion": False,
+        }
+    has_criminal_suspicion = any(article["isQuasiCriminal"] for article in selected_articles)
+    results_text = "\n".join(
+        f"{index}- {article['resultPoint']} ({article['code']})."
+        for index, article in enumerate(selected_articles, start=1)
+    )
+    technical_draft_text = " كما تبين من المعاينة الفنية أنه ".join(
+        article["technicalDraft"] for article in selected_articles
+    )
+    opinion_lines = "\n".join(f"• {article['legalOpinion']}" for article in selected_articles)
+    if has_criminal_suspicion:
+        criminal_codes = "، ".join(
+            article["code"] for article in selected_articles if article["isQuasiCriminal"]
+        )
+        legal_opinion_text = (
+            "⚠️ تنبيه نظامي (شبهة جنائية / مخالفة جسيمة):\n"
+            f"استناداً إلى {criminal_codes} من نظام المرور ولائحته التنفيذية، وبناءً على القرائن الفنية الموثقة أعلاه:\n"
+            f"{opinion_lines}\n"
+            "وعليه يوصى باستكمال محضر الاستدلال النظامي وإحالة كامل ملف القضية والأطراف إلى (الشرطة المختصة / النيابة العامة) لإعمال شؤونها النظامية."
+        )
+    else:
+        all_codes = "، ".join(article["code"] for article in selected_articles)
+        legal_opinion_text = (
+            f"بناءً على المعاينة الفنية وتطبيق قواعد المساءلة المرورية واستناداً إلى ({all_codes}) من نظام المرور ولائحته التنفيذية:\n"
+            f"{opinion_lines}"
+        )
+    return {
+        "resultsText": results_text,
+        "technicalDraftText": technical_draft_text,
+        "legalOpinionText": legal_opinion_text,
+        "hasCriminalSuspicion": has_criminal_suspicion,
+    }
+
 with tab2:
     st.subheader("📚 محرك المواد النظامية وفروعها")
     if "acc_how_text" not in st.session_state:
@@ -1636,23 +1678,15 @@ with tab2:
         format_func=lambda article_id: TRAFFIC_LAW_BY_ID[article_id]["label"],
         key="selected_law_ids",
     )
-    selected_articles = [TRAFFIC_LAW_BY_ID[article_id] for article_id in selected_law_ids if article_id in TRAFFIC_LAW_BY_ID]
+    generated_fields = generate_accident_report_fields(selected_law_ids)
     selection_signature = tuple(selected_law_ids)
     previous_signature = st.session_state.get("law_selection_sig")
-    if previous_signature != selection_signature:
+    if previous_signature != selection_signature and not (previous_signature is None and not selected_law_ids):
         st.session_state.law_selection_sig = selection_signature
-        if selected_articles:
-            st.session_state.acc_results_text = "\n".join(
-                f"{index}- {article['resultPoint']}" for index, article in enumerate(selected_articles, start=1)
-            )
-            st.session_state.acc_how_text = "\n\n".join(article["technicalDraft"] for article in selected_articles)
-            st.session_state.legal_opinion_text = "\n".join(
-                f"{article['code']}: {article['legalOpinion']}" for article in selected_articles
-            )
-        elif previous_signature not in (None, ()):
-            st.session_state.acc_results_text = ""
-            st.session_state.legal_opinion_text = ""
-    if any(article["isQuasiCriminal"] for article in selected_articles):
+        st.session_state.acc_results_text = generated_fields["resultsText"]
+        st.session_state.acc_how_text = generated_fields["technicalDraftText"]
+        st.session_state.legal_opinion_text = generated_fields["legalOpinionText"]
+    if generated_fields["hasCriminalSuspicion"]:
         st.warning("تشمل المواد المختارة شقاً جنائياً أو شبه جنائي، وتُحال إلى الشرطة أو النيابة.")
     acc_results = st.text_area("نتائج الحادث (نقاط مرقمة)", key="acc_results_text", height=90)
     acc_how = st.text_area("كيفية وقوع الحادث (الصياغة الفنية الدقيقة)", key="acc_how_text", height=120)
