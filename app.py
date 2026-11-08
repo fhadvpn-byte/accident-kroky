@@ -215,6 +215,23 @@ def render_save_and_clear_toolbar():
                         st.session_state["confirm_clear"] = False
                         st.rerun()
 
+def render_app_source_download():
+    app_path = Path(__file__).resolve()
+    try:
+        app_bytes = app_path.read_bytes()
+    except OSError as error:
+        st.error(f"تعذر قراءة ملف التطبيق للتنزيل: {error}")
+        return
+    st.download_button(
+        "⬇️ تحميل ملف app.py",
+        data=app_bytes,
+        file_name="app.py",
+        mime="text/x-python",
+        type="primary",
+        width="stretch",
+        key="download_app_py",
+    )
+
 def build_video_legal_paragraph():
     if st.session_state.get("has_video") != "نعم - يوجد توثيق مرئي (مقطع فيديو)":
         return "", ""
@@ -1540,6 +1557,7 @@ if app_logo_b64:
     _hero_ring = f'<div class="bayyinah-logo-ring"><img src="data:image/png;base64,{app_logo_b64}" alt="بَيِّنَة"/></div>'
 else:
     _hero_ring = '<div class="bayyinah-logo-ring"></div>'
+render_app_source_download()
 st.html(f"""
 <div class="glow-container bayyinah-hero">
   {_hero_ring}
