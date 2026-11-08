@@ -872,20 +872,153 @@ st.markdown("""
         border-radius: 14px !important;
         box-shadow: 0 0 16px rgba(0, 242, 254, 0.22) !important;
     }
+    [data-testid="stTextInput"] [data-baseweb="input"],
+    [data-testid="stNumberInput"] [data-baseweb="input"],
+    [data-testid="stDateInput"] [data-baseweb="input"],
+    [data-testid="stTimeInput"] [data-baseweb="input"],
+    [data-testid="stTextArea"] [data-baseweb="textarea"],
+    [data-testid="stTextArea"] [data-baseweb="base-input"],
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] > div,
+    [data-testid="stDateInput"] [data-baseweb="select"] > div,
+    [data-testid="stTimeInput"] [data-baseweb="select"] > div,
+    [data-testid="stTextInputRootElement"],
+    [data-testid="stTextAreaRootElement"],
+    [data-testid="stNumberInputContainer"],
+    [data-testid="stSelectbox"] .react-aria-ComboBox > div,
+    [data-testid="stMultiSelect"] .react-aria-ComboBox > div,
+    [data-testid="stSelectboxVirtualDropdown"],
+    [data-testid="stMultiSelectVirtualDropdown"],
+    [data-testid="stFileUploaderDropzone"] {
+        background: linear-gradient(180deg, #1b6cb8 0%, #14508f 100%) !important;
+        color: #f7fcff !important;
+        border: 1px solid #7ad7ff !important;
+        border-radius: 10px !important;
+        box-shadow: 0 0 14px rgba(0, 229, 255, 0.34), inset 0 0 10px rgba(0, 242, 254, 0.12) !important;
+    }
+    [data-testid="stRadioOption"] {
+        background: linear-gradient(180deg, rgba(27, 108, 184, 0.72), rgba(20, 80, 143, 0.72)) !important;
+        border: 1px solid #7ad7ff !important;
+        border-radius: 10px !important;
+        padding: 4px 10px !important;
+    }
     [data-testid="stTextInput"] input,
     [data-testid="stTextArea"] textarea,
-    [data-testid="stNumberInput"] input {
-        background: #112240 !important;
-        color: #f8f9fa !important;
-        border-radius: 10px !important;
-        border: 1px solid rgba(79, 172, 254, 0.55) !important;
-        box-shadow: 0 0 10px rgba(0, 242, 254, 0.12);
+    [data-testid="stNumberInput"] input,
+    [data-testid="stDateInput"] input,
+    [data-testid="stTimeInput"] input,
+    [data-testid="stSelectbox"] input,
+    [data-testid="stMultiSelect"] input {
+        background: transparent !important;
+        color: #f7fcff !important;
+        -webkit-text-fill-color: #f7fcff !important;
+        caret-color: #00f2fe !important;
+        border: 0 !important;
+        box-shadow: none !important;
     }
-    [data-baseweb="select"] > div {
-        background: #112240 !important;
-        color: #f8f9fa !important;
+    [data-testid="stTextInput"] input::placeholder,
+    [data-testid="stTextArea"] textarea::placeholder,
+    [data-testid="stNumberInput"] input::placeholder,
+    [data-testid="stSelectbox"] input::placeholder,
+    [data-testid="stMultiSelect"] input::placeholder {
+        color: #d7f3ff !important;
+        -webkit-text-fill-color: #d7f3ff !important;
+        opacity: 1 !important;
+    }
+    [data-testid="stTextInput"] input:-webkit-autofill,
+    [data-testid="stTextArea"] textarea:-webkit-autofill,
+    [data-testid="stNumberInput"] input:-webkit-autofill {
+        -webkit-box-shadow: 0 0 0 1000px #14508f inset !important;
+        -webkit-text-fill-color: #f7fcff !important;
+    }
+    [data-testid="stTextInput"] [data-baseweb="input"]:focus-within,
+    [data-testid="stNumberInput"] [data-baseweb="input"]:focus-within,
+    [data-testid="stDateInput"] [data-baseweb="input"]:focus-within,
+    [data-testid="stTextArea"] [data-baseweb="textarea"]:focus-within,
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div:focus-within,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] > div:focus-within {
+        border-color: #00f2fe !important;
+        box-shadow: 0 0 18px rgba(0, 242, 254, 0.62) !important;
+    }
+    [data-testid="stSelectbox"] [data-baseweb="select"] span,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] span,
+    [data-testid="stSelectbox"] [data-baseweb="select"] div,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] div {
+        color: #f7fcff !important;
+    }
+    [data-testid="stMultiSelect"] [data-baseweb="tag"],
+    [data-testid="stMultiSelect"] [data-baseweb="tag"] span {
+        color: #071422 !important;
+    }
+    [data-testid="stSelectbox"] svg,
+    [data-testid="stMultiSelect"] svg,
+    [data-testid="stDateInput"] svg,
+    [data-testid="stNumberInput"] svg {
+        fill: #00f2fe !important;
+    }
+    [data-testid="stNumberInput"] button {
+        background: #1d6ec4 !important;
+        color: #f7fcff !important;
+        border: 1px solid #7ad7ff !important;
+    }
+    [data-baseweb="tag"] {
+        background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
+        color: #071422 !important;
+        border: 0 !important;
+        border-radius: 8px !important;
+    }
+    [data-baseweb="tag"] span,
+    [data-baseweb="tag"] svg {
+        color: #071422 !important;
+        fill: #071422 !important;
+    }
+    [data-baseweb="popover"],
+    [data-baseweb="menu"],
+    [data-baseweb="calendar"],
+    [data-baseweb="datepicker"],
+    ul[role="listbox"] {
+        background: #0f4f92 !important;
+        color: #f7fcff !important;
+        border: 1px solid #7ad7ff !important;
         border-radius: 10px !important;
-        border-color: rgba(79, 172, 254, 0.55) !important;
+        box-shadow: 0 0 18px rgba(0, 229, 255, 0.35) !important;
+    }
+    [role="option"] {
+        background: #1460a8 !important;
+        color: #f7fcff !important;
+    }
+    [role="option"] * {
+        color: #f7fcff !important;
+    }
+    [role="option"]:hover,
+    [role="option"][aria-selected="true"] {
+        background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
+    }
+    [role="option"]:hover *,
+    [role="option"][aria-selected="true"] * {
+        color: #071422 !important;
+    }
+    [data-testid="stRadio"] [role="radiogroup"] label,
+    [data-testid="stCheckbox"] label {
+        background: linear-gradient(180deg, rgba(27, 108, 184, 0.55), rgba(20, 80, 143, 0.55));
+        border: 1px solid rgba(122, 215, 255, 0.7);
+        border-radius: 10px;
+        padding: 4px 10px;
+    }
+    [data-testid="stFileUploader"] section,
+    [data-testid="stFileUploaderDropzone"] {
+        background: linear-gradient(180deg, #1b6cb8 0%, #14508f 100%) !important;
+        border: 1px dashed #7ad7ff !important;
+        color: #f7fcff !important;
+    }
+    [data-testid="stFileUploader"] section small,
+    [data-testid="stFileUploader"] span,
+    [data-testid="stFileUploader"] p {
+        color: #e7f6ff !important;
+    }
+    [data-testid="stSlider"] [role="slider"] {
+        background: #00f2fe !important;
+        box-shadow: 0 0 10px rgba(0, 242, 254, 0.8) !important;
     }
     .stTabs [data-baseweb="tab-list"],
     .stTabs [role="tablist"] {
