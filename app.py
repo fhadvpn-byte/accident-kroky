@@ -3574,7 +3574,7 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
                 border-radius: 6px;
                 padding: 12px 15px;
                 margin-bottom: 12px;
-                page-break-inside: avoid;
+                page-break-inside: avoid; break-inside: avoid; page-break-after: avoid;
                 break-inside: avoid;
                 background-color: #fff;
             }}
@@ -3600,7 +3600,7 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
                 gap: 10px;
                 justify-content: center;
                 margin-top: 10px;
-                page-break-inside: avoid;
+                page-break-inside: avoid; break-inside: avoid; page-break-after: avoid;
                 break-inside: avoid;
             }}
             .evidence-image-container img {{
@@ -4031,6 +4031,11 @@ with tab5:
                 border: 1px solid #000;
             }}
             th, td {{ border: 1px solid #000 !important; }}
+            .sign-table, .sign-table tr, .sign-table td {{
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                page-break-after: avoid !important;
+            }}
             .header-logo img {{ height: 110px; max-width: 120px; }}
         }}
         {page_number_css}
@@ -4114,7 +4119,7 @@ with tab5:
                 {actions_html}
             </table></div>
             {criminal_details_html}
-            <div class="table-scroll"><table style="margin-top:35px;">
+            <div class="table-scroll"><table class="sign-table" style="margin-top:35px;">
                 <tr><th colspan="3" style="font-size:16px;">معد التقرير</th></tr>
                 <tr><th>إجراء الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
                 <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
