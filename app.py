@@ -252,6 +252,11 @@ VIDEO_FINDING_OPTIONS = [
     "ثبوت هوية السائق الفعلي وقت الاصطدام قبل محاولة الاستبدال",
     "تأكيد التوقف النظامي للمركبة المتضررة قبل تعرضها للصدم",
 ]
+CRIMINAL_SUSPICION_MARKERS = ("تعمد", "مطاردة", "مضايقة")
+CRIMINAL_SUSPICION_SENTENCE = (
+    "وحيث إن المعطيات والقرائن المرئية رصدت شبهة تعمد أو مطاردة، فإن الواقعة تنتفي عنها الصفة المرورية البحتة، "
+    "وتستوجب إحالة الأوراق والطرفين إلى مركز الشرطة المختص لاستكمال إجراءات الاستدلال الجنائي وتطبيق المقتضى النظامي."
+)
 VIDEO_CLIP_MIN = 1
 VIDEO_CLIP_MAX = 10
 VIDEO_HAS_OPTIONS = ["لا فيديو", "يوجد توثيق"]
@@ -391,6 +396,11 @@ def _upsert_marked_block(text, block):
     marked = f"{VIDEO_MARKER_START}\n{block}\n{VIDEO_MARKER_END}"
     return f"{base}\n\n{marked}".strip() if base else marked
 
+def _clip_shows_criminal_suspicion(clip):
+    observations = " ".join(clip.get("findings") or [])
+    observations = f"{observations} {clip.get('notes') or ''}"
+    return any(marker in observations for marker in CRIMINAL_SUSPICION_MARKERS)
+
 def _manual_evidence_blocks():
     clips = _active_video_clips()
     how_lines = []
@@ -405,10 +415,13 @@ def _manual_evidence_blocks():
             f"وهو ({clip['clarity']}){time_clause}، حيث أظهر المقطع: {findings}{notes}."
         )
         result_lines.append(f"{index}- ثبت من المقطع المرئي ({clip['source']}): {findings}.")
-        legal_lines.append(
+        legal_line = (
             f"المقطع ({index}): حُجية القرينة المرئية من ({clip['source']}) ({clip['clarity']}){time_clause}، "
             f"والمشاهدات المدونة: {findings}{notes}."
         )
+        if _clip_shows_criminal_suspicion(clip):
+            legal_line = f"{legal_line} {CRIMINAL_SUSPICION_SENTENCE}"
+        legal_lines.append(legal_line)
     return "\n".join(how_lines), "\n".join(result_lines), "\n".join(legal_lines)
 
 def _apply_marked_analysis(parsed):
