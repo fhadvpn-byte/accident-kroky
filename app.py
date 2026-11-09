@@ -135,7 +135,13 @@ def save_current_work():
     for key in DEFAULT_REPORT_STATE:
         if key in st.session_state and key != "confirm_clear":
             data_to_save[key] = st.session_state[key]
-    for secret_key_name in ("api_key_input", "api_key_widget", "analysis_api_key"):
+    for secret_key_name in (
+        "api_key_persistent",
+        "widget_api_key_input",
+        "api_key_input",
+        "api_key_widget",
+        "analysis_api_key",
+    ):
         data_to_save.pop(secret_key_name, None)
     now_str = datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d | %I:%M:%S %p")
     data_to_save["last_saved_time"] = now_str
@@ -472,13 +478,13 @@ def _groq_secret_key():
     return str(value or "").strip()
 
 def _sync_analysis_key_from_widget():
-    st.session_state.api_key_input = str(st.session_state.get("api_key_widget") or "").strip()
+    st.session_state.api_key_persistent = str(st.session_state.get("widget_api_key_input") or "").strip()
 
 def get_active_analysis_key():
-    typed = str(st.session_state.get("api_key_input") or "").strip()
+    typed = str(st.session_state.get("api_key_persistent") or "").strip()
     if typed:
         return typed
-    widget_value = str(st.session_state.get("api_key_widget") or "").strip()
+    widget_value = str(st.session_state.get("widget_api_key_input") or "").strip()
     if widget_value:
         return widget_value
     return _groq_secret_key()
@@ -2077,23 +2083,17 @@ with st.sidebar:
         manager_rank = st.text_input("رتبة المدير", value="")
     with st.container(key="glow-analysis-key"):
         st.subheader("مفتاح التحليل")
-        secret_key = _groq_secret_key()
-        has_widget = "api_key_widget" in st.session_state
-        widget_now = str(st.session_state.get("api_key_widget") or "").strip() if has_widget else ""
-        stored = str(st.session_state.get("api_key_input") or "").strip()
-        if not stored and not widget_now and secret_key:
-            st.session_state.api_key_input = secret_key
-            st.session_state.api_key_widget = secret_key
-        elif not has_widget:
-            st.session_state.api_key_widget = stored
+        if "api_key_persistent" not in st.session_state:
+            st.session_state.api_key_persistent = _groq_secret_key()
+        if "widget_api_key_input" not in st.session_state:
+            st.session_state.widget_api_key_input = str(st.session_state.get("api_key_persistent") or "")
         st.text_input(
-            "مفتاح التحليل",
+            "مفتاح التحليل (يبقى مخزناً عند التحديث)",
             type="password",
-            key="api_key_widget",
+            key="widget_api_key_input",
             on_change=_sync_analysis_key_from_widget,
-            help="يُحفظ في الجلسة فقط. إن تُرك فارغاً يُؤخذ من السر GROQ_API_KEY، ولا يُكتب في المسودة أو Git.",
+            help="يبقى في الجلسة عند التحديث. إن غاب يُؤخذ من السر GROQ_API_KEY، ولا يُكتب في المسودة أو Git.",
         )
-        _sync_analysis_key_from_widget()
 app_logo_b64 = ""
 if _bayyinah_logo_ready():
     try:
