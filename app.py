@@ -471,12 +471,30 @@ def remove_manual_video_evidence():
     st.session_state.video_injected_text = ""
     save_current_work()
 
-def _groq_secret_key():
+def _local_secrets_file():
+    return Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"
+
+def _groq_key_from_local_file():
+    path = _local_secrets_file()
+    if not path.is_file():
+        return ""
     try:
-        value = st.secrets["GROQ_API_KEY"]
+        import tomllib
+        with path.open("rb") as handle:
+            data = tomllib.load(handle)
     except Exception:
         return ""
-    return str(value or "").strip()
+    if not isinstance(data, dict) or "GROQ_API_KEY" not in data:
+        return ""
+    return str(data.get("GROQ_API_KEY") or "").strip()
+
+def _groq_secret_key():
+    try:
+        if "GROQ_API_KEY" in st.secrets:
+            return str(st.secrets["GROQ_API_KEY"] or "").strip()
+    except Exception:
+        pass
+    return _groq_key_from_local_file()
 
 def _sync_analysis_key_from_widget():
     st.session_state.api_key_persist = str(st.session_state.get("widget_api_key_input") or "").strip()
@@ -770,13 +788,6 @@ def render_video_evidence_engine():
         if has_video == "لا فيديو":
             st.info("ℹ️ لا يوجد تسجيل مرئي مرفق؛ يعتمد التقرير الفني والمسؤولية النظامية على الآثار المادية، والمعاينة الميدانية، وأقوال الأطراف.")
             return
-        if not isinstance(st.session_state.get("auto_analyze_video"), bool):
-            st.session_state.auto_analyze_video = False
-        st.checkbox(
-            "تحليل الفيديو تلقائياً فور إرفاقه",
-            key="auto_analyze_video",
-            on_change=save_current_work,
-        )
         st.file_uploader(
             "رفع جماعي لعدة مقاطع (mp4/mov/avi/mkv)",
             type=["mp4", "mov", "avi", "mkv"],
@@ -886,23 +897,6 @@ def render_video_evidence_engine():
                     origin = "المقطع الخاص" if uploaded_video is not None else "الرفع الجماعي"
                     with st.expander(f"▶️ معاينة المقطع ({origin})", expanded=False):
                         st.video(preview)
-        file_signature = _video_files_signature(len(clips), bulk_now)
-        if (
-            st.session_state.get("auto_analyze_video")
-            and file_signature
-            and file_signature != st.session_state.get("video_analysis_signature")
-        ):
-            st.session_state.video_analysis_signature = file_signature
-            with st.spinner("جارٍ تحليل المقاطع المرفقة مرة واحدة..."):
-                analyze_video_evidence()
-        if st.session_state.get("video_analysis_backend") == "text":
-            st.warning("التحليل نصي بلا مشاهدة للمقطع. الصياغة من البيانات المكتوبة فقط، دون اختراع وقائع مرئية.")
-        if st.button("تحليل المقاطع", type="primary", width="stretch"):
-            signature_now = _video_files_signature(len(clips), _bulk_uploads())
-            if signature_now:
-                st.session_state.video_analysis_signature = signature_now
-            with st.spinner("جارٍ تحليل المقاطع..."):
-                analyze_video_evidence()
         btn_insert, btn_remove = st.columns(2)
         with btn_insert:
             if st.button("إدراج وتحديث فقرة القرائن", width="stretch"):
@@ -2079,18 +2073,6 @@ with st.sidebar:
         officer_2_rank = st.text_input("رتبة مشرف الحوادث", value="")
         manager_name = st.text_input("اسم مدير القسم / الشعبة", value="")
         manager_rank = st.text_input("رتبة المدير", value="")
-    with st.container(key="glow-analysis-key"):
-        st.subheader("مفتاح التحليل")
-        if "api_key_persist" not in st.session_state:
-            st.session_state.api_key_persist = ""
-        st.text_input(
-            "مفتاح التحليل (يبقى مخزناً عند التحديث)",
-            type="password",
-            key="widget_api_key_input",
-            value=st.session_state.api_key_persist,
-            on_change=_sync_analysis_key_from_widget,
-            help="يبقى في الجلسة عند التحديث. إن غاب يُؤخذ من السر GROQ_API_KEY، ولا يُكتب في المسودة أو Git.",
-        )
 app_logo_b64 = ""
 if _bayyinah_logo_ready():
     try:
