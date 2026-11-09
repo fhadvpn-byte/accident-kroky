@@ -94,6 +94,7 @@ DEFAULT_REPORT_STATE = {
     "video_findings": [],
     "video_custom_notes": "",
     "video_injected_text": "",
+    "auto_analyze_video": False,
     "show_page_numbers": False,
     "confirm_clear": False,
     "last_saved_time": "لم يتم الحفظ بعد",
@@ -123,6 +124,8 @@ def init_and_load_state():
             st.session_state[text_key] = ""
     if not isinstance(st.session_state.get("show_page_numbers"), bool):
         st.session_state.show_page_numbers = False
+    if not isinstance(st.session_state.get("auto_analyze_video"), bool):
+        st.session_state.auto_analyze_video = False
     _normalize_loaded_video_state()
     st.session_state.law_selection_sig = tuple(st.session_state.get("selected_articles") or [])
     st.session_state["state_initialized"] = True
@@ -248,8 +251,28 @@ VIDEO_FINDING_OPTIONS = [
     "تأكيد التوقف النظامي للمركبة المتضررة قبل تعرضها للصدم",
 ]
 VIDEO_CLIP_MIN = 1
-VIDEO_CLIP_MAX = 6
+VIDEO_CLIP_MAX = 10
 VIDEO_HAS_OPTIONS = ["لا فيديو", "يوجد توثيق"]
+ANALYSIS_SECRET_NAMES = (
+    "GROQ_API_KEY",
+    "groq_api_key",
+    "GROQ_API_KEYS",
+    "API_KEY",
+    "OPENAI_API_KEY",
+    "XAI_API_KEY",
+)
+VISION_MODEL_NAMES = (
+    "meta-llama/llama-4-scout",
+    "llama-4-maverick",
+)
+TEXT_MODEL_NAMES = (
+    "llama-3.3-70b-versatile",
+    "meta-llama/llama-4-scout",
+    "llama-3.1-8b-instant",
+    "qwen-qwq-32b",
+)
+HOW_SECTION = "===كيفية وقوع الحادث==="
+RESULTS_SECTION = "===نتائج الحادث==="
 
 def _blank_video_clip():
     return {
@@ -378,6 +401,7 @@ def _manual_evidence_blocks():
     clips = _active_video_clips()
     how_lines = []
     result_lines = []
+    legal_lines = []
     for index, clip in enumerate(clips, start=1):
         findings = "، ".join(clip["findings"]) if clip["findings"] else "رصد آلية وحركة المركبات لحظة وقوع الحادث"
         time_clause = f" والموثق زمنياً عند ({clip['timestamp']})" if clip["timestamp"] else ""
@@ -387,150 +411,353 @@ def _manual_evidence_blocks():
             f"وهو ({clip['clarity']}){time_clause}، حيث أظهر المقطع: {findings}{notes}."
         )
         result_lines.append(f"{index}- ثبت من المقطع المرئي ({clip['source']}): {findings}.")
-    return "\n".join(how_lines), "\n".join(result_lines)
+        legal_lines.append(
+            f"المقطع ({index}): حُجية القرينة المرئية من ({clip['source']}) ({clip['clarity']}){time_clause}، "
+            f"والمشاهدات المدونة: {findings}{notes}."
+        )
+    return "\n".join(how_lines), "\n".join(result_lines), "\n".join(legal_lines)
 
-def insert_manual_video_evidence():
-    how_block, results_block = _manual_evidence_blocks()
-    st.session_state.technical_description = _upsert_marked_block(
-        st.session_state.get("technical_description", ""),
-        how_block,
-    )
-    st.session_state.accident_results = _upsert_marked_block(
-        st.session_state.get("accident_results", ""),
-        results_block,
-    )
-    st.session_state.video_injected_text = how_block
-    save_current_work()
-
-def remove_manual_video_evidence():
-    st.session_state.technical_description = _strip_marked_block(st.session_state.get("technical_description", ""))
-    st.session_state.accident_results = _strip_marked_block(st.session_state.get("accident_results", ""))
-    st.session_state.video_injected_text = ""
-    save_current_work()
-
-def _gemini_secret_key():
-    try:
-        value = st.secrets["GEMINI_API_KEY"]
-    except Exception:
-        return ""
-    return str(value or "").strip()
-
-def _resolved_gemini_key():
-    typed = str(st.session_state.get("gemini_api_key") or "").strip()
-    if typed:
-        return typed
-    return _gemini_secret_key()
-
-def _redact_secret(message, secret):
-    text = str(message or "")
-    if secret:
-        text = text.replace(secret, "•••")
-    return text
-
-def analyze_videos_with_gemini():
-    api_key = _resolved_gemini_key()
-    if not api_key:
-        st.error("أدخل مفتاح Gemini API في القائمة الجانبية، أو ضعه في الأسرار باسم GEMINI_API_KEY.")
-        return
-    uploads = []
-    clips = _active_video_clips()
-    for index, clip in enumerate(clips):
-        uploaded = st.session_state.get(f"clip_file_{index}")
-        if uploaded is not None:
-            uploads.append((index, clip, uploaded))
-    if not uploads:
-        st.warning("ارفع مقطعاً واحداً على الأقل قبل التحليل.")
-        return
-    try:
-        import google.generativeai as genai
-    except ImportError:
-        st.error("حزمة google-generativeai غير مثبتة. ثبّتها من requirements.txt ثم أعد تشغيل التطبيق.")
-        return
-    import time
-    genai.configure(api_key=api_key)
-    model = genai.GenerativeModel("gemini-2.5-flash")
-    prompt_lines = [
-        "أنت خبير معاينة حوادث مرورية. شاهد المقاطع المرفقة فقط.",
-        "أجب بكائن JSON صالح دون أي نص خارجه ودون markdown، وبالمفتاحين:",
-        "technical_description: فقرة عربية رسمية لكيفية وقوع الحادث.",
-        "accident_results: نتائج الحادث نقاطاً مرقمة، كل نقطة في سطر.",
-        "لا تخترع وقائع غير ظاهرة في المقاطع، ولا تذكر مفتاحاً أو بيانات سرية.",
-        "معطيات باحث الحوادث عن كل مقطع:",
-    ]
-    parts = []
-    remote_names = []
-    temp_paths = []
-    try:
-        for index, clip, uploaded in uploads:
-            suffix = Path(getattr(uploaded, "name", "") or "").suffix.lower()
-            if suffix not in {".mp4", ".mov", ".avi", ".mkv"}:
-                suffix = ".mp4"
-            mime = {
-                ".mp4": "video/mp4",
-                ".mov": "video/quicktime",
-                ".avi": "video/x-msvideo",
-                ".mkv": "video/x-matroska",
-            }.get(suffix, "video/mp4")
-            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
-                handle.write(uploaded.getvalue())
-                temp_path = handle.name
-            temp_paths.append(temp_path)
-            file_ref = genai.upload_file(temp_path, mime_type=mime)
-            deadline = time.time() + 180
-            state_name = getattr(getattr(file_ref, "state", None), "name", "")
-            while state_name == "PROCESSING" and time.time() < deadline:
-                time.sleep(2)
-                file_ref = genai.get_file(file_ref.name)
-                state_name = getattr(getattr(file_ref, "state", None), "name", "")
-            if state_name == "FAILED":
-                raise RuntimeError(f"تعذر معالجة المقطع {index + 1}")
-            remote_names.append(file_ref.name)
-            prompt_lines.append(
-                f"المقطع {index + 1}: المصدر {clip['source']}، الوضوح {clip['clarity']}، "
-                f"وقت اللقطة {clip['timestamp'] or 'غير محدد'}، ملاحظات الباحث: {clip['notes'] or 'لا يوجد'}."
-            )
-            parts.append(file_ref)
-        parts.insert(0, "\n".join(prompt_lines))
-        response = model.generate_content(parts)
-        raw = str(getattr(response, "text", "") or "").strip()
-        if raw.startswith("```"):
-            raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-        try:
-            parsed = json.loads(raw)
-            how_text = str(parsed.get("technical_description") or "").strip()
-            results_text = str(parsed.get("accident_results") or "").strip()
-        except (json.JSONDecodeError, AttributeError, TypeError):
-            how_text = raw
-            results_text = ""
-        if not how_text and not results_text:
-            st.error("لم يُرجع النموذج صياغة يمكن إدراجها.")
-            return
+def _apply_marked_analysis(parsed):
+    how_text = str((parsed or {}).get("technical_description") or "").strip()
+    results_text = str((parsed or {}).get("accident_results") or "").strip()
+    legal_text = str((parsed or {}).get("legal_opinion") or "").strip()
+    if not how_text and not results_text and not legal_text:
+        return False
+    if how_text:
         st.session_state.technical_description = _upsert_marked_block(
             st.session_state.get("technical_description", ""),
             how_text,
         )
-        if results_text:
-            st.session_state.accident_results = _upsert_marked_block(
-                st.session_state.get("accident_results", ""),
-                results_text,
-            )
-        st.session_state.video_injected_text = how_text
-        save_current_work()
-        st.toast("تم إدراج ناتج تحليل المقاطع في حقلي الكيفية والنتائج", icon="🎥")
-    except Exception as error:
-        st.error(f"تعذر تحليل المقاطع: {_redact_secret(error, api_key)}")
-    finally:
-        for path in temp_paths:
-            try:
-                os.remove(path)
-            except OSError:
-                pass
-        if "genai" in locals():
-            for name in remote_names:
+    if results_text:
+        st.session_state.accident_results = _upsert_marked_block(
+            st.session_state.get("accident_results", ""),
+            results_text,
+        )
+    if legal_text:
+        st.session_state.legal_opinion = _upsert_marked_block(
+            st.session_state.get("legal_opinion", ""),
+            legal_text,
+        )
+    st.session_state.video_injected_text = how_text or results_text or legal_text
+    save_current_work()
+    return True
+
+def insert_manual_video_evidence():
+    how_block, results_block, legal_block = _manual_evidence_blocks()
+    _apply_marked_analysis({
+        "technical_description": how_block,
+        "accident_results": results_block,
+        "legal_opinion": legal_block,
+    })
+
+def remove_manual_video_evidence():
+    st.session_state.technical_description = _strip_marked_block(st.session_state.get("technical_description", ""))
+    st.session_state.accident_results = _strip_marked_block(st.session_state.get("accident_results", ""))
+    st.session_state.legal_opinion = _strip_marked_block(st.session_state.get("legal_opinion", ""))
+    st.session_state.video_injected_text = ""
+    save_current_work()
+
+def _first_secret_token(name, value):
+    if isinstance(value, (list, tuple)):
+        parts = [str(item or "").strip() for item in value]
+    else:
+        text = str(value or "").strip()
+        parts = [item.strip() for item in text.split(",")] if name == "GROQ_API_KEYS" else [text]
+    for part in parts:
+        if part:
+            return part
+    return ""
+
+def _lookup_named_secret(name):
+    try:
+        secret_value = st.secrets[name]
+    except Exception:
+        secret_value = ""
+    found = _first_secret_token(name, secret_value)
+    if found:
+        return found
+    return _first_secret_token(name, os.getenv(name, ""))
+
+def _resolved_analysis_key():
+    typed = str(st.session_state.get("analysis_api_key") or "").strip()
+    if typed:
+        return typed
+    _absorb_groq_env()
+    for name in ANALYSIS_SECRET_NAMES:
+        found = _lookup_named_secret(name)
+        if found:
+            return found
+    return ""
+
+def _analysis_base_url(api_key):
+    if api_key.startswith("xai-"):
+        return "https://api.x.ai/v1"
+    if api_key.startswith("sk-") and not api_key.startswith("gsk_"):
+        return "https://api.openai.com/v1"
+    return "https://api.groq.com/openai/v1"
+
+def _sections_from_model_text(text):
+    raw = str(text or "")
+    if HOW_SECTION not in raw or RESULTS_SECTION not in raw:
+        return "", ""
+    how_text = raw.split(HOW_SECTION, 1)[1].split(RESULTS_SECTION, 1)[0].strip()
+    results_text = raw.split(RESULTS_SECTION, 1)[1].strip()
+    return how_text, results_text
+
+def _optional_cv2():
+    try:
+        import cv2
+    except Exception:
+        return None
+    return cv2
+
+def _redact_secret(message, *secrets):
+    text = str(message or "")
+    for secret in secrets:
+        if secret:
+            text = text.replace(secret, "•••")
+    return text
+
+def _upload_token(uploaded):
+    if uploaded is None:
+        return ""
+    file_id = str(getattr(uploaded, "file_id", "") or "")
+    name = str(getattr(uploaded, "name", "") or "")
+    size = getattr(uploaded, "size", None)
+    if size is None:
+        try:
+            size = len(uploaded.getvalue())
+        except Exception:
+            size = 0
+    return f"{file_id}:{name}:{size}"
+
+def _bulk_uploads():
+    bulk = st.session_state.get("video_bulk_files") or []
+    if bulk is None:
+        return []
+    if isinstance(bulk, list):
+        return [item for item in bulk if item is not None]
+    return [bulk]
+
+def _effective_clip_file(index, bulk):
+    per_clip = st.session_state.get(f"clip_file_{index}")
+    if per_clip is not None:
+        return per_clip
+    if index < len(bulk):
+        return bulk[index]
+    return None
+
+def _video_files_signature(count, bulk):
+    parts = ["bulk:" + "|".join(_upload_token(item) for item in bulk)]
+    for index in range(count):
+        parts.append(f"{index}:{_upload_token(st.session_state.get(f'clip_file_{index}'))}")
+    signature = "||".join(parts)
+    if not any(_upload_token(item) for item in bulk) and all(
+        not _upload_token(st.session_state.get(f"clip_file_{index}")) for index in range(count)
+    ):
+        return ""
+    return signature
+
+def _clip_prompt_line(index, clip):
+    findings = "، ".join(clip["findings"]) if clip["findings"] else "لا توجد مشاهدات مدونة"
+    return (
+        f"المقطع {index + 1}: المصدر {clip['source']}، الوضوح {clip['clarity']}، "
+        f"وقت اللقطة {clip['timestamp'] or 'غير محدد'}، المشاهدات المدونة: {findings}، "
+        f"ملاحظات الباحث: {clip['notes'] or 'لا يوجد'}."
+    )
+
+def _analysis_prompt(clips, watched):
+    if watched:
+        intro = [
+            "أنت خبير معاينة حوادث مرورية. اعتمد على اللقطات المرفقة والبيانات المكتوبة فقط.",
+            "لا تخترع وقائع غير ظاهرة في اللقطات أو غير مكتوبة أدناه.",
+        ]
+    else:
+        intro = [
+            "لم تُرسل إليك لقطات، ولا تملك مشاهدة للمقطع.",
+            "لا تخترع حركة مركبات أو ألواناً أو وقائع مرئية لم تُذكر كتابةً أدناه.",
+            "إن نقصت البيانات المكتوبة فقل صراحة إن التفاصيل المرئية غير متاحة لأن التحليل نصي بلا مشاهدة.",
+        ]
+    return "\n".join(intro + [
+        "أجب بهذا الشكل الحرفي دون مقدمات:",
+        HOW_SECTION,
+        "فقرة كيفية وقوع الحادث",
+        RESULTS_SECTION,
+        "نتائج الحادث نقاطاً مرقمة",
+        "لا تذكر مفاتيح API.",
+        "البيانات المكتوبة:",
+        *[_clip_prompt_line(index, clip) for index, clip in enumerate(clips)],
+    ])
+
+def _extract_clip_frames(uploads):
+    cv2 = _optional_cv2()
+    if cv2 is None:
+        return []
+    frames = []
+    for _index, _clip, uploaded in uploads:
+        if len(frames) >= 4:
+            break
+        suffix = Path(getattr(uploaded, "name", "") or "").suffix.lower()
+        if suffix not in {".mp4", ".mov", ".avi", ".mkv"}:
+            suffix = ".mp4"
+        temp_path = ""
+        try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
+                handle.write(uploaded.getvalue())
+                temp_path = handle.name
+            capture = cv2.VideoCapture(temp_path)
+            total = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+            if total > 1:
+                positions = [max(0, int(total * 0.35)), max(0, int(total * 0.7))]
+            else:
+                positions = [0]
+            taken = 0
+            for position in positions:
+                if taken >= 2 or len(frames) >= 4:
+                    break
+                capture.set(cv2.CAP_PROP_POS_FRAMES, position)
+                ok, frame = capture.read()
+                if not ok or frame is None:
+                    continue
+                height, width = frame.shape[:2]
+                if width != 720 and width > 0:
+                    scaled_height = max(1, int(height * (720 / width)))
+                    frame = cv2.resize(frame, (720, scaled_height))
+                encoded, buffer = cv2.imencode(
+                    ".jpg",
+                    frame,
+                    [int(cv2.IMWRITE_JPEG_QUALITY), 75],
+                )
+                if encoded:
+                    frames.append(base64.b64encode(buffer.tobytes()).decode("ascii"))
+                    taken += 1
+            capture.release()
+        except Exception:
+            continue
+        finally:
+            if temp_path:
                 try:
-                    genai.delete_file(name)
-                except Exception:
+                    os.remove(temp_path)
+                except OSError:
                     pass
+    return frames[:4]
+
+def _chat_completion(base_url, api_key, model_name, content):
+    import requests
+    response = requests.post(
+        f"{base_url}/chat/completions",
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        json={
+            "model": model_name,
+            "temperature": 0.1,
+            "messages": [{"role": "user", "content": content}],
+        },
+        timeout=90,
+    )
+    response.raise_for_status()
+    payload = response.json()
+    return payload["choices"][0]["message"]["content"]
+
+def _available_model_names(base_url, api_key):
+    import requests
+    try:
+        response = requests.get(
+            f"{base_url}/models",
+            headers={"Authorization": f"Bearer {api_key}"},
+            timeout=30,
+        )
+        response.raise_for_status()
+        payload = response.json()
+    except Exception:
+        return []
+    names = []
+    data = payload.get("data") if isinstance(payload, dict) else None
+    if not isinstance(data, list):
+        return []
+    for item in data:
+        model_id = str(item.get("id") or "").strip() if isinstance(item, dict) else ""
+        lowered = model_id.lower()
+        if not model_id or any(word in lowered for word in ("whisper", "guard", "tts")):
+            continue
+        names.append(model_id)
+    return names
+
+def _message_content(prompt, frames):
+    if not frames:
+        return prompt
+    content = [{"type": "text", "text": prompt}]
+    for encoded in frames:
+        content.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
+        })
+    return content
+
+def _apply_section_analysis(how_text, results_text):
+    if not how_text and not results_text:
+        return False
+    if how_text:
+        st.session_state.technical_description = _upsert_marked_block(
+            st.session_state.get("technical_description", ""),
+            how_text,
+        )
+    if results_text:
+        st.session_state.accident_results = _upsert_marked_block(
+            st.session_state.get("accident_results", ""),
+            results_text,
+        )
+    st.session_state.video_injected_text = how_text or results_text
+    save_current_work()
+    return True
+
+def analyze_videos_with_gemini():
+    api_key = _resolved_analysis_key()
+    clips = _active_video_clips()
+    bulk = _bulk_uploads()
+    uploads = []
+    for index, clip in enumerate(clips):
+        media = _effective_clip_file(index, bulk)
+        if media is not None:
+            uploads.append((index, clip, media))
+    has_notes = any(clip["notes"] or clip["findings"] for clip in clips)
+    if not uploads and not has_notes:
+        st.warning("أرفق مقطعاً أو دوّن مشاهدات الباحث قبل التحليل.")
+        return False
+    if not api_key:
+        st.error("لا يوجد مفتاح تحليل في حقل القائمة أو في الأسرار.")
+        return False
+    frames = _extract_clip_frames(uploads) if uploads else []
+    base_url = _analysis_base_url(api_key)
+    text_models = list(TEXT_MODEL_NAMES)
+    for model_name in _available_model_names(base_url, api_key):
+        if model_name not in text_models:
+            text_models.append(model_name)
+    attempts = []
+    if frames:
+        attempts.extend((model_name, True) for model_name in VISION_MODEL_NAMES)
+    attempts.extend((model_name, False) for model_name in text_models)
+    last_error = None
+    for model_name, use_frames in attempts:
+        try:
+            content = _message_content(
+                _analysis_prompt(clips, watched=bool(use_frames and frames)),
+                frames if use_frames else [],
+            )
+            raw = _chat_completion(base_url, api_key, model_name, content)
+            how_text, results_text = _sections_from_model_text(raw)
+            if not _apply_section_analysis(how_text, results_text):
+                last_error = RuntimeError(f"{model_name} بلا قسمين قابلين للإدراج")
+                continue
+            st.session_state.video_analysis_backend = "vision" if use_frames else "text"
+            st.toast("تم إدراج ناتج التحليل في حقلي الكيفية والنتائج", icon="🎥")
+            return True
+        except Exception as error:
+            last_error = error
+    st.error(f"تعذر التحليل: {_redact_secret(last_error, api_key)}")
+    return False
 
 def render_video_evidence_engine():
     with st.container(key="video-evidence"):
@@ -547,7 +774,30 @@ def render_video_evidence_engine():
         if has_video == "لا فيديو":
             st.info("ℹ️ لا يوجد تسجيل مرئي مرفق؛ يعتمد التقرير الفني والمسؤولية النظامية على الآثار المادية، والمعاينة الميدانية، وأقوال الأطراف.")
             return
+        if not isinstance(st.session_state.get("auto_analyze_video"), bool):
+            st.session_state.auto_analyze_video = False
+        st.checkbox(
+            "تحليل الفيديو تلقائياً فور إرفاقه",
+            key="auto_analyze_video",
+            on_change=save_current_work,
+        )
+        st.file_uploader(
+            "رفع جماعي لعدة مقاطع (mp4/mov/avi/mkv)",
+            type=["mp4", "mov", "avi", "mkv"],
+            accept_multiple_files=True,
+            key="video_bulk_files",
+        )
         current = _clamp_clip_count(st.session_state.get("video_clip_count"))
+        bulk_now = _bulk_uploads()
+        bulk_signature = "|".join(_upload_token(item) for item in bulk_now)
+        if bulk_now and bulk_signature != st.session_state.get("video_bulk_signature"):
+            st.session_state.video_bulk_signature = bulk_signature
+            grown = min(VIDEO_CLIP_MAX, max(current, len(bulk_now)))
+            if grown != current:
+                st.session_state.video_clip_count = grown
+                _sync_video_clips(grown)
+                save_current_work()
+                current = grown
         add_col, remove_col = st.columns(2)
         with add_col:
             if st.button("➕ إضافة مقطع", width="stretch"):
@@ -629,25 +879,44 @@ def render_video_evidence_engine():
                     on_change=_store_clip_fields,
                 )
                 uploaded_video = st.file_uploader(
-                    "رفع المقطع للمعاينة والتحليل (mp4/mov/avi/mkv)",
+                    "رفع اختياري لهذا المقطع (mp4/mov/avi/mkv)",
                     type=["mp4", "mov", "avi", "mkv"],
                     key=f"clip_file_{index}",
                 )
-                if uploaded_video is not None:
-                    with st.expander("▶️ معاينة المقطع", expanded=False):
-                        st.video(uploaded_video)
-        if st.button("تحليل المقاطع عبر Gemini", type="primary", width="stretch"):
-            with st.spinner("جارٍ رفع المقاطع وتحليلها..."):
+                preview = uploaded_video if uploaded_video is not None else (
+                    bulk_now[index] if index < len(bulk_now) else None
+                )
+                if preview is not None:
+                    origin = "المقطع الخاص" if uploaded_video is not None else "الرفع الجماعي"
+                    with st.expander(f"▶️ معاينة المقطع ({origin})", expanded=False):
+                        st.video(preview)
+        file_signature = _video_files_signature(len(clips), bulk_now)
+        if (
+            st.session_state.get("auto_analyze_video")
+            and file_signature
+            and file_signature != st.session_state.get("video_analysis_signature")
+        ):
+            st.session_state.video_analysis_signature = file_signature
+            with st.spinner("جارٍ تحليل المقاطع المرفقة مرة واحدة..."):
+                analyze_videos_with_gemini()
+        if st.session_state.get("video_analysis_backend") == "text":
+            st.warning("التحليل نصي بلا مشاهدة للمقطع. الصياغة من البيانات المكتوبة فقط، دون اختراع وقائع مرئية.")
+        if st.button("تحليل المقاطع", type="primary", width="stretch"):
+            signature_now = _video_files_signature(len(clips), _bulk_uploads())
+            if signature_now:
+                st.session_state.video_analysis_signature = signature_now
+            with st.spinner("جارٍ تحليل المقاطع..."):
                 analyze_videos_with_gemini()
         btn_insert, btn_remove = st.columns(2)
         with btn_insert:
             if st.button("إدراج وتحديث فقرة القرائن", width="stretch"):
                 insert_manual_video_evidence()
-                st.toast("تم تحديث فقرة القرائن ونتائجها بين علامتي البداية والنهاية", icon="🎥")
+                st.toast("تم تحديث القرائن في الكيفية والنتائج والرأي بين علامتي البداية والنهاية", icon="🎥")
         with btn_remove:
             if st.button("إزالة فقرات القرائن", width="stretch"):
                 remove_manual_video_evidence()
-                st.toast("تمت إزالة فقرات القرائن المرئية من الحقلين", icon="ℹ️")
+                st.session_state.video_analysis_backend = ""
+                st.toast("تمت إزالة فقرات القرائن المرئية من الحقول الثلاثة", icon="ℹ️")
 
 def _reset_new_accident():
     if os.path.exists(DRAFT_FILE_PATH):
@@ -1814,15 +2083,13 @@ with st.sidebar:
         officer_2_rank = st.text_input("رتبة مشرف الحوادث", value="")
         manager_name = st.text_input("اسم مدير القسم / الشعبة", value="")
         manager_rank = st.text_input("رتبة المدير", value="")
-    with st.container(key="glow-gemini"):
-        st.subheader("مفتاح Gemini API")
-        if "gemini_api_key" not in st.session_state:
-            st.session_state["gemini_api_key"] = _gemini_secret_key()
+    with st.container(key="glow-analysis-key"):
+        st.subheader("مفتاح التحليل")
         st.text_input(
-            "مفتاح Gemini API",
+            "مفتاح التحليل",
             type="password",
-            key="gemini_api_key",
-            help="يُقرأ من st.secrets باسم GEMINI_API_KEY إن وُجد، ولا يُحفظ في الكود أو Git أو مسودة الحادث.",
+            key="analysis_api_key",
+            help="يُستخدم إن كُتب هنا، وإلا تُقرأ الأسرار بالترتيب دون حفظ المفتاح في المسودة أو Git.",
         )
 app_logo_b64 = ""
 if _bayyinah_logo_ready():
@@ -2418,7 +2685,8 @@ with tab2:
         kept_tech = _extract_marked_block(st.session_state.get("technical_description", ""))
         st.session_state.accident_results = _upsert_marked_block(generated_fields["resultsText"], kept_results)
         st.session_state.technical_description = _upsert_marked_block(generated_fields["technicalDraftText"], kept_tech)
-        st.session_state.legal_opinion = generated_fields["legalOpinionText"]
+        kept_legal = _extract_marked_block(st.session_state.get("legal_opinion", ""))
+        st.session_state.legal_opinion = _upsert_marked_block(generated_fields["legalOpinionText"], kept_legal)
         save_current_work()
     if generated_fields["hasCriminalSuspicion"]:
         st.warning("تشمل المواد المختارة شقاً جنائياً أو شبه جنائي، وتُحال إلى الشرطة أو النيابة.")
