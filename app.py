@@ -136,6 +136,7 @@ def save_current_work():
         if key in st.session_state and key != "confirm_clear":
             data_to_save[key] = st.session_state[key]
     for secret_key_name in (
+        "api_key_persist",
         "api_key_persistent",
         "widget_api_key_input",
         "api_key_input",
@@ -478,15 +479,12 @@ def _groq_secret_key():
     return str(value or "").strip()
 
 def _sync_analysis_key_from_widget():
-    st.session_state.api_key_persistent = str(st.session_state.get("widget_api_key_input") or "").strip()
+    st.session_state.api_key_persist = str(st.session_state.get("widget_api_key_input") or "").strip()
 
 def get_active_analysis_key():
-    typed = str(st.session_state.get("api_key_persistent") or "").strip()
+    typed = str(st.session_state.get("api_key_persist") or "").strip()
     if typed:
         return typed
-    widget_value = str(st.session_state.get("widget_api_key_input") or "").strip()
-    if widget_value:
-        return widget_value
     return _groq_secret_key()
 
 def _analysis_base_url(api_key):
@@ -2083,14 +2081,13 @@ with st.sidebar:
         manager_rank = st.text_input("رتبة المدير", value="")
     with st.container(key="glow-analysis-key"):
         st.subheader("مفتاح التحليل")
-        if "api_key_persistent" not in st.session_state:
-            st.session_state.api_key_persistent = _groq_secret_key()
-        if "widget_api_key_input" not in st.session_state:
-            st.session_state.widget_api_key_input = str(st.session_state.get("api_key_persistent") or "")
+        if "api_key_persist" not in st.session_state:
+            st.session_state.api_key_persist = ""
         st.text_input(
             "مفتاح التحليل (يبقى مخزناً عند التحديث)",
             type="password",
             key="widget_api_key_input",
+            value=st.session_state.api_key_persist,
             on_change=_sync_analysis_key_from_widget,
             help="يبقى في الجلسة عند التحديث. إن غاب يُؤخذ من السر GROQ_API_KEY، ولا يُكتب في المسودة أو Git.",
         )
