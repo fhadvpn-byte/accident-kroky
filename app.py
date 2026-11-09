@@ -85,13 +85,16 @@ DEFAULT_REPORT_STATE = {
     "accident_nature": "حادث مروري اعتيادي",
     "rights_status": "اختر الحالة",
     "extra_procedure": "",
-    "has_video": "لا يوجد مقطع فيديو",
+    "has_video": "لا فيديو",
+    "video_clip_count": 1,
+    "video_clips": [],
     "video_source": "كاميرا مراقبة أمنية (CCTV)",
     "video_clarity": "واضح وموثق بختم زمني (تاريخ ووقت)",
     "video_timestamp": "",
     "video_findings": [],
     "video_custom_notes": "",
     "video_injected_text": "",
+    "show_page_numbers": False,
     "confirm_clear": False,
     "last_saved_time": "لم يتم الحفظ بعد",
 }
@@ -118,6 +121,9 @@ def init_and_load_state():
     for text_key in ("accident_results", "technical_description", "legal_opinion", "extra_procedure", "video_timestamp", "video_custom_notes"):
         if not isinstance(st.session_state.get(text_key), str):
             st.session_state[text_key] = ""
+    if not isinstance(st.session_state.get("show_page_numbers"), bool):
+        st.session_state.show_page_numbers = False
+    _normalize_loaded_video_state()
     st.session_state.law_selection_sig = tuple(st.session_state.get("selected_articles") or [])
     st.session_state["state_initialized"] = True
 
@@ -215,152 +221,433 @@ def render_save_and_clear_toolbar():
                         st.session_state["confirm_clear"] = False
                         st.rerun()
 
-def build_video_legal_paragraph():
-    if st.session_state.get("has_video") != "نعم - يوجد توثيق مرئي (مقطع فيديو)":
-        return "", ""
-    source = st.session_state.get("video_source", "")
-    clarity = st.session_state.get("video_clarity", "")
-    timestamp = str(st.session_state.get("video_timestamp", "")).strip()
-    findings = st.session_state.get("video_findings", [])
-    custom_notes = str(st.session_state.get("video_custom_notes", "")).strip()
-    time_clause = f" والموثق زمنياً عند ({timestamp})" if timestamp else ""
-    findings_clause = "، ".join(findings) if findings else "رصد آلية وحركة المركبات لحظة وقوع الحادث"
-    notes_clause = f"؛ كما أظهر التسجيل أن ({custom_notes})" if custom_notes else ""
-    tech_video_paragraph = (
-        f"وقد تعززت المعاينة الفنية بالاطلاع على التسجيل المرئي (مقطع فيديو) المستخرج من ({source}) "
-        f"وهو ({clarity}){time_clause}، حيث أظهر المقطع بوضوح: {findings_clause}{notes_clause}."
-    )
-    legal_video_paragraph = (
-        f"🎥 حُجية القرينة الرقمية والمرئية: استناداً إلى التسجيل المرئي المرفق والمستخرج من ({source}) "
-        f"({clarity}){time_clause}، والذي يُعد قرينة فنية ومادية قاطعة تعضد محضر الاستدلال والمعاينة الميدانية، "
-        f"فقد ثبت يقيناً من خلال تفريغ المقطع: ({findings_clause}){notes_clause}؛ "
-        f"وعليه بُني تحديد المسؤولية النظامية ونسب الخطأ استناداً للدليل المرئي الموثق."
-    )
-    return tech_video_paragraph, legal_video_paragraph
+VIDEO_MARKER_START = "[بداية القرائن المرئية]"
+VIDEO_MARKER_END = "[نهاية القرائن المرئية]"
+VIDEO_SOURCE_OPTIONS = [
+    "كاميرا مراقبة أمنية (CCTV)",
+    "كاميرا مركبة (داش كام - Dashcam)",
+    "كاميرا منشأة تجارية / خاصة محيطة",
+    "كاميرات الرصد الآلي / المدن الذكية",
+    "تصوير هاتف محمول موثق",
+]
+VIDEO_CLARITY_OPTIONS = [
+    "واضح وموثق بختم زمني (تاريخ ووقت)",
+    "واضح الدقة (بدون ختم زمني ظاهر)",
+    "متوسط الوضوح ولكن يُظهر آلية الاصطدام",
+    "زاوية بعيدة تُظهر اتجاهات المركبات فقط",
+]
+VIDEO_FINDING_OPTIONS = [
+    "رصد لحظة الاصطدام وزاوية الدخول بدقة",
+    "ثبوت انحراف المركبة المتسببة بشكل مفاجئ على مسار الطرف الآخر",
+    "تجاوز السرعة النظامية وعدم ظهور إضاءة المكابح قبل الاصطدام",
+    "ثبوت قطع الإشارة الضوئية الحمراء بالصوت والصورة",
+    "ثبوت السير عكس اتجاه الحركة المرورية",
+    "رصد قرائن تدل على تعمد الصدم أو المطاردة والمضايقة (شبهة جنائية)",
+    "رصد هروب المركبة المتسببة من مسرح الحادث عقب الاصطدام مباشرة",
+    "ثبوت هوية السائق الفعلي وقت الاصطدام قبل محاولة الاستبدال",
+    "تأكيد التوقف النظامي للمركبة المتضررة قبل تعرضها للصدم",
+]
+VIDEO_CLIP_MIN = 1
+VIDEO_CLIP_MAX = 6
+VIDEO_HAS_OPTIONS = ["لا فيديو", "يوجد توثيق"]
 
-def inject_video_into_opinion_and_description():
-    tech_add, legal_add = build_video_legal_paragraph()
-    if not legal_add:
-        return
-    current_tech = str(st.session_state.get("technical_description", "")).strip()
-    tech_marker = "وقد تعززت المعاينة الفنية بالاطلاع على التسجيل المرئي"
-    if tech_marker in current_tech:
-        base_tech = current_tech.split(tech_marker)[0].strip()
-        st.session_state["technical_description"] = f"{base_tech}\n\n{tech_add}".strip() if base_tech else tech_add
-    elif tech_add not in current_tech:
-        st.session_state["technical_description"] = f"{current_tech}\n\n{tech_add}".strip() if current_tech else tech_add
-    current_legal = str(st.session_state.get("legal_opinion", "")).strip()
-    if "🎥 حُجية القرينة الرقمية والمرئية:" not in current_legal:
-        st.session_state["legal_opinion"] = f"{current_legal}\n\n{legal_add}".strip() if current_legal else legal_add
+def _blank_video_clip():
+    return {
+        "source": VIDEO_SOURCE_OPTIONS[0],
+        "clarity": VIDEO_CLARITY_OPTIONS[0],
+        "timestamp": "",
+        "findings": [],
+        "notes": "",
+    }
+
+def _normalize_video_clip(raw):
+    clip = _blank_video_clip()
+    if isinstance(raw, dict):
+        if raw.get("source") in VIDEO_SOURCE_OPTIONS:
+            clip["source"] = raw["source"]
+        if raw.get("clarity") in VIDEO_CLARITY_OPTIONS:
+            clip["clarity"] = raw["clarity"]
+        clip["timestamp"] = str(raw.get("timestamp") or "").strip()
+        findings = raw.get("findings") if isinstance(raw.get("findings"), list) else []
+        clip["findings"] = [item for item in findings if item in VIDEO_FINDING_OPTIONS]
+        clip["notes"] = str(raw.get("notes") or "").strip()
+    return clip
+
+def _clamp_clip_count(value):
+    try:
+        count = int(value)
+    except (TypeError, ValueError):
+        count = VIDEO_CLIP_MIN
+    return max(VIDEO_CLIP_MIN, min(VIDEO_CLIP_MAX, count))
+
+def _normalize_loaded_video_state():
+    raw_has = str(st.session_state.get("has_video") or "")
+    if raw_has in ("لا يوجد مقطع فيديو", "لا فيديو"):
+        st.session_state.has_video = "لا فيديو"
+    elif "توثيق" in raw_has or raw_has.startswith("نعم"):
+        st.session_state.has_video = "يوجد توثيق"
     else:
-        base_legal = current_legal.split("🎥 حُجية القرينة الرقمية والمرئية:")[0].strip()
-        st.session_state["legal_opinion"] = f"{base_legal}\n\n{legal_add}".strip() if base_legal else legal_add
-    st.session_state["video_injected_text"] = legal_add
+        st.session_state.has_video = "لا فيديو"
+    clips = st.session_state.get("video_clips")
+    if not isinstance(clips, list) or not clips:
+        legacy = _blank_video_clip()
+        if st.session_state.get("video_source") in VIDEO_SOURCE_OPTIONS:
+            legacy["source"] = st.session_state.video_source
+        if st.session_state.get("video_clarity") in VIDEO_CLARITY_OPTIONS:
+            legacy["clarity"] = st.session_state.video_clarity
+        legacy["timestamp"] = str(st.session_state.get("video_timestamp") or "").strip()
+        old_findings = st.session_state.get("video_findings")
+        if isinstance(old_findings, list):
+            legacy["findings"] = [item for item in old_findings if item in VIDEO_FINDING_OPTIONS]
+        legacy["notes"] = str(st.session_state.get("video_custom_notes") or "").strip()
+        clips = [legacy]
+    clips = [_normalize_video_clip(item) for item in clips][:VIDEO_CLIP_MAX]
+    if not clips:
+        clips = [_blank_video_clip()]
+    count = _clamp_clip_count(st.session_state.get("video_clip_count", len(clips)))
+    while len(clips) < count:
+        clips.append(_blank_video_clip())
+    st.session_state.video_clips = clips[:count]
+    st.session_state.video_clip_count = count
+
+def _sync_video_clips(count):
+    count = _clamp_clip_count(count)
+    clips = [_normalize_video_clip(item) for item in (st.session_state.get("video_clips") or [])]
+    while len(clips) < count:
+        clips.append(_blank_video_clip())
+    st.session_state.video_clips = clips[:count]
+    return st.session_state.video_clips
+
+def _store_clip_fields():
+    count = _clamp_clip_count(st.session_state.get("video_clip_count"))
+    clips = []
+    for index in range(count):
+        findings = st.session_state.get(f"clip_{index}_findings", [])
+        if not isinstance(findings, list):
+            findings = []
+        clips.append(_normalize_video_clip({
+            "source": st.session_state.get(f"clip_{index}_source"),
+            "clarity": st.session_state.get(f"clip_{index}_clarity"),
+            "timestamp": st.session_state.get(f"clip_{index}_timestamp", ""),
+            "findings": findings,
+            "notes": st.session_state.get(f"clip_{index}_notes", ""),
+        }))
+    st.session_state.video_clips = clips
     save_current_work()
+
+def _active_video_clips():
+    count = _clamp_clip_count(st.session_state.get("video_clip_count"))
+    stored = _sync_video_clips(count)
+    clips = []
+    for index, clip in enumerate(stored):
+        findings = st.session_state.get(f"clip_{index}_findings", clip["findings"])
+        if not isinstance(findings, list):
+            findings = []
+        clips.append(_normalize_video_clip({
+            "source": st.session_state.get(f"clip_{index}_source", clip["source"]),
+            "clarity": st.session_state.get(f"clip_{index}_clarity", clip["clarity"]),
+            "timestamp": st.session_state.get(f"clip_{index}_timestamp", clip["timestamp"]),
+            "findings": findings,
+            "notes": st.session_state.get(f"clip_{index}_notes", clip["notes"]),
+        }))
+    return clips
+
+def _extract_marked_block(text):
+    text = str(text or "")
+    if VIDEO_MARKER_START in text and VIDEO_MARKER_END in text:
+        return text.split(VIDEO_MARKER_START, 1)[1].split(VIDEO_MARKER_END, 1)[0].strip()
+    return ""
+
+def _strip_marked_block(text):
+    text = str(text or "")
+    if VIDEO_MARKER_START in text and VIDEO_MARKER_END in text:
+        pre, rest = text.split(VIDEO_MARKER_START, 1)
+        _, post = rest.split(VIDEO_MARKER_END, 1)
+        return f"{pre.rstrip()}\n\n{post.lstrip()}".strip()
+    return text.strip()
+
+def _upsert_marked_block(text, block):
+    base = _strip_marked_block(text)
+    block = str(block or "").strip()
+    if not block:
+        return base
+    marked = f"{VIDEO_MARKER_START}\n{block}\n{VIDEO_MARKER_END}"
+    return f"{base}\n\n{marked}".strip() if base else marked
+
+def _manual_evidence_blocks():
+    clips = _active_video_clips()
+    how_lines = []
+    result_lines = []
+    for index, clip in enumerate(clips, start=1):
+        findings = "، ".join(clip["findings"]) if clip["findings"] else "رصد آلية وحركة المركبات لحظة وقوع الحادث"
+        time_clause = f" والموثق زمنياً عند ({clip['timestamp']})" if clip["timestamp"] else ""
+        notes = f"؛ كما أظهر التسجيل أن ({clip['notes']})" if clip["notes"] else ""
+        how_lines.append(
+            f"المقطع ({index}): تعززت المعاينة الفنية بالاطلاع على التسجيل المرئي المستخرج من ({clip['source']}) "
+            f"وهو ({clip['clarity']}){time_clause}، حيث أظهر المقطع: {findings}{notes}."
+        )
+        result_lines.append(f"{index}- ثبت من المقطع المرئي ({clip['source']}): {findings}.")
+    return "\n".join(how_lines), "\n".join(result_lines)
+
+def insert_manual_video_evidence():
+    how_block, results_block = _manual_evidence_blocks()
+    st.session_state.technical_description = _upsert_marked_block(
+        st.session_state.get("technical_description", ""),
+        how_block,
+    )
+    st.session_state.accident_results = _upsert_marked_block(
+        st.session_state.get("accident_results", ""),
+        results_block,
+    )
+    st.session_state.video_injected_text = how_block
+    save_current_work()
+
+def remove_manual_video_evidence():
+    st.session_state.technical_description = _strip_marked_block(st.session_state.get("technical_description", ""))
+    st.session_state.accident_results = _strip_marked_block(st.session_state.get("accident_results", ""))
+    st.session_state.video_injected_text = ""
+    save_current_work()
+
+def _gemini_secret_key():
+    try:
+        value = st.secrets["GEMINI_API_KEY"]
+    except Exception:
+        return ""
+    return str(value or "").strip()
+
+def _resolved_gemini_key():
+    typed = str(st.session_state.get("gemini_api_key") or "").strip()
+    if typed:
+        return typed
+    return _gemini_secret_key()
+
+def _redact_secret(message, secret):
+    text = str(message or "")
+    if secret:
+        text = text.replace(secret, "•••")
+    return text
+
+def analyze_videos_with_gemini():
+    api_key = _resolved_gemini_key()
+    if not api_key:
+        st.error("أدخل مفتاح Gemini API في القائمة الجانبية، أو ضعه في الأسرار باسم GEMINI_API_KEY.")
+        return
+    uploads = []
+    clips = _active_video_clips()
+    for index, clip in enumerate(clips):
+        uploaded = st.session_state.get(f"clip_file_{index}")
+        if uploaded is not None:
+            uploads.append((index, clip, uploaded))
+    if not uploads:
+        st.warning("ارفع مقطعاً واحداً على الأقل قبل التحليل.")
+        return
+    try:
+        import google.generativeai as genai
+    except ImportError:
+        st.error("حزمة google-generativeai غير مثبتة. ثبّتها من requirements.txt ثم أعد تشغيل التطبيق.")
+        return
+    import time
+    genai.configure(api_key=api_key)
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    prompt_lines = [
+        "أنت خبير معاينة حوادث مرورية. شاهد المقاطع المرفقة فقط.",
+        "أجب بكائن JSON صالح دون أي نص خارجه ودون markdown، وبالمفتاحين:",
+        "technical_description: فقرة عربية رسمية لكيفية وقوع الحادث.",
+        "accident_results: نتائج الحادث نقاطاً مرقمة، كل نقطة في سطر.",
+        "لا تخترع وقائع غير ظاهرة في المقاطع، ولا تذكر مفتاحاً أو بيانات سرية.",
+        "معطيات باحث الحوادث عن كل مقطع:",
+    ]
+    parts = []
+    remote_names = []
+    temp_paths = []
+    try:
+        for index, clip, uploaded in uploads:
+            suffix = Path(getattr(uploaded, "name", "") or "").suffix.lower()
+            if suffix not in {".mp4", ".mov", ".avi", ".mkv"}:
+                suffix = ".mp4"
+            mime = {
+                ".mp4": "video/mp4",
+                ".mov": "video/quicktime",
+                ".avi": "video/x-msvideo",
+                ".mkv": "video/x-matroska",
+            }.get(suffix, "video/mp4")
+            with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as handle:
+                handle.write(uploaded.getvalue())
+                temp_path = handle.name
+            temp_paths.append(temp_path)
+            file_ref = genai.upload_file(temp_path, mime_type=mime)
+            deadline = time.time() + 180
+            state_name = getattr(getattr(file_ref, "state", None), "name", "")
+            while state_name == "PROCESSING" and time.time() < deadline:
+                time.sleep(2)
+                file_ref = genai.get_file(file_ref.name)
+                state_name = getattr(getattr(file_ref, "state", None), "name", "")
+            if state_name == "FAILED":
+                raise RuntimeError(f"تعذر معالجة المقطع {index + 1}")
+            remote_names.append(file_ref.name)
+            prompt_lines.append(
+                f"المقطع {index + 1}: المصدر {clip['source']}، الوضوح {clip['clarity']}، "
+                f"وقت اللقطة {clip['timestamp'] or 'غير محدد'}، ملاحظات الباحث: {clip['notes'] or 'لا يوجد'}."
+            )
+            parts.append(file_ref)
+        parts.insert(0, "\n".join(prompt_lines))
+        response = model.generate_content(parts)
+        raw = str(getattr(response, "text", "") or "").strip()
+        if raw.startswith("```"):
+            raw = raw.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
+        try:
+            parsed = json.loads(raw)
+            how_text = str(parsed.get("technical_description") or "").strip()
+            results_text = str(parsed.get("accident_results") or "").strip()
+        except (json.JSONDecodeError, AttributeError, TypeError):
+            how_text = raw
+            results_text = ""
+        if not how_text and not results_text:
+            st.error("لم يُرجع النموذج صياغة يمكن إدراجها.")
+            return
+        st.session_state.technical_description = _upsert_marked_block(
+            st.session_state.get("technical_description", ""),
+            how_text,
+        )
+        if results_text:
+            st.session_state.accident_results = _upsert_marked_block(
+                st.session_state.get("accident_results", ""),
+                results_text,
+            )
+        st.session_state.video_injected_text = how_text
+        save_current_work()
+        st.toast("تم إدراج ناتج تحليل المقاطع في حقلي الكيفية والنتائج", icon="🎥")
+    except Exception as error:
+        st.error(f"تعذر تحليل المقاطع: {_redact_secret(error, api_key)}")
+    finally:
+        for path in temp_paths:
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+        if "genai" in locals():
+            for name in remote_names:
+                try:
+                    genai.delete_file(name)
+                except Exception:
+                    pass
 
 def render_video_evidence_engine():
     with st.container(key="video-evidence"):
-        st.subheader("🎥 محرك القرائن الرقمية والتوثيق المرئي (مقطع الفيديو)")
+        st.subheader("🎥 محرك القرائن الرقمية والتوثيق المرئي")
+        if st.session_state.get("has_video") not in VIDEO_HAS_OPTIONS:
+            st.session_state.has_video = "لا فيديو"
         has_video = st.radio(
-            "هل يتوفر مقطع فيديو يوثق الحادث؟",
-            options=["لا يوجد مقطع فيديو", "نعم - يوجد توثيق مرئي (مقطع فيديو)"],
+            "هل يتوفر توثيق مرئي للحادث؟",
+            options=VIDEO_HAS_OPTIONS,
             key="has_video",
             horizontal=True,
             on_change=save_current_work,
         )
-        if has_video == "لا يوجد مقطع فيديو":
+        if has_video == "لا فيديو":
             st.info("ℹ️ لا يوجد تسجيل مرئي مرفق؛ يعتمد التقرير الفني والمسؤولية النظامية على الآثار المادية، والمعاينة الميدانية، وأقوال الأطراف.")
-        else:
-            source_options = [
-                "كاميرا مراقبة أمنية (CCTV)",
-                "كاميرا مركبة (داش كام - Dashcam)",
-                "كاميرا منشأة تجارية / خاصة محيطة",
-                "كاميرات الرصد الآلي / المدن الذكية",
-                "تصوير هاتف محمول موثق",
-            ]
-            clarity_options = [
-                "واضح وموثق بختم زمني (تاريخ ووقت)",
-                "واضح الدقة (بدون ختم زمني ظاهر)",
-                "متوسط الوضوح ولكن يُظهر آلية الاصطدام",
-                "زاوية بعيدة تُظهر اتجاهات المركبات فقط",
-            ]
-            finding_options = [
-                "رصد لحظة الاصطدام وزاوية الدخول بدقة",
-                "ثبوت انحراف المركبة المتسببة بشكل مفاجئ على مسار الطرف الآخر",
-                "تجاوز السرعة النظامية وعدم ظهور إضاءة المكابح قبل الاصطدام",
-                "ثبوت قطع الإشارة الضوئية الحمراء بالصوت والصورة",
-                "ثبوت السير عكس اتجاه الحركة المرورية",
-                "رصد قرائن تدل على تعمد الصدم أو المطاردة والمضايقة (شبهة جنائية)",
-                "رصد هروب المركبة المتسببة من مسرح الحادث عقب الاصطدام مباشرة",
-                "ثبوت هوية السائق الفعلي وقت الاصطدام قبل محاولة الاستبدال",
-                "تأكيد التوقف النظامي للمركبة المتضررة قبل تعرضها للصدم",
-            ]
-            if st.session_state.get("video_source") not in source_options:
-                st.session_state.video_source = source_options[0]
-            if st.session_state.get("video_clarity") not in clarity_options:
-                st.session_state.video_clarity = clarity_options[0]
-            stored_findings = st.session_state.get("video_findings")
+            return
+        current = _clamp_clip_count(st.session_state.get("video_clip_count"))
+        add_col, remove_col = st.columns(2)
+        with add_col:
+            if st.button("➕ إضافة مقطع", width="stretch"):
+                st.session_state.video_clip_count = min(VIDEO_CLIP_MAX, current + 1)
+                _sync_video_clips(st.session_state.video_clip_count)
+                save_current_work()
+                st.rerun()
+        with remove_col:
+            if st.button("➖ إنقاص مقطع", width="stretch", disabled=current <= VIDEO_CLIP_MIN):
+                st.session_state.video_clip_count = max(VIDEO_CLIP_MIN, current - 1)
+                _sync_video_clips(st.session_state.video_clip_count)
+                for index in range(st.session_state.video_clip_count, VIDEO_CLIP_MAX):
+                    for suffix in ("source", "clarity", "timestamp", "findings", "notes"):
+                        st.session_state.pop(f"clip_{index}_{suffix}", None)
+                    st.session_state.pop(f"clip_file_{index}", None)
+                save_current_work()
+                st.rerun()
+        count = st.number_input(
+            "عدد المقاطع",
+            min_value=VIDEO_CLIP_MIN,
+            max_value=VIDEO_CLIP_MAX,
+            step=1,
+            key="video_clip_count",
+            on_change=_store_clip_fields,
+        )
+        clips = _sync_video_clips(int(count))
+        for index, clip in enumerate(clips):
+            st.session_state.setdefault(f"clip_{index}_source", clip["source"])
+            st.session_state.setdefault(f"clip_{index}_clarity", clip["clarity"])
+            st.session_state.setdefault(f"clip_{index}_timestamp", clip["timestamp"])
+            st.session_state.setdefault(f"clip_{index}_findings", list(clip["findings"]))
+            st.session_state.setdefault(f"clip_{index}_notes", clip["notes"])
+            if st.session_state.get(f"clip_{index}_source") not in VIDEO_SOURCE_OPTIONS:
+                st.session_state[f"clip_{index}_source"] = VIDEO_SOURCE_OPTIONS[0]
+            if st.session_state.get(f"clip_{index}_clarity") not in VIDEO_CLARITY_OPTIONS:
+                st.session_state[f"clip_{index}_clarity"] = VIDEO_CLARITY_OPTIONS[0]
+            stored_findings = st.session_state.get(f"clip_{index}_findings")
             if not isinstance(stored_findings, list):
                 stored_findings = []
-            st.session_state.video_findings = [item for item in stored_findings if item in finding_options]
-            col_v1, col_v2, col_v3 = st.columns(3)
-            with col_v1:
-                st.selectbox(
-                    "مصدر مقطع الفيديو",
-                    options=source_options,
-                    key="video_source",
-                    on_change=save_current_work,
+            st.session_state[f"clip_{index}_findings"] = [
+                item for item in stored_findings if item in VIDEO_FINDING_OPTIONS
+            ]
+        clip_tabs = st.tabs([f"المقطع {index + 1}" for index in range(len(clips))])
+        for index, tab in enumerate(clip_tabs):
+            with tab:
+                col_v1, col_v2, col_v3 = st.columns(3)
+                with col_v1:
+                    st.selectbox(
+                        "مصدر المقطع",
+                        options=VIDEO_SOURCE_OPTIONS,
+                        key=f"clip_{index}_source",
+                        on_change=_store_clip_fields,
+                    )
+                with col_v2:
+                    st.selectbox(
+                        "درجة الوضوح",
+                        options=VIDEO_CLARITY_OPTIONS,
+                        key=f"clip_{index}_clarity",
+                        on_change=_store_clip_fields,
+                    )
+                with col_v3:
+                    st.text_input(
+                        "وقت اللقطة",
+                        placeholder="اختياري: 00:45 / الساعة 10:15 م",
+                        key=f"clip_{index}_timestamp",
+                        on_change=_store_clip_fields,
+                    )
+                st.multiselect(
+                    "مشاهدات فنية",
+                    options=VIDEO_FINDING_OPTIONS,
+                    key=f"clip_{index}_findings",
+                    on_change=_store_clip_fields,
                 )
-            with col_v2:
-                st.selectbox(
-                    "درجة وضوح المقطع والختم الزمني",
-                    options=clarity_options,
-                    key="video_clarity",
-                    on_change=save_current_work,
+                st.text_area(
+                    "تفاصيل الباحث",
+                    placeholder="لون المركبة، حركة المشاة، حالة الطريق أثناء التصوير...",
+                    key=f"clip_{index}_notes",
+                    height=80,
+                    on_change=_store_clip_fields,
                 )
-            with col_v3:
-                st.text_input(
-                    "وقت اللقطة في الفيديو (مثال: الدقيقة 01:24 أو 14:35:10)",
-                    placeholder="اختياري: 00:45 / الساعة 10:15 م",
-                    key="video_timestamp",
-                    on_change=save_current_work,
+                uploaded_video = st.file_uploader(
+                    "رفع المقطع للمعاينة والتحليل (mp4/mov/avi/mkv)",
+                    type=["mp4", "mov", "avi", "mkv"],
+                    key=f"clip_file_{index}",
                 )
-            st.multiselect(
-                "المشاهدات الفنية المستخلصة من مقطع الفيديو (تُدرج في الرأي والمسؤولية):",
-                options=finding_options,
-                key="video_findings",
-                on_change=save_current_work,
-            )
-            st.text_area(
-                "تفاصيل إضافية رصدها باحث الحوادث في مقطع الفيديو:",
-                placeholder="اكتب أي تفصيل دقيق ظهر في الفيديو (مثل: لون المركبة، حركة المشاة، حالة الطريق أثناء التصوير...)",
-                key="video_custom_notes",
-                height=80,
-                on_change=save_current_work,
-            )
-            uploaded_video = st.file_uploader(
-                "📎 إرفاق ملف الفيديو للمعاينة المباشرة (MP4, MOV, AVI) - اختياري:",
-                type=["mp4", "mov", "avi", "mkv"],
-            )
-            if uploaded_video is not None:
-                with st.expander("▶️ عرض ومعاينة مقطع الفيديو المرفق", expanded=False):
-                    st.video(uploaded_video)
-            col_btn1, col_btn2 = st.columns([2, 1])
-            with col_btn1:
-                if st.button(
-                    "⚡ إدراج وتحديث معلومات الفيديو في (الرأي والمسؤولية النظامية) و(كيفية وقوع الحادث)",
-                    width="stretch",
-                    type="primary",
-                ):
-                    inject_video_into_opinion_and_description()
-                    st.toast("تم دمج قرينة الفيديو في الرأي والمسؤولية النظامية وحفظ المسودة", icon="🎥")
-            with col_btn2:
-                if st.button("🧹 إزالة فقرة الفيديو من الرأي النظامي", width="stretch"):
-                    current_legal = st.session_state.get("legal_opinion", "")
-                    if "🎥 حُجية القرينة الرقمية والمرئية:" in current_legal:
-                        st.session_state["legal_opinion"] = current_legal.split("🎥 حُجية القرينة الرقمية والمرئية:")[0].strip()
-                        save_current_work()
-                        st.toast("تمت إزالة فقرة الفيديو من الرأي النظامي", icon="ℹ️")
+                if uploaded_video is not None:
+                    with st.expander("▶️ معاينة المقطع", expanded=False):
+                        st.video(uploaded_video)
+        if st.button("تحليل المقاطع عبر Gemini", type="primary", width="stretch"):
+            with st.spinner("جارٍ رفع المقاطع وتحليلها..."):
+                analyze_videos_with_gemini()
+        btn_insert, btn_remove = st.columns(2)
+        with btn_insert:
+            if st.button("إدراج وتحديث فقرة القرائن", width="stretch"):
+                insert_manual_video_evidence()
+                st.toast("تم تحديث فقرة القرائن ونتائجها بين علامتي البداية والنهاية", icon="🎥")
+        with btn_remove:
+            if st.button("إزالة فقرات القرائن", width="stretch"):
+                remove_manual_video_evidence()
+                st.toast("تمت إزالة فقرات القرائن المرئية من الحقلين", icon="ℹ️")
 
 def _reset_new_accident():
     if os.path.exists(DRAFT_FILE_PATH):
@@ -1527,6 +1814,16 @@ with st.sidebar:
         officer_2_rank = st.text_input("رتبة مشرف الحوادث", value="")
         manager_name = st.text_input("اسم مدير القسم / الشعبة", value="")
         manager_rank = st.text_input("رتبة المدير", value="")
+    with st.container(key="glow-gemini"):
+        st.subheader("مفتاح Gemini API")
+        if "gemini_api_key" not in st.session_state:
+            st.session_state["gemini_api_key"] = _gemini_secret_key()
+        st.text_input(
+            "مفتاح Gemini API",
+            type="password",
+            key="gemini_api_key",
+            help="يُقرأ من st.secrets باسم GEMINI_API_KEY إن وُجد، ولا يُحفظ في الكود أو Git أو مسودة الحادث.",
+        )
 app_logo_b64 = ""
 if _bayyinah_logo_ready():
     try:
@@ -2095,7 +2392,11 @@ def generate_accident_report_fields(selected_article_ids):
 with tab2:
     st.subheader("📚 محرك المواد النظامية وفروعها")
     if st.session_state.get("acc_how_override"):
-        st.session_state.technical_description = st.session_state.pop("acc_how_override")
+        kept_override = _extract_marked_block(st.session_state.get("technical_description", ""))
+        st.session_state.technical_description = _upsert_marked_block(
+            st.session_state.pop("acc_how_override"),
+            kept_override,
+        )
     valid_article_ids = [article["id"] for article in TRAFFIC_LAW_ARTICLES]
     stored_articles = st.session_state.get("selected_articles")
     if not isinstance(stored_articles, list):
@@ -2113,13 +2414,12 @@ with tab2:
     previous_signature = st.session_state.get("law_selection_sig")
     if previous_signature != selection_signature and not (previous_signature is None and not selected_law_ids):
         st.session_state.law_selection_sig = selection_signature
-        st.session_state.accident_results = generated_fields["resultsText"]
-        st.session_state.technical_description = generated_fields["technicalDraftText"]
+        kept_results = _extract_marked_block(st.session_state.get("accident_results", ""))
+        kept_tech = _extract_marked_block(st.session_state.get("technical_description", ""))
+        st.session_state.accident_results = _upsert_marked_block(generated_fields["resultsText"], kept_results)
+        st.session_state.technical_description = _upsert_marked_block(generated_fields["technicalDraftText"], kept_tech)
         st.session_state.legal_opinion = generated_fields["legalOpinionText"]
-        if st.session_state.get("has_video") == "نعم - يوجد توثيق مرئي (مقطع فيديو)":
-            inject_video_into_opinion_and_description()
-        else:
-            save_current_work()
+        save_current_work()
     if generated_fields["hasCriminalSuspicion"]:
         st.warning("تشمل المواد المختارة شقاً جنائياً أو شبه جنائي، وتُحال إلى الشرطة أو النيابة.")
     render_video_evidence_engine()
@@ -3193,6 +3493,30 @@ with tab5:
             <div class="page-num">5</div>
         </div>
         """
+    if not isinstance(st.session_state.get("show_page_numbers"), bool):
+        st.session_state.show_page_numbers = False
+    show_page_numbers = st.checkbox(
+        "ترقيم الصفحات في الهامش السفلي",
+        key="show_page_numbers",
+        on_change=save_current_work,
+    )
+    page_number_css = ""
+    body_class = ""
+    if show_page_numbers:
+        body_class = "with-page-numbers"
+        page_number_css = """
+        .with-page-numbers .page { padding-bottom: 22mm !important; }
+        .with-page-numbers .page-num {
+            bottom: 5mm; left: 0; right: 0; transform: none; text-align: center;
+            height: 8mm; line-height: 8mm; margin: 0;
+        }
+        @media print {
+            .with-page-numbers .page { padding-bottom: 12mm !important; }
+            .with-page-numbers .page-num { display: none !important; }
+            @page { size: A4; margin: 8mm 8mm 16mm 8mm; }
+            @page { @bottom-center { content: counter(page); font-family: "Tajawal", sans-serif; font-size: 11pt; } }
+        }
+        """
     full_report_html = f"""
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -3339,6 +3663,7 @@ with tab5:
             th, td {{ border: 1px solid #000 !important; }}
             .header-logo img {{ height: 110px; max-width: 120px; }}
         }}
+        {page_number_css}
     </style>
     <script>
     function fitReportFrame() {{
@@ -3357,7 +3682,7 @@ with tab5:
     setTimeout(fitReportFrame, 400);
     </script>
     </head>
-    <body>
+    <body class="{body_class}">
         <div class="no-print" style="text-align:center; margin:0; padding:12px;">
             <button onclick="window.print()" style="background:linear-gradient(90deg,#0e7490,#2563eb); color:white; font-family:'Tajawal'; font-size:18px; font-weight:bold; padding:12px 35px; border:1px solid #4facfe; border-radius:10px; cursor:pointer; box-shadow:0 0 14px rgba(0,242,254,0.45);">
                 🖨️ طباعة التقرير الرسمي أو حفظه كـ PDF
