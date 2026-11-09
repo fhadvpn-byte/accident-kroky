@@ -135,6 +135,8 @@ def save_current_work():
     for key in DEFAULT_REPORT_STATE:
         if key in st.session_state and key != "confirm_clear":
             data_to_save[key] = st.session_state[key]
+    for secret_key_name in ("api_key_input", "api_key_widget", "analysis_api_key"):
+        data_to_save.pop(secret_key_name, None)
     now_str = datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d | %I:%M:%S %p")
     data_to_save["last_saved_time"] = now_str
     st.session_state["last_saved_time"] = now_str
@@ -253,14 +255,6 @@ VIDEO_FINDING_OPTIONS = [
 VIDEO_CLIP_MIN = 1
 VIDEO_CLIP_MAX = 10
 VIDEO_HAS_OPTIONS = ["لا فيديو", "يوجد توثيق"]
-ANALYSIS_SECRET_NAMES = (
-    "GROQ_API_KEY",
-    "groq_api_key",
-    "GROQ_API_KEYS",
-    "API_KEY",
-    "OPENAI_API_KEY",
-    "XAI_API_KEY",
-)
 VISION_MODEL_NAMES = (
     "meta-llama/llama-4-scout",
     "llama-4-maverick",
@@ -457,37 +451,24 @@ def remove_manual_video_evidence():
     st.session_state.video_injected_text = ""
     save_current_work()
 
-def _first_secret_token(name, value):
-    if isinstance(value, (list, tuple)):
-        parts = [str(item or "").strip() for item in value]
-    else:
-        text = str(value or "").strip()
-        parts = [item.strip() for item in text.split(",")] if name == "GROQ_API_KEYS" else [text]
-    for part in parts:
-        if part:
-            return part
-    return ""
-
-def _lookup_named_secret(name):
+def _groq_secret_key():
     try:
-        secret_value = st.secrets[name]
+        value = st.secrets["GROQ_API_KEY"]
     except Exception:
-        secret_value = ""
-    found = _first_secret_token(name, secret_value)
-    if found:
-        return found
-    return _first_secret_token(name, os.getenv(name, ""))
+        return ""
+    return str(value or "").strip()
 
-def _resolved_analysis_key():
-    typed = str(st.session_state.get("analysis_api_key") or "").strip()
+def _sync_analysis_key_from_widget():
+    st.session_state.api_key_input = str(st.session_state.get("api_key_widget") or "").strip()
+
+def get_active_analysis_key():
+    typed = str(st.session_state.get("api_key_input") or "").strip()
     if typed:
         return typed
-    _absorb_groq_env()
-    for name in ANALYSIS_SECRET_NAMES:
-        found = _lookup_named_secret(name)
-        if found:
-            return found
-    return ""
+    widget_value = str(st.session_state.get("api_key_widget") or "").strip()
+    if widget_value:
+        return widget_value
+    return _groq_secret_key()
 
 def _analysis_base_url(api_key):
     if api_key.startswith("xai-"):
@@ -712,7 +693,7 @@ def _apply_section_analysis(how_text, results_text):
     return True
 
 def analyze_video_evidence():
-    api_key = _resolved_analysis_key()
+    api_key = get_active_analysis_key()
     clips = _active_video_clips()
     bulk = _bulk_uploads()
     uploads = []
@@ -2083,12 +2064,23 @@ with st.sidebar:
         manager_rank = st.text_input("رتبة المدير", value="")
     with st.container(key="glow-analysis-key"):
         st.subheader("مفتاح التحليل")
+        secret_key = _groq_secret_key()
+        has_widget = "api_key_widget" in st.session_state
+        widget_now = str(st.session_state.get("api_key_widget") or "").strip() if has_widget else ""
+        stored = str(st.session_state.get("api_key_input") or "").strip()
+        if not stored and not widget_now and secret_key:
+            st.session_state.api_key_input = secret_key
+            st.session_state.api_key_widget = secret_key
+        elif not has_widget:
+            st.session_state.api_key_widget = stored
         st.text_input(
             "مفتاح التحليل",
             type="password",
-            key="analysis_api_key",
-            help="يُستخدم إن كُتب هنا، وإلا تُقرأ الأسرار بالترتيب دون حفظ المفتاح في المسودة أو Git.",
+            key="api_key_widget",
+            on_change=_sync_analysis_key_from_widget,
+            help="يُحفظ في الجلسة فقط. إن تُرك فارغاً يُؤخذ من السر GROQ_API_KEY، ولا يُكتب في المسودة أو Git.",
         )
+        _sync_analysis_key_from_widget()
 app_logo_b64 = ""
 if _bayyinah_logo_ready():
     try:
