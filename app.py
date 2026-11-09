@@ -471,12 +471,30 @@ def remove_manual_video_evidence():
     st.session_state.video_injected_text = ""
     save_current_work()
 
-def _groq_secret_key():
+def _local_secrets_file():
+    return Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"
+
+def _groq_key_from_local_file():
+    path = _local_secrets_file()
+    if not path.is_file():
+        return ""
     try:
-        value = st.secrets["GROQ_API_KEY"]
+        import tomllib
+        with path.open("rb") as handle:
+            data = tomllib.load(handle)
     except Exception:
         return ""
-    return str(value or "").strip()
+    if not isinstance(data, dict) or "GROQ_API_KEY" not in data:
+        return ""
+    return str(data.get("GROQ_API_KEY") or "").strip()
+
+def _groq_secret_key():
+    try:
+        if "GROQ_API_KEY" in st.secrets:
+            return str(st.secrets["GROQ_API_KEY"] or "").strip()
+    except Exception:
+        pass
+    return _groq_key_from_local_file()
 
 def _sync_analysis_key_from_widget():
     st.session_state.api_key_persist = str(st.session_state.get("widget_api_key_input") or "").strip()
