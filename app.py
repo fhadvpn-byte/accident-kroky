@@ -595,8 +595,6 @@ def _extract_clip_frames(uploads):
         return []
     frames = []
     for _index, _clip, uploaded in uploads:
-        if len(frames) >= 4:
-            break
         suffix = Path(getattr(uploaded, "name", "") or "").suffix.lower()
         if suffix not in {".mp4", ".mov", ".avi", ".mkv"}:
             suffix = ".mp4"
@@ -613,7 +611,7 @@ def _extract_clip_frames(uploads):
                 positions = [0]
             taken = 0
             for position in positions:
-                if taken >= 2 or len(frames) >= 4:
+                if taken >= 2:
                     break
                 capture.set(cv2.CAP_PROP_POS_FRAMES, position)
                 ok, frame = capture.read()
@@ -640,7 +638,7 @@ def _extract_clip_frames(uploads):
                     os.remove(temp_path)
                 except OSError:
                     pass
-    return frames[:4]
+    return frames
 
 def _chat_completion(base_url, api_key, model_name, content):
     import requests
@@ -713,7 +711,7 @@ def _apply_section_analysis(how_text, results_text):
     save_current_work()
     return True
 
-def analyze_videos_with_gemini():
+def analyze_video_evidence():
     api_key = _resolved_analysis_key()
     clips = _active_video_clips()
     bulk = _bulk_uploads()
@@ -898,7 +896,7 @@ def render_video_evidence_engine():
         ):
             st.session_state.video_analysis_signature = file_signature
             with st.spinner("جارٍ تحليل المقاطع المرفقة مرة واحدة..."):
-                analyze_videos_with_gemini()
+                analyze_video_evidence()
         if st.session_state.get("video_analysis_backend") == "text":
             st.warning("التحليل نصي بلا مشاهدة للمقطع. الصياغة من البيانات المكتوبة فقط، دون اختراع وقائع مرئية.")
         if st.button("تحليل المقاطع", type="primary", width="stretch"):
@@ -906,7 +904,7 @@ def render_video_evidence_engine():
             if signature_now:
                 st.session_state.video_analysis_signature = signature_now
             with st.spinner("جارٍ تحليل المقاطع..."):
-                analyze_videos_with_gemini()
+                analyze_video_evidence()
         btn_insert, btn_remove = st.columns(2)
         with btn_insert:
             if st.button("إدراج وتحديث فقرة القرائن", width="stretch"):

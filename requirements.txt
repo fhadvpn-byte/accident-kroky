@@ -3,4 +3,4 @@ pandas
 pillow
 reportlab
 google-generativeai
-opencv-python-headless
+requests
