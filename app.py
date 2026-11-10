@@ -3592,7 +3592,7 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
                 color: #000;
                 background: #fff;
                 direction: rtl;
-                font-size: 12pt;
+                font-size: 11px;
                 line-height: 1.6;
             }}
             .report-container {{
@@ -3642,6 +3642,9 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
                 border-radius: 4px;
                 padding: 3px;
             }}
+            .content-text, .report-box {{
+                font-size: 11px;
+            }}
             @media screen {{
                 body {{
                     padding: 20px;
@@ -3651,6 +3654,11 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
                     background: #fff;
                     padding: 15mm;
                     box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+                }}
+            }}
+            @media print {{
+                body, .content-text, .report-box {{
+                    font-size: 9px !important;
                 }}
             }}
         </style>
@@ -3955,6 +3963,15 @@ with tab5:
         .report-sheet {{
             width: 210mm; min-width: 750px; margin: 12px auto 20px auto;
         }}
+        .report-sheet .box-content,
+        .report-sheet table,
+        .report-sheet th,
+        .report-sheet td,
+        .report-sheet .photo-meta,
+        .report-sheet p,
+        .report-sheet li {{
+            font-size: 11px !important;
+        }}
         .page {{
             background: white; width: 210mm; min-width: 750px; min-height: 297mm; margin: 0 auto 20px auto;
             padding: 15mm 18mm; box-sizing: border-box; position: relative;
@@ -4079,6 +4096,15 @@ with tab5:
                 border: 1px solid #000;
             }}
             th, td {{ border: 1px solid #000 !important; }}
+            .report-sheet .box-content,
+            .report-sheet table,
+            .report-sheet th,
+            .report-sheet td,
+            .report-sheet .photo-meta,
+            .report-sheet p,
+            .report-sheet li {{
+                font-size: 9px !important;
+            }}
             .sign-table, .sign-table tr, .sign-table td {{
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
