@@ -1012,6 +1012,28 @@ def get_base64_image(image_filename):
         return ""
     return f"data:{mime};base64,{encoded}"
 
+def _signature_data_url(*names):
+    for name in names:
+        found = get_base64_image(name)
+        if found:
+            return found
+    return ""
+
+def _signature_box(sig_base64):
+    image_html = ""
+    if str(sig_base64 or "").startswith("data:image/"):
+        image_html = (
+            f'<img src="{sig_base64}" style="max-height: 42px; width: auto; display: block; margin: 4px auto;" '
+            "onerror=\"this.style.display='none'\">"
+        )
+    return (
+        '<div style="margin-top: 6px; min-height: 45px;">'
+        '<span style="font-weight: bold;">التوقيع:</span><br>'
+        f"{image_html}"
+        '<div style="border-bottom: 1px solid #111; height: 18px; margin: 4px 10px 0;"></div>'
+        "</div>"
+    )
+
 def _project_logo_path():
     root = Path(__file__).resolve().parent
     for name in ("traffic_logo.png", "logo.png", "traffic_logo.jpg", "logo.jpg", "logo.jpeg", "traffic_logo.jpeg", "logo.webp"):
@@ -3798,6 +3820,22 @@ with tab5:
         if sketch_b64 else ""
     )
     logo_src = get_base64_image("traffic_logo.png")
+    sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
+    stored_sig = str(st.session_state.get("sig_base64") or "").strip()
+    if not sig_officer and stored_sig.startswith("data:image/"):
+        sig_officer = stored_sig
+    elif not sig_officer and stored_sig:
+        sig_officer = get_base64_image(stored_sig)
+    sig_supervisor = _signature_data_url(
+        "signature_supervisor.png",
+        "signature_supervisor.jpg",
+        "signature_supervisor.jpeg",
+    )
+    sig_manager = _signature_data_url(
+        "signature_manager.png",
+        "signature_manager.jpg",
+        "signature_manager.jpeg",
+    )
     def build_header():
         logo_html = f'<img src="{logo_src}" alt="شعار المرور">' if logo_src else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
         return f"""
@@ -4127,7 +4165,7 @@ with tab5:
                 <tr><th>إجراء الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
                 <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
                 <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
-                <tr style="height:65px;"><td>التوقيع:</td><td>التوقيع:</td><td>التوقيع:</td></tr>
+                <tr><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
             </table></div>
             <div class="page-num">3</div>
         </div>
