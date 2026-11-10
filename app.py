@@ -3880,23 +3880,30 @@ with tab5:
                 <tr><td style="padding:14px; font-size:16px; text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
             </table></div>
         """
-    photo_cards = ""
-    for number, entry in enumerate(st.session_state.gallery_photos, start=1):
-        safe_caption = html.escape(entry.get("caption") or "")
-        photo_cards += f"""
+    photos_list = list(st.session_state.gallery_photos or [])
+    photos_pages_html = ""
+    photos_per_page = 4
+    for page_idx in range(0, len(photos_list), photos_per_page):
+        page_photos = photos_list[page_idx:page_idx + photos_per_page]
+        if not page_photos:
+            continue
+        photo_cards = ""
+        for offset, entry in enumerate(page_photos):
+            number = page_idx + offset + 1
+            safe_caption = html.escape(entry.get("caption") or "")
+            photo_cards += f"""
         <div class="photo-card">
             <img src="{entry['b64']}" alt="صورة {number}">
             <div class="photo-meta">{number}<br>{safe_caption}</div>
         </div>
         """
-    photos_pages_html = ""
-    if photo_cards:
-        photos_pages_html = f"""
+        page_number = 5 + (page_idx // photos_per_page)
+        photos_pages_html += f"""
         <div class="page report-page photo-annex">
             {build_header()}
             <div class="section-badge">ملحق الصور الفوتوغرافية لموقع الحادث</div>
             <div class="photo-grid">{photo_cards}</div>
-            <div class="page-num">5</div>
+            <div class="page-num">{page_number}</div>
         </div>
         """
     if not isinstance(st.session_state.get("show_page_numbers"), bool):
