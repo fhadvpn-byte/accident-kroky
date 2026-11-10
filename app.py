@@ -995,6 +995,23 @@ def _arabic_font(size):
                 continue
     return ImageFont.load_default()
 
+def get_base64_image(image_filename):
+    name = Path(str(image_filename or "")).name
+    if not name:
+        return ""
+    root = Path(__file__).resolve().parent
+    path = next((item for item in (root / name, root / "assets" / name) if item.is_file()), None)
+    if path is None:
+        return ""
+    mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(path.suffix.lower(), "")
+    if not mime:
+        return ""
+    try:
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+    return f"data:{mime};base64,{encoded}"
+
 def _project_logo_path():
     root = Path(__file__).resolve().parent
     for name in ("traffic_logo.png", "logo.png", "traffic_logo.jpg", "logo.jpg", "logo.jpeg", "traffic_logo.jpeg", "logo.webp"):
@@ -2073,17 +2090,9 @@ with st.sidebar:
         officer_2_rank = st.text_input("رتبة مشرف الحوادث", value="")
         manager_name = st.text_input("اسم مدير القسم / الشعبة", value="")
         manager_rank = st.text_input("رتبة المدير", value="")
-app_logo_b64 = ""
-if _bayyinah_logo_ready():
-    try:
-        with Image.open(_bayyinah_logo_path) as app_logo:
-            _hero_buf = io.BytesIO()
-            app_logo.convert("RGBA").save(_hero_buf, format="PNG")
-            app_logo_b64 = base64.b64encode(_hero_buf.getvalue()).decode()
-    except OSError:
-        app_logo_b64 = ""
-if app_logo_b64:
-    _hero_ring = f'<div class="bayyinah-logo-ring"><img src="data:image/png;base64,{app_logo_b64}" alt="بَيِّنَة"/></div>'
+app_logo_src = get_base64_image("bayyinah_logo.jpg")
+if app_logo_src:
+    _hero_ring = f'<div class="bayyinah-logo-ring"><img src="{app_logo_src}" alt="بَيِّنَة"/></div>'
 else:
     _hero_ring = '<div class="bayyinah-logo-ring"></div>'
 st.html(f"""
@@ -3788,15 +3797,9 @@ with tab5:
         f'<img src="data:image/png;base64,{sketch_b64}" style="max-width:100%; height:440px; border:1px solid #ccc;">'
         if sketch_b64 else ""
     )
-    logo_b64 = ""
-    _fixed_logo_path = Path(__file__).resolve().parent / "traffic_logo.png"
-    if _fixed_logo_path.is_file():
-        try:
-            logo_b64 = img_to_b64(Image.open(_fixed_logo_path).convert("RGBA"))
-        except OSError:
-            logo_b64 = ""
+    logo_src = get_base64_image("traffic_logo.png")
     def build_header():
-        logo_html = f'<img src="data:image/png;base64,{logo_b64}" alt="شعار المرور">' if logo_b64 else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
+        logo_html = f'<img src="{logo_src}" alt="شعار المرور">' if logo_src else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
         return f"""
         <div class="header-Title">بسم الله الرحمن الرحيم</div>
         <div class="header-box">
