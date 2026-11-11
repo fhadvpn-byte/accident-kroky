@@ -3,5 +3,5 @@ __pycache__/
 saved_accident_images/
 saved_logo.png
 .env
-.streamlit/secrets.toml
+.streamlit/
 bayyinah_autosave_draft.json

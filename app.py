@@ -81,9 +81,28 @@ DEFAULT_REPORT_STATE = {
     "accident_results": "",
     "technical_description": "",
     "legal_opinion": "",
+    "liability_ratio_select": "100% الطرف الأول | 0% الطرف الثاني",
+    "custom_p1_ratio": 75,
+    "p1_title_input": "قائد المركبة الأولى (الطرف الأول)",
+    "p2_role_select": "قائد المركبة الثانية (الطرف الثاني)",
+    "p2_custom_title": "الطرف الثاني",
+    "p1_reasons": (
+        "بناءً على المعاينة الفنية وتطبيق قواعد المساءلة المرورية واستناداً إلى المادة (50/1) من نظام المرور ولائحته التنفيذية.\n"
+        "عدم التأكد من خلو الطريق وأخذ الحيطة والحذر اللازمين قبل المناورة أو التجاوز."
+    ),
+    "p2_reasons": (
+        "استناداً إلى المادة (54) والمادة (57) من نظام المرور ولائحته التنفيذية.\n"
+        "الإهمال وضعف الانتباه وعدم تفادي الخطأ الممكن تلافيه أثناء السير أو العبور."
+    ),
     "selected_articles": [],
-    "accident_nature": "حادث مروري اعتيادي",
-    "rights_status": "اختر الحالة",
+    "accident_nature": "حادث مروري اعتيادي (تلفيات مادية)",
+    "rights_status": "انقضاء الحق الخاص بالتنازل والصلح، ولا يوجد حق عام",
+    "acc_nature_sel": "حادث مروري اعتيادي (تلفيات مادية)",
+    "acc_nature_custom": "حادث مروري اعتيادي",
+    "rights_sel": "انقضاء الحق الخاص بالتنازل والصلح، ولا يوجد حق عام",
+    "rights_custom": "",
+    "selected_actions_multi": ["1. صلح وتنازل ميداني نهائي"],
+    "actions_taken_editor": "",
     "extra_procedure": "",
     "has_video": "لا فيديو",
     "video_clip_count": 1,
@@ -118,9 +137,11 @@ def init_and_load_state():
             st.session_state.setdefault(key, default_val)
     if not isinstance(st.session_state.get("selected_articles"), list):
         st.session_state.selected_articles = []
+    if not isinstance(st.session_state.get("selected_actions_multi"), list):
+        st.session_state.selected_actions_multi = ["1. صلح وتنازل ميداني نهائي"]
     if not isinstance(st.session_state.get("video_findings"), list):
         st.session_state.video_findings = []
-    for text_key in ("accident_results", "technical_description", "legal_opinion", "extra_procedure", "video_timestamp", "video_custom_notes"):
+    for text_key in ("accident_results", "technical_description", "legal_opinion", "extra_procedure", "video_timestamp", "video_custom_notes", "p1_title_input", "p2_custom_title", "p1_reasons", "p2_reasons", "acc_nature_custom", "rights_custom", "actions_taken_editor"):
         if not isinstance(st.session_state.get(text_key), str):
             st.session_state[text_key] = ""
     if not isinstance(st.session_state.get("show_page_numbers"), bool):
@@ -451,10 +472,12 @@ def _apply_marked_analysis(parsed):
             results_text,
         )
     if legal_text:
-        st.session_state.legal_opinion = _upsert_marked_block(
-            st.session_state.get("legal_opinion", ""),
+        merged_reasons = _upsert_marked_block(
+            st.session_state.get("p1_reasons", st.session_state.get("legal_opinion", "")),
             legal_text,
         )
+        st.session_state.p1_reasons = merged_reasons
+        st.session_state.legal_opinion = merged_reasons
     st.session_state.video_injected_text = how_text or results_text or legal_text
     save_current_work()
     return True
@@ -470,7 +493,8 @@ def insert_manual_video_evidence():
 def remove_manual_video_evidence():
     st.session_state.technical_description = _strip_marked_block(st.session_state.get("technical_description", ""))
     st.session_state.accident_results = _strip_marked_block(st.session_state.get("accident_results", ""))
-    st.session_state.legal_opinion = _strip_marked_block(st.session_state.get("legal_opinion", ""))
+    st.session_state.p1_reasons = _strip_marked_block(st.session_state.get("p1_reasons", st.session_state.get("legal_opinion", "")))
+    st.session_state.legal_opinion = st.session_state.p1_reasons
     st.session_state.video_injected_text = ""
     save_current_work()
 
@@ -1044,6 +1068,68 @@ def _signature_data_url(*names):
         if found:
             return found
     return ""
+
+def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ratio, p2_reasons):
+    def format_bullets(text):
+        if not text:
+            return ""
+        lines = [html.escape(line.strip().lstrip("-•* ")) for line in str(text).splitlines() if line.strip()]
+        if not lines:
+            return ""
+        items = "".join([f"<li style='margin-bottom: 5px;'>{line}</li>" for line in lines])
+        return f"<ul style='margin: 6px 22px 10px 0; padding: 0; list-style-type: disc;'>{items}</ul>"
+
+    p1_ratio = int(p1_ratio or 0)
+    p2_ratio = int(p2_ratio or 0)
+    safe_p1_title = html.escape(str(p1_title or ""))
+    safe_p2_title = html.escape(str(p2_title or ""))
+    blocks = []
+    is_shared = p1_ratio > 0 and p2_ratio > 0
+    if p1_ratio > 0:
+        header_prefix = "أولاً: " if is_shared else ""
+        blocks.append(
+            f"<div style='margin-bottom: 10px;'>"
+            f"<div style='font-weight: bold; font-size: 15px; margin-bottom: 4px;'>"
+            f"{header_prefix}إدانة ({safe_p1_title}) بنسبة ({p1_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
+            f"</div>"
+            f"{format_bullets(p1_reasons)}"
+            f"</div>"
+        )
+    if is_shared:
+        blocks.append("<hr style='border: 0; border-top: 1px dashed #666; margin: 10px 0;'>")
+    if p2_ratio > 0:
+        header_prefix = "ثانياً: " if is_shared else ""
+        blocks.append(
+            f"<div style='margin-bottom: 8px;'>"
+            f"<div style='font-weight: bold; font-size: 15px; margin-bottom: 4px;'>"
+            f"{header_prefix}إدانة ({safe_p2_title}) بنسبة ({p2_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
+            f"</div>"
+            f"{format_bullets(p2_reasons)}"
+            f"</div>"
+        )
+    if p1_ratio == 100 and p2_ratio == 0:
+        blocks.append(
+            f"<div style='font-weight: bold; font-size: 14.5px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #eee;'>"
+            f"• عدم مسؤولية ({safe_p2_title}) عن الحادث (نسبة المسؤولية 0%)."
+            f"</div>"
+        )
+    elif p2_ratio == 100 and p1_ratio == 0:
+        blocks.append(
+            f"<div style='font-weight: bold; font-size: 14.5px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #eee;'>"
+            f"• عدم مسؤولية ({safe_p1_title}) عن الحادث (نسبة المسؤولية 0%)."
+            f"</div>"
+        )
+    inner_content = "".join(blocks)
+    return (
+        f"<div style='text-align: center; margin-top: 14px; margin-bottom: 8px;'>"
+        f"<span style='display: inline-block; border: 1.5px solid #000; border-radius: 6px; padding: 4px 28px; font-weight: bold; font-size: 16px; background-color: #f4f4f4;'>"
+        f"الرأي والمسؤولية"
+        f"</span>"
+        f"</div>"
+        f"<div style='border: 1.5px solid #000; padding: 12px 16px; direction: rtl; text-align: right; font-size: 14.5px; line-height: 1.65; background-color: #fff;'>"
+        f"{inner_content}"
+        f"</div>"
+    )
 
 def _signature_box(sig_base64):
     image_html = ""
@@ -2747,8 +2833,10 @@ with tab2:
         kept_tech = _extract_marked_block(st.session_state.get("technical_description", ""))
         st.session_state.accident_results = _upsert_marked_block(generated_fields["resultsText"], kept_results)
         st.session_state.technical_description = _upsert_marked_block(generated_fields["technicalDraftText"], kept_tech)
-        kept_legal = _extract_marked_block(st.session_state.get("legal_opinion", ""))
-        st.session_state.legal_opinion = _upsert_marked_block(generated_fields["legalOpinionText"], kept_legal)
+        kept_legal = _extract_marked_block(st.session_state.get("p1_reasons", st.session_state.get("legal_opinion", "")))
+        merged_opinion = _upsert_marked_block(generated_fields["legalOpinionText"], kept_legal)
+        st.session_state.p1_reasons = merged_opinion
+        st.session_state.legal_opinion = merged_opinion
         save_current_work()
     if generated_fields["hasCriminalSuspicion"]:
         st.warning("تشمل المواد المختارة شقاً جنائياً أو شبه جنائي، وتُحال إلى الشرطة أو النيابة.")
@@ -2765,71 +2853,277 @@ with tab2:
         height=140,
         on_change=save_current_work,
     )
-    st.subheader("الرأي والمسؤولية النظامية")
-    resp_summary = st.text_input("صدر قرار الإدانة", value="")
-    custom_laws = st.text_area(
-        "الرأي والمسؤولية النظامية (يشمل المواد النظامية وقرينة الفيديو إن وجدت)",
-        key="legal_opinion",
-        height=160,
+    if "p1_title_input" not in st.session_state:
+        st.session_state.p1_title_input = DEFAULT_REPORT_STATE["p1_title_input"]
+    if "p2_custom_title" not in st.session_state:
+        st.session_state.p2_custom_title = DEFAULT_REPORT_STATE["p2_custom_title"]
+    if "p1_reasons" not in st.session_state:
+        st.session_state.p1_reasons = DEFAULT_REPORT_STATE["p1_reasons"]
+    if "p2_reasons" not in st.session_state:
+        st.session_state.p2_reasons = DEFAULT_REPORT_STATE["p2_reasons"]
+    if not isinstance(st.session_state.get("custom_p1_ratio"), int):
+        try:
+            st.session_state.custom_p1_ratio = int(st.session_state.get("custom_p1_ratio") or 75)
+        except (TypeError, ValueError):
+            st.session_state.custom_p1_ratio = 75
+    st.markdown("### ⚖️ الرأي وتوزيع نسب المسؤولية")
+    ratio_options = [
+        "100% الطرف الأول | 0% الطرف الثاني",
+        "75% الطرف الأول | 25% الطرف الثاني",
+        "50% الطرف الأول | 50% الطرف الثاني",
+        "25% الطرف الأول | 75% الطرف الثاني",
+        "0% الطرف الأول | 100% الطرف الثاني",
+        "نسبة مخصصة",
+    ]
+    if st.session_state.get("liability_ratio_select") not in ratio_options:
+        st.session_state.liability_ratio_select = ratio_options[0]
+    selected_ratio = st.selectbox(
+        "توزيع نسبة الخطأ والمسؤولية:",
+        options=ratio_options,
+        key="liability_ratio_select",
         on_change=save_current_work,
     )
-with tab3:
-    st.subheader("الحقوق والإجراءات المتخذة")
-    nature_options = ["حادث مروري اعتيادي", "حادث مروري مقترن بشق جنائي / أمني"]
-    if st.session_state.get("accident_nature") not in nature_options:
-        st.session_state.accident_nature = nature_options[0]
-    accident_nature = st.radio(
-        "طبيعة وتصنيف الحادث:",
-        nature_options,
-        horizontal=True,
-        key="accident_nature",
-        on_change=save_current_work,
-    )
-    rights_options = [
-        "اختر الحالة",
-        "قيام الحق الخاص فقط (تنازل أو صلح)",
-        "قيام الحق العام والخاص (مخالفة مرورية موجبة للتوقيف)",
-        "قيام الحق العام والخاص مع وجود شق جنائي (إحالة للشرطة والنيابة)",
-        "وفاة الطرف المتسبب (استكمال الإجراءات النظامية والجنائية)",
-    ]
-    if st.session_state.get("rights_status") not in rights_options:
-        st.session_state.rights_status = rights_options[0]
-    rights_status = st.selectbox(
-        "الحقوق الخاصة والعامة",
-        rights_options,
-        key="rights_status",
-        on_change=save_current_work,
-    )
-    base_procedures = [
-        "معاينة الموقع ورسم الكروكي",
-        "إسعاف المصابين للمستشفى",
-        "رفع المركبات من الموقع",
-    ]
-    criminal_procedures = [
-        "استدعاء الأدلة الجنائية للموقع والمستشفى",
-        "استدعاء الشرطة لاستلام الشق الجنائي",
-        "تعيين خفارة وتشديد الحراسة على المصاب بالمستشفى",
-        "التعميم للعمليات بالمركبات الهاربة والمساندة",
-        "تفتيش المركبة للتأكد من عدم وجود ممنوعات",
-        "إثبات حالة صدم متعمد لدورية رسمية ومقاومة رجال الأمن",
-        "إثبات استخدام السلاح الرسمي (طلقات تحذيرية / إعطاب)",
-    ]
-    available_procedures = base_procedures + criminal_procedures if "جنائي" in accident_nature else base_procedures
-    if "taken_procedures" in st.session_state:
-        st.session_state.taken_procedures = [
-            item for item in st.session_state.taken_procedures if item in available_procedures
+    ratio_lookup = {
+        "100% الطرف الأول | 0% الطرف الثاني": (100, 0),
+        "75% الطرف الأول | 25% الطرف الثاني": (75, 25),
+        "50% الطرف الأول | 50% الطرف الثاني": (50, 50),
+        "25% الطرف الأول | 75% الطرف الثاني": (25, 75),
+        "0% الطرف الأول | 100% الطرف الثاني": (0, 100),
+    }
+    if selected_ratio == "نسبة مخصصة":
+        c_r1, c_r2 = st.columns(2)
+        with c_r1:
+            p1_ratio = st.number_input(
+                "نسبة إدانة الطرف الأول (%)",
+                min_value=0,
+                max_value=100,
+                step=5,
+                key="custom_p1_ratio",
+                on_change=save_current_work,
+            )
+        with c_r2:
+            p2_ratio = 100 - int(p1_ratio)
+            st.info(f"نسبة إدانة الطرف الثاني التلقائية: **{p2_ratio}%**")
+    else:
+        p1_ratio, p2_ratio = ratio_lookup[selected_ratio]
+    p1_ratio = int(p1_ratio)
+    p2_ratio = int(p2_ratio)
+    c_t1, c_t2 = st.columns(2)
+    with c_t1:
+        p1_title = st.text_input(
+            "صفة الطرف الأول في التقرير:",
+            key="p1_title_input",
+            on_change=save_current_work,
+        )
+    with c_t2:
+        p2_role_options = [
+            "قائد المركبة الثانية (الطرف الثاني)",
+            "عابر الطريق (المشاة)",
+            "قائد الدراجة النارية / الهوائية",
+            "تحديد صفة مخصصة",
         ]
-    taken_procedures = st.multiselect(
-        "الإجراءات المتخذة:",
-        options=available_procedures,
-        placeholder="Choose options",
-        key="taken_procedures",
+        if st.session_state.get("p2_role_select") not in p2_role_options:
+            st.session_state.p2_role_select = p2_role_options[0]
+        p2_role_type = st.selectbox(
+            "نوع وصفة الطرف الثاني:",
+            options=p2_role_options,
+            key="p2_role_select",
+            on_change=save_current_work,
+        )
+        if p2_role_type == "تحديد صفة مخصصة":
+            p2_title = st.text_input(
+                "اكتب صفة الطرف الثاني:",
+                key="p2_custom_title",
+                on_change=save_current_work,
+            )
+        else:
+            p2_title = p2_role_type
+    if p1_ratio > 0:
+        p1_reasons = st.text_area(
+            f"المواد النظامية وأسباب إدانة {p1_title} ({p1_ratio}%) — (كل سبب في سطر جديد):",
+            height=110,
+            key="p1_reasons",
+            on_change=save_current_work,
+        )
+    else:
+        p1_reasons = st.session_state.get("p1_reasons", "")
+    if p2_ratio > 0:
+        p2_reasons = st.text_area(
+            f"المواد النظامية وأسباب إدانة {p2_title} ({p2_ratio}%) — (كل سبب في سطر جديد):",
+            height=110,
+            key="p2_reasons",
+            on_change=save_current_work,
+        )
+    else:
+        p2_reasons = st.session_state.get("p2_reasons", "")
+    liability_html = build_liability_section_html(
+        p1_title=p1_title,
+        p1_ratio=p1_ratio,
+        p1_reasons=p1_reasons,
+        p2_title=p2_title,
+        p2_ratio=p2_ratio,
+        p2_reasons=p2_reasons,
     )
+ACTIONS_SCENARIOS = {
+    "1. صلح وتنازل ميداني نهائي": (
+        "تم إفهام الأطراف بحقوقهم النظامية، وانتهى الحادث بالصلح والتنازل الخطي التام بين الطرفين في الموقع دون أي مطالبات مالية أو حقوقية، وأُخلي سبيل الأطراف والمركبات."
+    ),
+    "2. إحالة للتقدير وشركة التأمين (تأمين ساري)": (
+        "تم استكمال إجراءات المعاينة والرسم الكروكي، وإشعار الأطراف بمراجعة مركز تقدير أضرار المركبات (تقدير) ومطالبة شركة التأمين إلكترونياً بالحق الخاص."
+    ),
+    "3. عدم وجود تأمين / تعذر الصلح (إحالة للمحكمة المرورية)": (
+        "لعدم وجود تأمين ساري وتعذر الصلح، تم توجيه المتضرر لمركز التقدير لتثبيت قيمة التلفيات، واستكمال أوراق المعاملة لإحالتها إلى المحكمة المختصة (الدائرة المرورية) للفصل في الحق الخاص."
+    ),
+    "4. حادث إصابات (إسعاف وطلب تقارير طبية)": (
+        "تم إسعاف المصابين عبر الهلال الأحمر إلى المستشفى، ومخاطبة المستشفى لتزويدنا بالتقرير الطبي الأولي والنهائي موضحاً به مدة الشفاء، واتخاذ الإجراء النظامي بحق المتسبب (توقيف / كفالة نظامية)."
+    ),
+    "5. حادث وفاة (إيداع الجثمان وتوقيف وإحالة للنيابة العامة)": (
+        "تمت معاينة الموقع ونقل الجثمان إلى ثلاجة الموتى بالمستشفى، وتوقيف السائق المتسبب وحجز المركبات، والرفع بملف القضية كاملاً إلى النيابة العامة بحكم الاختصاص للنظر في الحقين العام والخاص."
+    ),
+    "6. حادث دهس مشاة": (
+        "تم نقل المصاب للمستشفى وطلب التقرير الطبي، ومعاينة نقطة الاصطدام ومسار العبور، وضبط أقوال السائق والشهود ومراجعة الكاميرات المحيطة بالموقع."
+    ),
+    "7. مخالفة جسيمة موجبة للتوقيف والحق العام (عكس سير / قطع إشارة / تجاوز خاطئ / تفحيط)": (
+        "نظراً لارتكاب مخالفة مرورية جسيمة عرضت السلامة العامة للخطر، تم إيقاف السائق المتسبب وحجز المركبة وتطبيق المخالفة النظامية، وإحالة الأوراق لجهة الاختصاص للنظر في الحق العام."
+    ),
+    "8. اشتباه حالة غير طبيعية أو شبهة جنائية / مضبوطات": (
+        "للاشتباه بوضع غير طبيعي أو شبهة جنائية، تم التحفظ الفوري على الأطراف والمركبة وتحرير محضر ضبط بالموجودات، وإحالة السائق للفحص الطبي المخبري وتسليم القضية لجهة الاختصاص (الشرطة / مكافحة المخدرات) مع حفظ الشق المروري."
+    ),
+    "9. هروب طرف من موقع الحادث (تعميم وبحث وتحري)": (
+        "نظراً لهروب أحد أطراف الحادث من الموقع، تم تدوين الأوصاف والمعلومات المتوفرة ومراجعة كاميرات المراقبة، ومخاطبة العمليات للتعميم عن المركبة والبحث والتحري لضبط السائق الهارب."
+    ),
+    "10. عهدة رسمية أو عسكرية بحوزة أحد الأطراف (سلاح / أجهزة / مناظير)": (
+        "تبين أن أحد الأطراف بالزي الرسمي وبحوزته عهدة رسمية (سلاح شخصي / ذخيرة / جهاز اتصال)، وتم جردها والتحفظ عليها بموجب محضر رسمي وتسليمها لمندوب مرجعه الرسمي."
+    ),
+    "11. طرف مركبة حكومية / رسمية": (
+        "نظراً لكون إحدى المركبات حكومية، تم إشعار الجهة الرسمية التابع لها السائق لحضور مندوبها وحصر التلفيات واستكمال الإجراءات المتبعة لمركبات الدولة."
+    ),
+    "12. تلفيات ممتلكات عامة أو خاصة (عمود إنارة / كهرباء / سياج / لوحة إرشادية)": (
+        "تم حصر التلفيات الواقعة على الممتلكات العامة/الخاصة بالمحضر، ومخاطبة الجهة المتضررة (البلدية / شركة الكهرباء / وزارة النقل / المالك) لتقدير قيمة التلفيات ومطالبة المتسبب أو التأمين بها."
+    ),
+    "13. حادث مفرد لطرف واحد (انقلاب / انحراف / ارتطام بجبل أو عائق ثابت)": (
+        "تمت معاينة الموقع وتبين أنه حادث مفرد دون اشتراك طرف آخر أو وجود شبهة جنائية، وتم حصر التلفيات ورفع المركبة لتأمين سلامة الطريق."
+    ),
+    "14. ارتطام بحيوان سائب (إبل / ماشية)": (
+        "تمت معاينة الموقع وتحديد زمن وقوع الحادث وحرم الطريق، والتحري عن مالك الحيوان السائب (عبر الوسم أو الشريحة) لاستدعائه وتطبيق التعليمات واللوائح المنظمة لذلك."
+    ),
+    "15. قيادة حدث (صغير سن) أو غير مؤهل للقيادة": (
+        "تم رصد مخالفة عدم وجود رخصة قيادة، واستدعاء ولي أمر الحدث / مالك المركبة وأخذ الإقرارات والكفالة النظامية (أو الإحالة لدار الملاحظة الاجتماعية في الحوادث الجسيمة)."
+    ),
+    "16. حجز المركبات بالسطحة وإخلاء الطريق": (
+        "تم رفع المركبات المتضررة بواسطة السطحة وإيداعها حجز المرور لعدم صلاحيتها للسير أو لوجود مطالبة قائمة، وإزالة مخلفات الحادث وإعادة فتح الحركة المرورية."
+    ),
+    "17. تضرر بضائع أو حمولات منقولة (شاحنات)": (
+        "تم إثبات حالة الحمولة المتضررة في المحضر وإشعار مالك البضاعة / الناقل لاستكمال إجراءات التقدير والتأمين، وتأمين نقل الحمولة من نهر الطريق."
+    ),
+}
+
+def sync_selected_actions():
+    selected_keys = [
+        key for key in st.session_state.get("selected_actions_multi", [])
+        if key in ACTIONS_SCENARIOS
+    ]
+    if not selected_keys:
+        st.session_state["actions_taken_editor"] = ""
+        save_current_work()
+        return
+    lines = [f"{idx}- {ACTIONS_SCENARIOS[key]}" for idx, key in enumerate(selected_keys, start=1)]
+    st.session_state["actions_taken_editor"] = "\n".join(lines)
+    save_current_work()
+
+with tab3:
+    st.markdown("### 📋 التصنيف والحقوق والإجراءات المتخذة (الصفحة 3)")
+    accident_nature_options = [
+        "حادث مروري اعتيادي (تلفيات مادية)",
+        "حادث مروري جسيم (إصابات)",
+        "حادث مروري جسيم (وفاة)",
+        "حادث دهس (مشاة)",
+        "حادث مفرد لطرف واحد (انقلاب / ارتطام بثابت)",
+        "حادث ارتطام بحيوان سائب",
+        "حادث مصحوب بهروب من الموقع",
+        "حادث مصحوب بشبهة جنائية / حالة غير طبيعية",
+        "تحديد تصنيف مخصص",
+    ]
+    rights_options = [
+        "انقضاء الحق الخاص بالتنازل والصلح، ولا يوجد حق عام",
+        "قيام الحق الخاص فقط (تنازل أو صلح)",
+        "قيام الحق الخاص فقط (مطالبة تأمينية / تقدير)",
+        "قيام الحق الخاص فقط (إحالة للمحكمة المرورية)",
+        "قيام الحقين العام والخاص معاً (إصابات / وفاة / مخالفة جسيمة)",
+        "قيام الحق العام فقط (مع التنازل عن الحق الخاص)",
+        "قيام حق مالي لجهة عامة / خاصة (تلفيات ممتلكات)",
+        "تحديد حقوق مخصصة",
+    ]
+    if st.session_state.get("acc_nature_sel") not in accident_nature_options:
+        st.session_state.acc_nature_sel = accident_nature_options[0]
+    if "acc_nature_custom" not in st.session_state:
+        st.session_state.acc_nature_custom = "حادث مروري اعتيادي"
+    if st.session_state.get("rights_sel") not in rights_options:
+        st.session_state.rights_sel = rights_options[0]
+    if "rights_custom" not in st.session_state:
+        st.session_state.rights_custom = ""
+    if not isinstance(st.session_state.get("selected_actions_multi"), list):
+        st.session_state.selected_actions_multi = ["1. صلح وتنازل ميداني نهائي"]
+    st.session_state.selected_actions_multi = [
+        key for key in st.session_state.selected_actions_multi if key in ACTIONS_SCENARIOS
+    ]
+    if "actions_taken_editor" not in st.session_state:
+        st.session_state.actions_taken_editor = f"1- {ACTIONS_SCENARIOS['1. صلح وتنازل ميداني نهائي']}"
+    col_p3_1, col_p3_2 = st.columns(2)
+    with col_p3_1:
+        selected_nature = st.selectbox(
+            "طبيعة وتصنيف الحادث:",
+            options=accident_nature_options,
+            key="acc_nature_sel",
+            on_change=save_current_work,
+        )
+        if selected_nature == "تحديد تصنيف مخصص":
+            accident_nature_val = st.text_input(
+                "اكتب طبيعة وتصنيف الحادث:",
+                key="acc_nature_custom",
+                on_change=save_current_work,
+            )
+        else:
+            accident_nature_val = selected_nature
+    with col_p3_2:
+        selected_rights = st.selectbox(
+            "الحقوق الخاصة والعامة:",
+            options=rights_options,
+            key="rights_sel",
+            on_change=save_current_work,
+        )
+        if selected_rights == "تحديد حقوق مخصصة":
+            rights_status_val = st.text_input(
+                "اكتب حالة الحقوق الخاصة والعامة:",
+                key="rights_custom",
+                on_change=save_current_work,
+            )
+        else:
+            rights_status_val = selected_rights
+    st.session_state.accident_nature = accident_nature_val
+    st.session_state.rights_status = rights_status_val
+    st.multiselect(
+        "اختر إجراءً واحداً أو ادمج عدة إجراءات معاً (تُرقّم تلقائياً بالأسفل):",
+        options=list(ACTIONS_SCENARIOS.keys()),
+        key="selected_actions_multi",
+        on_change=sync_selected_actions,
+    )
+    actions_taken_raw = st.text_area(
+        "النص النهائي لـ (الإجراءات المتخذة) في التقرير — يمكنك التعديل أو إضافة تفاصيل (مثل نوع العهدة أو اسم المستشفى):",
+        height=120,
+        key="actions_taken_editor",
+        on_change=save_current_work,
+    )
+    final_actions_html = "<br>".join(
+        html.escape(line.strip()) for line in str(actions_taken_raw or "").splitlines() if line.strip()
+    )
+    accident_nature = accident_nature_val
+    rights_status = rights_status_val
     participating_agency = ""
     escaped_vehicles = ""
     shots_fired = ""
     contraband_found = ""
-    if "جنائي" in accident_nature:
+    if "جنائي" in (accident_nature_val or ""):
         st.markdown("#### 🚨 تفاصيل الشق الجنائي والأمني")
         col1, col2 = st.columns(2)
         with col1:
@@ -2847,14 +3141,6 @@ with tab3:
                 "نتيجة تفتيش المركبة:",
                 ["لم يتم العثور على ممنوعات", "تم العثور على ممنوعات (يرفق بمحضر الضبط)"],
             )
-    extra_procedure = st.text_input(
-        "إجراء إضافي خاص:",
-        key="extra_procedure",
-        on_change=save_current_work,
-    )
-    selected_actions = list(taken_procedures)
-    if extra_procedure:
-        selected_actions.append(extra_procedure)
 _SKETCH_ATTACH_LABEL = "✅ إرفاق صفحة الكروكي"
 _SKETCH_OMIT_LABEL = "❌ حذف صفحة الكروكي - حادث قديم"
 
@@ -3946,12 +4232,6 @@ with tab5:
         vehicles_rows += "<tr>" + "".join(f"<td>{row.get(key, '')}</td>" for key, _label in _vehicle_columns) + "</tr>"
     results_html = "<br>".join(html.escape(line) for line in acc_results.split("\n") if line.strip())
     acc_how_html = html.escape(acc_how or "").replace("\n", "<br>")
-    laws_html = "".join(
-        f"<li>{html.escape(line)}</li>" for line in custom_laws.split("\n") if line.strip()
-    )
-    actions_html = "".join(
-        f"<tr><td>{i+1}- {html.escape(str(act))}</td></tr>" for i, act in enumerate(selected_actions)
-    )
     criminal_details_html = ""
     if "جنائي" in (accident_nature or ""):
         criminal_details_html = f"""
@@ -4308,26 +4588,22 @@ with tab5:
             <div class="box-content">نتج عن الحادث :<br>{results_html}</div>
             <div class="section-badge">كيفية وقوع الحادث</div>
             <div class="box-content">{acc_how_html}</div>
-            <div class="section-badge">الرأي والمسؤولية</div>
-            <div class="box-content">
-                {resp_summary}<br>وذلك للأسباب التالية:
-                <ul style="margin-top:8px;">{laws_html}</ul>
-            </div>
+            {liability_html}
             <div class="page-num">2</div>
         </div>
         <div class="page report-page page-three page-flow">
             {build_header()}
             <div class="table-scroll"><table>
                 <tr><th>طبيعة وتصنيف الحادث</th></tr>
-                <tr><td>{html.escape(accident_nature or "")}</td></tr>
+                <tr><td>{html.escape(accident_nature_val or "")}</td></tr>
             </table></div>
             <div class="table-scroll"><table>
                 <tr><th>الحقوق الخاصة والعامة</th></tr>
-                <tr><td>{html.escape("" if rights_status == "اختر الحالة" else rights_status)}</td></tr>
+                <tr><td>{html.escape(rights_status_val or "")}</td></tr>
             </table></div>
             <div class="table-scroll"><table>
                 <tr><th>الإجراءات المتخذة</th></tr>
-                {actions_html}
+                <tr><td>{final_actions_html}</td></tr>
             </table></div>
             {criminal_details_html}
             <div class="table-scroll"><table class="sign-table">
