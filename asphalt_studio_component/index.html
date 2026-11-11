@@ -918,38 +918,11 @@
         ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 1.8;
         ctx.beginPath(); ctx.roundRect(14, 446, 932, 42, 6); ctx.fill(); ctx.stroke();
         const rName = roadNameIn.value.trim() || ROADS[currentRoad].replace(/^\d+\.\s*/, "");
-        const locationText = "الموقع: " + rName;
         ctx.font = "bold 12.5px Tahoma, Arial";
         ctx.fillStyle = "#0f172a";
         ctx.textAlign = "right";
         ctx.textBaseline = "middle";
-        const locationMax = 310;
-        const locationLines = [];
-        let locationRest = locationText;
-        while (locationRest && locationLines.length < 2) {
-            if (ctx.measureText(locationRest).width <= locationMax) {
-                locationLines.push(locationRest);
-                locationRest = "";
-                break;
-            }
-            let cut = locationRest.length;
-            while (cut > 1 && ctx.measureText(locationRest.slice(0, cut)).width > locationMax) cut -= 1;
-            let splitAt = locationRest.lastIndexOf(" ", cut);
-            if (splitAt < 6) splitAt = cut;
-            locationLines.push(locationRest.slice(0, splitAt).trim());
-            locationRest = locationRest.slice(splitAt).trim();
-        }
-        if (locationRest && locationLines.length) {
-            let last = locationLines[locationLines.length - 1];
-            while (last.length > 1 && ctx.measureText(last + "…").width > locationMax) last = last.slice(0, -1);
-            locationLines[locationLines.length - 1] = last + "…";
-        }
-        if (locationLines.length > 1) {
-            ctx.fillText(locationLines[0], 932, 459);
-            ctx.fillText(locationLines[1], 932, 476);
-        } else {
-            ctx.fillText(locationLines[0] || locationText, 932, 467);
-        }
+        ctx.fillText("الموقع: " + rName, 932, 472, 380);
         ctx.font = "bold 12px Tahoma, Arial";
         ctx.textAlign = "center";
         ctx.fillStyle = "#dc2626";
