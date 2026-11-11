@@ -1049,14 +1049,14 @@ def _signature_box(sig_base64):
     image_html = ""
     if str(sig_base64 or "").startswith("data:image/"):
         image_html = (
-            f'<img src="{sig_base64}" style="max-height: 42px; width: auto; display: block; margin: 4px auto;" '
+            f'<img src="{sig_base64}" style="max-height: 42px; width: auto; display: block; margin: 1px auto;" '
             "onerror=\"this.style.display='none'\">"
         )
     return (
-        '<div style="margin-top: 6px; min-height: 45px;">'
+        '<div style="margin: 0; padding: 0; line-height: 1.15;">'
         '<span style="font-weight: bold;">التوقيع:</span><br>'
         f"{image_html}"
-        '<div style="border-bottom: 1px solid #111; height: 18px; margin: 4px 10px 0;"></div>'
+        '<div style="border-bottom: 1px solid #111; height: 12px; margin: 1px 8px 0;"></div>'
         "</div>"
     )
 
@@ -2842,8 +2842,8 @@ with tab3:
     selected_actions = list(taken_procedures)
     if extra_procedure:
         selected_actions.append(extra_procedure)
-_SKETCH_ATTACH_LABEL = "إرفاق صفحة الكروكي في التقرير"
-_SKETCH_OMIT_LABEL = "حذف صفحة الكروكي من التقرير (حادث قديم بدون كروكي)"
+_SKETCH_ATTACH_LABEL = "✅ إرفاق صفحة الكروكي"
+_SKETCH_OMIT_LABEL = "❌ حذف صفحة الكروكي - حادث قديم"
 
 def _on_sketch_choice_tab4():
     st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab4") == _SKETCH_ATTACH_LABEL
@@ -2860,7 +2860,7 @@ def _sketch_availability_control(widget_key, on_change):
     if st.session_state.get(widget_key) != selected:
         st.session_state[widget_key] = selected
     st.radio(
-        "هل يتوفر رسم كروكي للحادث؟",
+        "حالة الرسم الكروكي في التقرير",
         (_SKETCH_ATTACH_LABEL, _SKETCH_OMIT_LABEL),
         key=widget_key,
         on_change=on_change,
@@ -4064,16 +4064,30 @@ with tab5:
             padding: 15mm 18mm; box-sizing: border-box; position: relative;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
         }}
-        .photo-annex {{ page-break-before: always; }}
-        .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; }}
-        .photo-card {{ width: 48%; margin-bottom: 18px; text-align: center; }}
+        .photo-annex {{ page-break-before: always; overflow: visible; }}
+        .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
+        .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
+        .photo-annex .section-badge {{ margin: 4px auto 6px auto; padding: 3px 14px; }}
+        .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; overflow: visible; }}
+        .photo-card {{
+            width: 48%; margin-bottom: 8px; text-align: center; overflow: visible;
+            break-inside: avoid; page-break-inside: avoid;
+        }}
         .photo-card img {{
             width: auto; max-width: 100%; max-height: 185px; height: auto; object-fit: contain;
+            display: block; margin: 0 auto;
             border: 2px solid #1b4332; border-radius: 6px; background: #fff;
         }}
-        .page-three table {{ margin-top: 6px !important; margin-bottom: 6px !important; }}
-        .page-three th, .page-three td {{ padding: 4px 4px !important; }}
-        .photo-card .photo-meta {{ margin-top: 6px; font-weight: bold; font-size: 14px; line-height: 1.6; }}
+        .page-three table {{ margin-top: 4px !important; margin-bottom: 4px !important; }}
+        .page-three th, .page-three td {{ padding: 3px 4px !important; }}
+        .page-three .sign-table {{ margin-top: 2px !important; margin-bottom: 0 !important; }}
+        .page-three .sign-table th, .page-three .sign-table td {{
+            padding: 2px 3px !important; line-height: 1.15;
+        }}
+        .photo-card .photo-meta {{
+            margin-top: 4px; font-weight: bold; font-size: 13px; line-height: 1.35;
+            overflow: visible; white-space: normal;
+        }}
         .logo-fallback {{
             border: 2px solid #1b4332; border-radius: 50%; width: 80px; height: 80px;
             display: flex; align-items: center; justify-content: center; margin: auto;
@@ -4121,6 +4135,9 @@ with tab5:
             .page, .report-page, .a4-page {{
                 width: 100%; min-width: 0; max-width: 850px;
                 min-height: 0; height: auto; overflow: hidden; box-sizing: border-box;
+            }}
+            .photo-annex, .photo-annex .photo-card, .photo-annex .photo-meta {{
+                overflow: visible; height: auto; max-height: none;
             }}
             .table-scroll {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
             table, .table-scroll table {{
@@ -4199,6 +4216,14 @@ with tab5:
                 break-inside: avoid !important;
                 page-break-after: avoid !important;
             }}
+            .page-three {{ padding: 8mm 12mm 8mm 12mm; }}
+            .page-three .sign-table th, .page-three .sign-table td {{ padding: 1px 3px !important; }}
+            .photo-annex {{
+                overflow: visible; height: auto; max-height: none; min-height: 297mm;
+                padding: 8mm 10mm 12mm 10mm;
+            }}
+            .photo-annex .photo-card, .photo-annex .photo-meta {{ overflow: visible; max-height: none; }}
+            .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
             .header-logo img {{ height: 110px; max-width: 120px; }}
         }}
         {page_number_css}
