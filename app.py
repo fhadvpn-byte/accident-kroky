@@ -2452,8 +2452,6 @@ st.components.v1.html(
     """,
     height=0,
 )
-if _bayyinah_logo_ready():
-    st.logo(str(_bayyinah_logo_path), icon_image=str(_bayyinah_logo_path), size="large")
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
 st.markdown("""
 <style>
@@ -2472,6 +2470,14 @@ st.markdown("""
     }
     section[data-testid="stSidebar"] {
         display: flex !important;
+    }
+    [data-testid="stLogo"],
+    [data-testid="stLogoSpacer"] {
+        display: none !important;
+        height: 0 !important;
+        min-height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
     }
     .main .block-container {
         max-width: 100% !important;
