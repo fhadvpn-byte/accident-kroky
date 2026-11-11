@@ -251,12 +251,11 @@ def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تا
         btn_label = f"📅  {picked_year:04d}/{picked_month:02d}/{picked_day:02d} هـ   •   {picked_day} {HIJRI_MONTHS.get(picked_month, '')}"
     else:
         btn_label = "📅  اختر التاريخ الهجري..."
-    st.markdown("<div id='hijri-lux-trigger'></div>", unsafe_allow_html=True)
-    if label:
-        st.markdown(
-            f"<div style='font-size:13.5px; font-weight:600; color:#bae6fd; margin-bottom:4px; text-align:right;'>{label}</div>",
-            unsafe_allow_html=True,
-        )
+    safe_label = html.escape(str(label or ""))
+    st.markdown(
+        f"<div id='hijri-lux-trigger' style='font-size:13.5px; font-weight:600; color:#bae6fd; margin-bottom:4px; text-align:right;'>{safe_label}</div>",
+        unsafe_allow_html=True,
+    )
     with st.popover(btn_label, use_container_width=True):
         st.markdown("<div id='hijri-lux-scope'></div>", unsafe_allow_html=True)
         active_d = st.session_state.get(sel_d_key)
@@ -556,12 +555,11 @@ def render_smart_time_picker(state_key: str = "p1_acc_time", label: str = "ال�
         st.session_state[f"{state_key}_manual"] = formatted
 
     btn_text = f"🕒  {current_val}" if current_val else "🕒  حدد وقت الحادث..."
-    st.markdown("<div id='hijri-lux-trigger'></div>", unsafe_allow_html=True)
-    if label:
-        st.markdown(
-            f"<div style='font-size:13.5px; font-weight:600; color:#bae6fd; margin-bottom:4px; text-align:right;'>{label}</div>",
-            unsafe_allow_html=True,
-        )
+    safe_label = html.escape(str(label or ""))
+    st.markdown(
+        f"<div id='hijri-lux-trigger' style='font-size:13.5px; font-weight:600; color:#bae6fd; margin-bottom:4px; text-align:right;'>{safe_label}</div>",
+        unsafe_allow_html=True,
+    )
     with st.popover(btn_text, use_container_width=True):
         st.markdown("<div id='hijri-lux-scope'></div>", unsafe_allow_html=True)
         t_c1, t_c2 = st.columns([2.2, 1])
@@ -1294,12 +1292,36 @@ def inject_bayyinah_blue_styles():
         align-items: flex-end !important;
     }
     div:has(> [data-testid="stElementContainer"] #hijri-lux-trigger) [data-testid="stPopover"] > button {
-        min-height: 42px !important;
-        height: 42px !important;
+        min-height: 44px !important;
+        height: 44px !important;
+        max-height: 44px !important;
         margin-bottom: 0px !important;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
+    }
+    div[data-testid="stElementContainer"]:has(#hijri-lux-trigger):not(:has(button)):not(:has(input)) {
+        margin-bottom: -12px !important;
+        padding: 0 !important;
+    }
+    div[data-testid="stTextInput"] div[data-baseweb="input"],
+    div[data-testid="stNumberInput"] div[data-baseweb="input"],
+    div[data-testid="stSelectbox"] div[data-baseweb="select"] > div,
+    div[data-testid="stPopover"] > button {
+        height: 44px !important;
+        min-height: 44px !important;
+        max-height: 44px !important;
+        border-radius: 10px !important;
+        border: 1.4px solid rgba(56, 189, 248, 0.55) !important;
+        background-color: rgba(10, 28, 52, 0.85) !important;
+        box-sizing: border-box !important;
+        display: flex !important;
+        align-items: center !important;
+        margin: 0 !important;
+    }
+    div[data-testid="stWidgetLabel"] {
+        min-height: 22px !important;
+        margin-bottom: 6px !important;
     }
     .stButton > button[kind="primary"],
     .stButton > button {
@@ -3414,36 +3436,38 @@ tab_data, tab_sketch, tab_analysis, tab_print = st.tabs([
 ])
 with tab_data:
     st.subheader("معلومات الحادث الأساسية")
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
+    _acc_type_options = ["تصادم مركبتين", "دهس مشاة", "انقلاب", "تصادم متعدد", "اصطدام بجسم ثابت"]
+    _acc_weather_options = ["صحو", "غائم", "ممطر", "غبار / عوالق ترابية", "ضباب"]
+    _loaded_page1_keys = set(st.session_state.get("_p1_loaded_keys") or [])
+    if "hijri_date" not in st.session_state:
+        st.session_state.hijri_date = str(st.session_state.get("p1_acc_date") or "")
+    if st.session_state.get("acc_date_override"):
+        st.session_state.hijri_date = st.session_state.pop("acc_date_override")
+        st.session_state.pop("hijri_date_manual_in", None)
+        st.session_state.p1_acc_date = st.session_state.hijri_date
+    if st.session_state.get("acc_loc_override"):
+        st.session_state.p1_acc_location = st.session_state.pop("acc_loc_override")
+    elif st.session_state.get("acc_loc_value") and not st.session_state.get("p1_acc_location"):
+        st.session_state.p1_acc_location = st.session_state.get("acc_loc_value")
+    if st.session_state.get("p1_acc_type_choice") not in _acc_type_options:
+        saved_type = st.session_state.get("p1_acc_type")
+        if "p1_acc_type" in _loaded_page1_keys and saved_type in _acc_type_options:
+            st.session_state.p1_acc_type_choice = saved_type
+        else:
+            st.session_state.pop("p1_acc_type_choice", None)
+    if st.session_state.get("p1_acc_weather_choice") not in _acc_weather_options:
+        saved_weather = st.session_state.get("p1_acc_weather")
+        if "p1_acc_weather" in _loaded_page1_keys and saved_weather in _acc_weather_options:
+            st.session_state.p1_acc_weather_choice = saved_weather
+        else:
+            st.session_state.pop("p1_acc_weather_choice", None)
+    r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4, gap="medium")
+    with r1_c1:
         acc_num = st.text_input("رقم الحادث", key="p1_acc_number")
-        if "hijri_date" not in st.session_state:
-            st.session_state.hijri_date = str(st.session_state.get("p1_acc_date") or "")
-        if st.session_state.get("acc_date_override"):
-            st.session_state.hijri_date = st.session_state.pop("acc_date_override")
-            st.session_state.pop("hijri_date_manual_in", None)
-            st.session_state.p1_acc_date = st.session_state.hijri_date
-        accident_date = render_luxury_hijri_picker(state_key="hijri_date", label="تاريخ الحادث (هجري)")
-        acc_date = accident_date
-        st.session_state.p1_acc_date = accident_date
-        st.session_state.hijri_manual_date = accident_date
-    with col2:
+    with r1_c2:
         accident_time = render_smart_time_picker(state_key="p1_acc_time", label="الوقت")
         acc_time = accident_time
-        if st.session_state.get("acc_loc_override"):
-            st.session_state.p1_acc_location = st.session_state.pop("acc_loc_override")
-        elif st.session_state.get("acc_loc_value") and not st.session_state.get("p1_acc_location"):
-            st.session_state.p1_acc_location = st.session_state.get("acc_loc_value")
-        acc_loc = st.text_input("موقع الحادث", key="p1_acc_location")
-    with col3:
-        _acc_type_options = ["تصادم مركبتين", "دهس مشاة", "انقلاب", "تصادم متعدد", "اصطدام بجسم ثابت"]
-        _loaded_page1_keys = set(st.session_state.get("_p1_loaded_keys") or [])
-        if st.session_state.get("p1_acc_type_choice") not in _acc_type_options:
-            saved_type = st.session_state.get("p1_acc_type")
-            if "p1_acc_type" in _loaded_page1_keys and saved_type in _acc_type_options:
-                st.session_state.p1_acc_type_choice = saved_type
-            else:
-                st.session_state.pop("p1_acc_type_choice", None)
+    with r1_c3:
         acc_type = st.selectbox(
             "نوع الحادث",
             _acc_type_options,
@@ -3451,13 +3475,17 @@ with tab_data:
             placeholder="اختر نوع الحادث",
             key="p1_acc_type_choice",
         ) or ""
-        _acc_weather_options = ["صحو", "غائم", "ممطر", "غبار / عوالق ترابية", "ضباب"]
-        if st.session_state.get("p1_acc_weather_choice") not in _acc_weather_options:
-            saved_weather = st.session_state.get("p1_acc_weather")
-            if "p1_acc_weather" in _loaded_page1_keys and saved_weather in _acc_weather_options:
-                st.session_state.p1_acc_weather_choice = saved_weather
-            else:
-                st.session_state.pop("p1_acc_weather_choice", None)
+    with r1_c4:
+        acc_injuries = st.number_input("عدد الإصابات", min_value=0, key="p1_acc_injuries")
+    r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4, gap="medium")
+    with r2_c1:
+        accident_date = render_luxury_hijri_picker(state_key="hijri_date", label="تاريخ الحادث (هجري)")
+        acc_date = accident_date
+        st.session_state.p1_acc_date = accident_date
+        st.session_state.hijri_manual_date = accident_date
+    with r2_c2:
+        acc_loc = st.text_input("موقع الحادث", key="p1_acc_location")
+    with r2_c3:
         acc_weather = st.selectbox(
             "الطقس",
             _acc_weather_options,
@@ -3465,8 +3493,7 @@ with tab_data:
             placeholder="اختر الطقس",
             key="p1_acc_weather_choice",
         ) or ""
-    with col4:
-        acc_injuries = st.number_input("عدد الإصابات", min_value=0, key="p1_acc_injuries")
+    with r2_c4:
         acc_deaths = st.number_input("عدد الوفيات", min_value=0, key="p1_acc_deaths")
     
     acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", key="p1_acc_cause")
