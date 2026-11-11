@@ -4016,8 +4016,8 @@ with tab5:
         @media print {
             .with-page-numbers .page { padding-bottom: 12mm !important; }
             .with-page-numbers .page-num { display: none !important; }
-            @page { size: A4; margin: 8mm 8mm 16mm 8mm; }
-            @page { @bottom-center { content: counter(page); font-family: "Tajawal", sans-serif; font-size: 11pt; } }
+            @page { size: A4; margin: 0 0 14mm 0; }
+            @page { @bottom-center { content: counter(page); font-family: "Tajawal", sans-serif; font-size: 15px; font-weight: 600; } }
         }
         """
     sketch_page_html = ""
@@ -4063,15 +4063,20 @@ with tab5:
             width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
             transform: none; zoom: 1; scale: 1;
         }}
-        .report-sheet .box-content,
+        .report-sheet .header-Title,
+        .report-sheet .section-badge {{
+            font-size: 18px !important; font-weight: 700;
+        }}
         .report-sheet table,
         .report-sheet th,
         .report-sheet td,
+        .report-sheet .box-content,
         .report-sheet .photo-meta,
         .report-sheet p,
         .report-sheet li {{
-            font-size: 11px !important;
+            font-size: 15px !important; font-weight: 600;
         }}
+        .report-sheet th {{ font-weight: 700; }}
         .page, .report-page, .a4-page {{
             background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
             min-height: 297mm; height: auto; margin: 0 auto 8mm auto;
@@ -4122,7 +4127,7 @@ with tab5:
             padding: 2px 3px !important; line-height: 1.15;
         }}
         .photo-card .photo-meta {{
-            margin-top: 4px; font-weight: bold; font-size: 13px; line-height: 1.35;
+            margin-top: 4px; font-weight: 600; font-size: 15px; line-height: 1.35;
             overflow: visible; white-space: normal;
         }}
         .logo-fallback {{
@@ -4134,11 +4139,11 @@ with tab5:
             height: 110px; width: auto; max-width: 120px; object-fit: contain;
             display: block; margin: 0 auto;
         }}
-        .header-Title {{ text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 6px; }}
+        .header-Title {{ text-align: center; font-size: 18px; font-weight: 700; margin-bottom: 6px; }}
         .header-box {{
             position: relative; display: flex; justify-content: space-between; align-items: center;
             min-height: 128px; border-bottom: 3px double #1b4332; padding-bottom: 10px;
-            margin-bottom: 18px; font-size: 14px; font-weight: bold; line-height: 1.6;
+            margin-bottom: 18px; font-size: 15px; font-weight: 700; line-height: 1.6;
         }}
         .header-right {{ width: 36%; text-align: right; }}
         .header-center {{ width: 36%; text-align: center; }}
@@ -4148,11 +4153,11 @@ with tab5:
         }}
         .section-badge {{
             background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
-            padding: 5px 25px; font-weight: bold; font-size: 17px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
+            padding: 5px 25px; font-weight: 700; font-size: 18px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
         }}
-        table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 14px; }}
-        th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-weight: bold; }}
-        th {{ background-color: #d8f3dc; color: #1b4332; }}
+        table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 15px; }}
+        th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-weight: 600; }}
+        th {{ font-weight: 700; background-color: #d8f3dc; color: #1b4332; }}
         .box-content {{
             border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
             line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
@@ -4224,6 +4229,10 @@ with tab5:
             }}
             table, .table-scroll table {{ border: 1px solid #000; }}
             th, td {{ border: 1px solid #000 !important; }}
+            .report-sheet .header-Title,
+            .report-sheet .section-badge {{
+                font-size: 18px !important; font-weight: 700;
+            }}
             .report-sheet .box-content,
             .report-sheet table,
             .report-sheet th,
@@ -4231,8 +4240,9 @@ with tab5:
             .report-sheet .photo-meta,
             .report-sheet p,
             .report-sheet li {{
-                font-size: 9px !important;
+                font-size: 15px !important; font-weight: 600;
             }}
+            .report-sheet th {{ font-weight: 700; }}
             .sign-table, .sign-table tr, .sign-table td {{
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
@@ -4284,7 +4294,7 @@ with tab5:
         <div class="page report-page page-one">
             {build_header()}
             <div class="section-badge">تقرير حادث مروري</div>
-            <div class="section-badge" style="font-size:15px;">معلومات الحادث</div>
+            <div class="section-badge" style="font-size:18px;">معلومات الحادث</div>
             <div class="table-scroll"><table>
                 <tr>
                     <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
@@ -4295,12 +4305,12 @@ with tab5:
                     <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
                 </tr>
             </table></div>
-            <div class="section-badge" style="font-size:15px;">معلومات أطراف الحادث</div>
+            <div class="section-badge" style="font-size:18px;">معلومات أطراف الحادث</div>
             <div class="table-scroll"><table>
                 <tr>{parties_head}</tr>
                 {parties_rows}
             </table></div>
-            <div class="section-badge" style="font-size:15px;">معلومات المركبات</div>
+            <div class="section-badge" style="font-size:18px;">معلومات المركبات</div>
             <div class="table-scroll"><table>
                 <tr>{vehicles_head}</tr>
                 {vehicles_rows}
