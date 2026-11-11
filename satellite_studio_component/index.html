@@ -69,6 +69,7 @@
     <div class="coord-row">
         <input class="coord-in" id="coordBox" value="17.0369, 43.0983" placeholder="17.0369, 43.0983"/>
         <button class="tool-btn" onclick="jumpToCoords()">📍 انتقال للإحداثيات</button>
+        <button class="tool-btn" id="btnProvider" onclick="switchSatelliteProvider()">🛰️ القمر: Google HD</button>
         <button class="tool-btn" id="btnLabels" onclick="toggleLabels()">🏷️ إظهار/إخفاء المسميات</button>
     </div>
     <div id="mapWrap">
@@ -96,20 +97,63 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
         return this;
     };
 }
-const map = L.map("satMap", { zoomControl: true, preferCanvas: true }).setView([17.0369, 43.0983], 18);
-const imageryLayer = L.tileLayer(
-    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
-    { maxZoom: 20, crossOrigin: "anonymous" }
-).addTo(map);
-const labelsLayer = L.tileLayer(
-    "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
-    { maxZoom: 20, crossOrigin: "anonymous" }
+const map = L.map("satMap", {
+    zoomControl: true,
+    maxZoom: 22,
+    minZoom: 5,
+    preferCanvas: true
+}).setView([17.03693, 43.08947], 18);
+const googleSatLayer = L.tileLayer(
+    "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+    { maxNativeZoom: 19, maxZoom: 22, crossOrigin: "anonymous" }
 );
+const googleHybridArLayer = L.tileLayer(
+    "https://mt1.google.com/vt/lyrs=y&hl=ar&x={x}&y={y}&z={z}",
+    { maxNativeZoom: 19, maxZoom: 22, crossOrigin: "anonymous" }
+);
+const esriSatLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    { maxNativeZoom: 17, maxZoom: 22, crossOrigin: "anonymous" }
+);
+const esriLabelsLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
+    { maxNativeZoom: 17, maxZoom: 22, crossOrigin: "anonymous" }
+);
+[googleSatLayer, googleHybridArLayer].forEach(layer => {
+    layer.on("tileerror", function(e) {
+        if (e.coords && e.coords.z >= 18 && layer.options.maxNativeZoom >= e.coords.z) {
+            layer.options.maxNativeZoom = e.coords.z - 1;
+            layer.redraw();
+        }
+    });
+});
+let currentProvider = "google";
 let labelsVisible = false;
-function toggleLabels() {
-    if (labelsVisible) { map.removeLayer(labelsLayer); labelsVisible = false; }
-    else { labelsLayer.addTo(map); labelsVisible = true; }
+function refreshMapLayers() {
+    [googleSatLayer, googleHybridArLayer, esriSatLayer, esriLabelsLayer].forEach(l => {
+        if (map.hasLayer(l)) map.removeLayer(l);
+    });
+    if (currentProvider === "google") {
+        if (labelsVisible) googleHybridArLayer.addTo(map);
+        else googleSatLayer.addTo(map);
+    } else {
+        esriSatLayer.addTo(map);
+        if (labelsVisible) esriLabelsLayer.addTo(map);
+    }
+    const srcBtn = document.getElementById("btnProvider");
+    if (srcBtn) {
+        srcBtn.textContent = currentProvider === "google" ? "🛰️ القمر: Google HD" : "🌍 القمر: Esri";
+    }
 }
+window.toggleLabels = function() {
+    labelsVisible = !labelsVisible;
+    refreshMapLayers();
+};
+window.switchSatelliteProvider = function() {
+    currentProvider = (currentProvider === "google") ? "esri" : "google";
+    refreshMapLayers();
+};
+refreshMapLayers();
 map.on("moveend", () => {
     const c = map.getCenter();
     document.getElementById("coordBox").value = c.lat.toFixed(5) + ", " + c.lng.toFixed(5);
@@ -216,9 +260,10 @@ window.commitSatelliteToStreamlit = function() {
     const wrapRect = document.getElementById("mapWrap").getBoundingClientRect();
     const sx = 960 / (wrapRect.width || 960);
     const sy = 520 / (wrapRect.height || 520);
-    const tiles = document.querySelectorAll("#satMap img.leaflet-tile");
+    const tiles = document.querySelectorAll("#satMap img.leaflet-tile.leaflet-tile-loaded");
     tiles.forEach(img => {
-        if (img.complete && img.naturalWidth > 0) {
+        const parentOpacity = parseFloat(window.getComputedStyle(img.parentElement).opacity || "1");
+        if (img.complete && img.naturalWidth > 0 && parentOpacity > 0) {
             const tr = img.getBoundingClientRect();
             const dx = (tr.left - wrapRect.left) * sx;
             const dy = (tr.top - wrapRect.top) * sy;
