@@ -8,7 +8,6 @@ import base64
 import os
 import json
 import re
-import hashlib
 import math
 import tempfile
 from datetime import date, datetime
@@ -412,8 +411,6 @@ PAGE1_STATIC_KEYS = {
 PAGE1_EXTRA_SYNC_KEYS = (
     "p1_acc_type_choice",
     "p1_acc_weather_choice",
-    "hijri_month_label",
-    "hijri_year_label",
 )
 _PARTY_LABELS = {
     1: "الطرف الأول",
@@ -1243,9 +1240,6 @@ def _groq_secret_key():
         pass
     return _groq_key_from_local_file()
 
-def _sync_analysis_key_from_widget():
-    st.session_state.api_key_persist = str(st.session_state.get("widget_api_key_input") or "").strip()
-
 def get_active_analysis_key():
     typed = str(st.session_state.get("api_key_persist") or "").strip()
     if typed:
@@ -1309,17 +1303,6 @@ def _effective_clip_file(index, bulk):
     if index < len(bulk):
         return bulk[index]
     return None
-
-def _video_files_signature(count, bulk):
-    parts = ["bulk:" + "|".join(_upload_token(item) for item in bulk)]
-    for index in range(count):
-        parts.append(f"{index}:{_upload_token(st.session_state.get(f'clip_file_{index}'))}")
-    signature = "||".join(parts)
-    if not any(_upload_token(item) for item in bulk) and all(
-        not _upload_token(st.session_state.get(f"clip_file_{index}")) for index in range(count)
-    ):
-        return ""
-    return signature
 
 def _clip_prompt_line(index, clip):
     findings = "، ".join(clip["findings"]) if clip["findings"] else "لا توجد مشاهدات مدونة"
@@ -1671,58 +1654,6 @@ def _reset_new_accident():
     except OSError:
         pass
 
-_HIJRI_MONTH_LABELS = (
-    "01 - محرم",
-    "02 - صفر",
-    "03 - ربيع الأول",
-    "04 - ربيع الثاني",
-    "05 - جمادى الأولى",
-    "06 - جمادى الآخرة",
-    "07 - رجب",
-    "08 - شعبان",
-    "09 - رمضان",
-    "10 - شوال",
-    "11 - ذو القعدة",
-    "12 - ذو الحجة",
-)
-_HIJRI_YEAR_LABELS = tuple(str(year) for year in range(HIJRI_YEAR_MIN, HIJRI_YEAR_MAX + 1))
-
-def _hijri_picker_state(value):
-    parts = str(value).split("/")
-    year, month, day = "1448", "01", "01"
-    if len(parts) == 3 and parts[1].isdigit() and parts[2].isdigit():
-        year, month, day = parts[0], f"{int(parts[1]):02d}", f"{int(parts[2]):02d}"
-    if year not in _HIJRI_YEAR_LABELS:
-        year = "1448"
-    if not month.isdigit() or not 1 <= int(month) <= 12:
-        month = "01"
-    if not day.isdigit() or not 1 <= int(day) <= 30:
-        day = "01"
-    return year, _HIJRI_MONTH_LABELS[int(month) - 1], f"{int(day):02d}"
-
-def _apply_manual_hijri_date():
-    raw = str(st.session_state.get("hijri_manual_date") or "").strip()
-    if not raw:
-        st.session_state.hijri_manual_error = ""
-        return
-    parts = raw.split("/")
-    valid = (
-        len(parts) == 3
-        and all(part.isdigit() for part in parts)
-        and len(parts[0]) == 4
-        and parts[0] in _HIJRI_YEAR_LABELS
-        and 1 <= int(parts[1]) <= 12
-        and 1 <= int(parts[2]) <= 30
-    )
-    if not valid:
-        st.session_state.hijri_manual_error = "الصيغة غير صحيحة. اكتب التاريخ هكذا: YYYY/MM/DD"
-        return
-    year, month, day = parts
-    st.session_state.hijri_date = f"{year}/{int(month):02d}/{int(day):02d}"
-    st.session_state.hijri_manual_date = st.session_state.hijri_date
-    st.session_state.hijri_parts_sync = True
-    st.session_state.hijri_manual_error = ""
-
 def _absorb_groq_env():
     if os.getenv("GROQ_API_KEY"):
         return
@@ -1866,55 +1797,6 @@ def _signature_box(sig_base64):
         '<div style="border-bottom: 1px solid #111; height: 12px; margin: 1px 8px 0;"></div>'
         "</div>"
     )
-
-def _project_logo_path():
-    root = Path(__file__).resolve().parent
-    for name in ("traffic_logo.png", "logo.png", "traffic_logo.jpg", "logo.jpg", "logo.jpeg", "traffic_logo.jpeg", "logo.webp"):
-        candidate = root / name
-        if candidate.is_file():
-            return candidate
-    return None
-
-def _open_fixed_logo():
-    path = _project_logo_path()
-    if path is None:
-        return None
-    try:
-        return Image.open(path).convert("RGBA")
-    except OSError:
-        return None
-
-def _save_upload_once(uploaded):
-    try:
-        SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-    except OSError:
-        pass
-    raw = uploaded.getvalue()
-    digest = hashlib.sha256(raw).hexdigest()[:20]
-    ext = Path(getattr(uploaded, "name", "") or "").suffix.lower()
-    if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
-        ext = ".jpg"
-    dest = SAVED_IMAGES_DIR / f"{digest}{ext}"
-    try:
-        if not dest.exists():
-            dest.write_bytes(raw)
-    except OSError:
-        return dest
-    return dest
-
-def persist_uploads(uploads):
-    if not uploads:
-        return []
-    return [_save_upload_once(item) for item in uploads]
-
-def list_saved_images():
-    if not SAVED_IMAGES_DIR.exists():
-        return []
-    files = [
-        path for path in SAVED_IMAGES_DIR.iterdir()
-        if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
-    ]
-    return sorted(files, key=lambda path: path.stat().st_mtime)
 
 def _parse_model_json(text):
     cleaned = (text or "").strip()
