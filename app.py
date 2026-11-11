@@ -520,7 +520,7 @@ def render_persistent_sidebar_settings():
         dept_region = st.text_input("إدارة مرور منطقة", key="p1_dept_region", on_change=_commit)
         dept_branch = st.text_input("القسم / الشعبة", key="p1_dept_branch", on_change=_commit)
     with st.container(key="glow-officers"):
-        st.subheader("👮‍♂️ بيانات معدي التقرير (الصفحة 3)")
+        st.subheader("👮‍♂️ بيانات معدي التقرير المعتمدين")
         presets = data.get("saved_officers") or []
         render_officer_quick_picker(presets, "officer_1_name", "officer_1_rank", "مباشر الحوادث")
         officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", key="officer_1_name", on_change=_commit)
@@ -1290,6 +1290,30 @@ def inject_bayyinah_blue_styles():
         box-shadow: 0 0 18px rgba(0, 212, 255, 0.22);
         direction: rtl;
     }
+    div[data-testid="stHorizontalBlock"] {
+        align-items: flex-end !important;
+    }
+    div:has(> [data-testid="stElementContainer"] #hijri-lux-trigger) [data-testid="stPopover"] > button {
+        min-height: 42px !important;
+        height: 42px !important;
+        margin-bottom: 0px !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+    .stButton > button[kind="primary"],
+    .stButton > button {
+        font-weight: 800 !important;
+        letter-spacing: 0.2px !important;
+    }
+    button[kind="primary"],
+    button[kind="primary"] p,
+    button[kind="primary"] span {
+        color: #031527 !important;
+        -webkit-text-fill-color: #031527 !important;
+        font-weight: 900 !important;
+        text-shadow: none !important;
+    }
     </style>
     """, unsafe_allow_html=True)
 
@@ -1364,6 +1388,7 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
     with col_brand:
         acc_no = str(st.session_state.get("p1_acc_number", "") or "").strip()
         acc_badge = f"رقم الحادث: {acc_no}" if acc_no else "معاملة قيد الإعداد"
+        saved_at = html.escape(str(st.session_state.get("last_saved_time") or "لم يتم الحفظ بعد"))
         st.markdown(
             f"""
             <div class="bayyinah-cmd-bar">
@@ -1371,16 +1396,15 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
                     <span style="font-size:20px; font-weight:900; color:#f8fafc; letter-spacing:0.4px;">🛡️ منظومة بَيِّنَة</span>
                     <span style="font-size:12.5px; color:#7dd3fc; font-weight:600;">المنصة الذكية لتقارير الحوادث المرورية</span>
                 </div>
-                <span class="bayyinah-status-pill">● {acc_badge}</span>
+                <span class="bayyinah-status-pill">● {html.escape(acc_badge)} · آخر حفظ: {saved_at}</span>
             </div>
             """,
             unsafe_allow_html=True,
         )
     with col_save:
-        if st.button("💾 حفظ سريع", key="_top_cmd_save", use_container_width=True):
+        if st.button("💾 حفظ العمل", key="_top_cmd_save", use_container_width=True):
             if callable(on_save_callback):
                 on_save_callback()
-            st.toast("✅ تم حفظ بيانات المعاملة بنجاح")
     with col_print:
         if st.button("🖨️ طباعة فورية A4", key="_top_cmd_print", type="primary", use_container_width=True):
             st.session_state["_trigger_instant_print"] = True
@@ -1433,12 +1457,13 @@ def _report_tab_done_flags():
         isinstance(row, dict) and str(row.get("الاسم") or "").strip()
         for row in party_rows
     )
-    page1_done = _filled("p1_acc_number") or _filled("hijri_date") or _filled("p1_acc_location") or has_party_name
-    page2_done = _filled("accident_results") or _filled("technical_description") or bool(st.session_state.get("selected_articles"))
-    page3_done = _filled("actions_taken_editor")
-    page4_done = str(st.session_state.get("sketch_data_url") or "").startswith("data:image/")
-    page5_done = bool(st.session_state.get("gallery_photos"))
-    return [page1_done, page2_done, page3_done, page4_done, page5_done]
+    done_tab1 = _filled("p1_acc_number") or _filled("hijri_date") or _filled("p1_acc_location") or has_party_name
+    done_analysis = _filled("accident_results") or _filled("technical_description") or bool(st.session_state.get("selected_articles"))
+    done_actions = _filled("actions_taken_editor")
+    done_sketch = str(st.session_state.get("sketch_data_url") or "").startswith("data:image/")
+    done_print = bool(st.session_state.get("gallery_photos"))
+    done_analysis_actions = done_analysis or done_actions
+    return [done_tab1, done_sketch, done_analysis_actions, done_print]
 
 def render_compact_sketch_legends(key_prefix: str = "sketch_legend_"):
     """عرض أول 4 مدلولات في عمودين متجاورين وطي المدلولات 5-10 لترتيب صفحة التخطيط."""
@@ -1520,34 +1545,6 @@ OFFICIAL_A4_HIGH_CONTRAST_CSS = """
 def _quick_save_from_header():
     sync_page1_to_vault()
     st.session_state["_p1_save_requested"] = True
-
-def render_save_and_clear_toolbar():
-    with st.container(key="save-bar"):
-        col_status, col_save, col_clear = st.columns([3, 1.5, 1.5])
-        with col_status:
-            st.markdown(
-                f"**🛡️ نظام حماية البيانات النشط:** آخر حفظ للعمل: `{st.session_state.get('last_saved_time', 'لم يتم الحفظ بعد')}`"
-            )
-        with col_save:
-            if st.button("💾 حفظ العمل الحالي", width="stretch", type="primary"):
-                sync_page1_to_vault()
-                st.session_state["_p1_save_requested"] = True
-        with col_clear:
-            if not st.session_state.get("confirm_clear", False):
-                if st.button("🗑️ مسح جميع الحقول", width="stretch"):
-                    st.session_state["confirm_clear"] = True
-                    st.rerun()
-            else:
-                sub_c1, sub_c2 = st.columns(2)
-                with sub_c1:
-                    if st.button("⚠️ تأكيد المسح", width="stretch"):
-                        clear_all_work()
-                        st.toast("تم مسح البيانات وبدء تقرير جديد", icon="🔄")
-                        st.rerun()
-                with sub_c2:
-                    if st.button("إلغاء", width="stretch"):
-                        st.session_state["confirm_clear"] = False
-                        st.rerun()
 
 VIDEO_MARKER_START = "[بداية القرائن المرئية]"
 VIDEO_MARKER_END = "[نهاية القرائن المرئية]"
@@ -3389,9 +3386,6 @@ if 'parties' not in st.session_state:
 if 'vehicles' not in st.session_state:
     st.session_state.vehicles = _clone_page1_value(st.session_state.get("p1_vehicles_records") or _blank_vehicles())
 with st.sidebar:
-    if st.button("🔄 حادث جديد", type="primary", width="stretch", key="new_accident_btn"):
-        _reset_new_accident()
-        st.rerun()
     if _bayyinah_logo_ready():
         try:
             st.image(str(_bayyinah_logo_path), width=148)
@@ -3412,15 +3406,13 @@ render_compact_command_header(
     on_save_callback=_quick_save_from_header,
     on_reset_callback=_reset_new_accident,
 )
-render_save_and_clear_toolbar()
-tab1, tab2, tab3, tab4, tab5 = st.tabs([
-    "1️⃣ الصفحة (1): البيانات والأطراف",
-    "2️⃣ الصفحة (2): الوصف ومواد المرور (حسم)",
-    "3️⃣ الصفحة (3): الإجراءات والتوقيعات",
-    "4️⃣ الصفحة (4): استوديو الكروكي",
-    "5️⃣ الملحق والطباعة النهائية (PDF)"
+tab_data, tab_sketch, tab_analysis, tab_print = st.tabs([
+    "1️⃣ البيانات والأطراف",
+    "2️⃣ الموقع واستوديو الكروكي",
+    "3️⃣ الوصف والمسؤولية والإجراءات",
+    "4️⃣ المرفقات والطباعة النهائية (A4)",
 ])
-with tab1:
+with tab_data:
     st.subheader("معلومات الحادث الأساسية")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
@@ -3984,7 +3976,7 @@ def generate_accident_report_fields(selected_article_ids):
         "hasCriminalSuspicion": has_criminal_suspicion,
     }
 
-with tab2:
+with tab_analysis:
     st.subheader("📚 محرك المواد النظامية وفروعها")
     if st.session_state.get("acc_how_override"):
         kept_override = _extract_marked_block(st.session_state.get("technical_description", ""))
@@ -4217,7 +4209,11 @@ def sync_selected_actions():
     save_current_work()
 
 flush_pending_casualty_actions()
-with tab3:
+with tab_analysis:
+    st.markdown(
+        "<hr style='border:0;height:1px;background:linear-gradient(90deg,transparent,#7dd3fc,transparent);margin:22px 0 14px 0;'>",
+        unsafe_allow_html=True,
+    )
     st.markdown("### 📋 التصنيف والحقوق والإجراءات المتخذة (الصفحة 3)")
     accident_nature_options = [
         "حادث مروري اعتيادي (تلفيات مادية)",
@@ -4349,6 +4345,7 @@ def _sketch_availability_control(widget_key, on_change):
         (_SKETCH_ATTACH_LABEL, _SKETCH_OMIT_LABEL),
         key=widget_key,
         on_change=on_change,
+        horizontal=True,
     )
     st.session_state.include_sketch = st.session_state.get(widget_key) == _SKETCH_ATTACH_LABEL
 
@@ -4416,13 +4413,6 @@ def _accept_asphalt_commit(sketch_image_state_key: str, default_loc: str):
             st.toast("✅ تم اعتماد الكروكي في تقرير A4 بنجاح!")
 
 def _render_aerial_reference():
-    place = st.radio(
-        "موضع لقطة التصوير الجوي داخل ورقة الكروكي عند اعتمادها:",
-        ["أسفل الكروكي", "بجانب الكروكي"],
-        horizontal=True,
-        key="aerial_place_choice",
-    )
-    st.session_state["aerial_place"] = "beside" if str(place).startswith("بجانب") else "below"
     sat_result = _satellite_studio_component(
         saved_sat_state=st.session_state.get("_saved_satellite_state"),
         key="bayyinah_satellite_studio_v1",
@@ -4446,12 +4436,7 @@ def render_interactive_asphalt_studio(
 ):
     """استوديو كروكي أسفلتي مع خريطة التصوير الجوي بجانبه عند الحاجة."""
     default_loc = str(st.session_state.get(location_state_key, "") or "").strip()
-    mode_sel = st.radio(
-        "اختر نمط عرض التخطيط:",
-        options=[_LAYOUT_DUAL, _LAYOUT_SKETCH, _LAYOUT_SAT],
-        horizontal=True,
-        key="_studio_layout_mode",
-    )
+    mode_sel = st.session_state.get("_studio_layout_mode") or _LAYOUT_DUAL
     show_sketch = mode_sel != _LAYOUT_SAT
     show_sat = mode_sel != _LAYOUT_SKETCH
     if show_sketch and show_sat:
@@ -4470,8 +4455,25 @@ def render_interactive_asphalt_studio(
             encoded = preview.split(",", 1)[-1]
             st.image(base64.b64decode(encoded), use_container_width=True)
 
-with tab4:
-    _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
+with tab_sketch:
+    col_sketch_state, col_layout, col_place = st.columns([1.1, 1.7, 1.0])
+    with col_sketch_state:
+        _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
+    with col_layout:
+        st.radio(
+            "نمط عرض التخطيط",
+            options=[_LAYOUT_DUAL, _LAYOUT_SKETCH, _LAYOUT_SAT],
+            horizontal=True,
+            key="_studio_layout_mode",
+        )
+    with col_place:
+        aerial_place_choice = st.radio(
+            "موضع لقطة التصوير الجوي",
+            ["أسفل الكروكي", "بجانب الكروكي"],
+            horizontal=True,
+            key="aerial_place_choice",
+        )
+        st.session_state["aerial_place"] = "beside" if str(aerial_place_choice).startswith("بجانب") else "below"
     _load_remembered_sketch()
     render_interactive_asphalt_studio(
         sketch_image_state_key="sketch_data_url",
@@ -4648,7 +4650,7 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
     </html>
     """
 
-with tab5:
+with tab_print:
     st.subheader("📸 إرفاق صور موقع الحادث والمركبات للتقرير الرسمي")
     _max_accident_photos = 10
     if "gallery_photos" not in st.session_state:
