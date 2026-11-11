@@ -76,6 +76,299 @@ def _blank_vehicles():
         {"الطرف": "الطرف الثاني", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "", "التأمين": ""},
     ]
 
+P1_AUTOSAVE_PATH = Path(".p1_autosave_draft.json")
+PAGE1_STATIC_KEYS = {
+    "p1_hdr_number": "",
+    "p1_hdr_date": "",
+    "p1_hdr_attachments": "",
+    "p1_hdr_subject": "تقرير حادث مروري",
+    "p1_acc_number": "",
+    "p1_acc_day": "",
+    "p1_acc_month": "",
+    "p1_acc_year": "1448",
+    "p1_acc_date": "",
+    "p1_acc_time": "",
+    "p1_acc_location": "",
+    "p1_acc_type": "تصادم",
+    "p1_acc_injuries": 0,
+    "p1_acc_deaths": 0,
+    "p1_acc_weather": "صحو",
+    "p1_acc_cause": "",
+    "p1_parties_count": 2,
+    "p1_dept_region": "",
+    "p1_dept_branch": "",
+    "hijri_date": "",
+    "hijri_manual_date": "",
+    "p1_parties_records": _blank_parties(),
+    "p1_vehicles_records": _blank_vehicles(),
+}
+PAGE1_EXTRA_SYNC_KEYS = (
+    "p1_acc_type_choice",
+    "p1_acc_weather_choice",
+    "hijri_month_label",
+    "hijri_year_label",
+)
+_PARTY_LABELS = {
+    1: "الطرف الأول",
+    2: "الطرف الثاني",
+    3: "الطرف الثالث",
+    4: "الطرف الرابع",
+    5: "الطرف الخامس",
+    6: "الطرف السادس",
+    7: "الطرف السابع",
+    8: "الطرف الثامن",
+    9: "الطرف التاسع",
+    10: "الطرف العاشر",
+}
+
+def get_dynamic_party_keys(max_parties: int = 10) -> dict:
+    dyn_keys = {}
+    for i in range(1, max_parties + 1):
+        dyn_keys[f"p1_party_name_{i}"] = ""
+        dyn_keys[f"p1_party_id_{i}"] = ""
+        dyn_keys[f"p1_party_role_{i}"] = "سائق"
+        dyn_keys[f"p1_party_health_{i}"] = "سليم"
+        dyn_keys[f"p1_party_qual_{i}"] = "مؤهل (رخصة سارية)"
+        dyn_keys[f"p1_veh_type_{i}"] = ""
+        dyn_keys[f"p1_veh_plate_{i}"] = ""
+        dyn_keys[f"p1_veh_serial_{i}"] = ""
+        dyn_keys[f"p1_veh_reg_{i}"] = "خصوصي"
+        dyn_keys[f"p1_veh_ins_{i}"] = "ساري"
+    return dyn_keys
+
+ALL_PAGE1_DEFAULTS = {**PAGE1_STATIC_KEYS, **get_dynamic_party_keys(10)}
+
+def _clone_page1_value(value):
+    if isinstance(value, list):
+        return [dict(item) if isinstance(item, dict) else item for item in value]
+    if isinstance(value, dict):
+        return dict(value)
+    return value
+
+def _frame_records(frame):
+    rows = []
+    for row in frame.to_dict("records"):
+        clean = {}
+        for key, value in row.items():
+            if value is None or (isinstance(value, float) and math.isnan(value)):
+                clean[str(key)] = ""
+            else:
+                clean[str(key)] = str(value)
+        rows.append(clean)
+    return rows
+
+def _records_from_dynamic_parties(vault):
+    rows = []
+    for i in range(1, 11):
+        name = str(vault.get(f"p1_party_name_{i}") or "")
+        id_no = str(vault.get(f"p1_party_id_{i}") or "")
+        role = str(vault.get(f"p1_party_role_{i}") or "")
+        health = str(vault.get(f"p1_party_health_{i}") or "")
+        qual = str(vault.get(f"p1_party_qual_{i}") or "")
+        meaningful = any((
+            name.strip(),
+            id_no.strip(),
+            role.strip() and role != "سائق",
+            health.strip() and health != "سليم",
+            qual.strip() and qual != "مؤهل (رخصة سارية)",
+        ))
+        if meaningful:
+            rows.append({
+                "الطرف": _PARTY_LABELS.get(i, f"الطرف {i}"),
+                "الاسم": name,
+                "الهوية": id_no,
+                "المشاركة": role,
+                "الحالة": health,
+                "التأهيل": qual,
+            })
+    return rows
+
+def _records_from_dynamic_vehicles(vault):
+    rows = []
+    for i in range(1, 11):
+        veh_type = str(vault.get(f"p1_veh_type_{i}") or "")
+        plate = str(vault.get(f"p1_veh_plate_{i}") or "")
+        serial = str(vault.get(f"p1_veh_serial_{i}") or "")
+        reg = str(vault.get(f"p1_veh_reg_{i}") or "")
+        ins = str(vault.get(f"p1_veh_ins_{i}") or "")
+        meaningful = any((
+            veh_type.strip(),
+            plate.strip(),
+            serial.strip(),
+            reg.strip() and reg != "خصوصي",
+            ins.strip() and ins != "ساري",
+        ))
+        if meaningful:
+            rows.append({
+                "الطرف": _PARTY_LABELS.get(i, f"الطرف {i}"),
+                "نوع المركبة": veh_type,
+                "رقم اللوحة": plate,
+                "الرقم التسلسلي": serial,
+                "نوع الترخيص": reg,
+                "التأمين": ins,
+            })
+    return rows
+
+def init_and_restore_page1_state():
+    if "_p1_vault" not in st.session_state:
+        loaded_draft = {}
+        if P1_AUTOSAVE_PATH.exists():
+            try:
+                loaded_draft = json.loads(P1_AUTOSAVE_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                loaded_draft = {}
+        if not isinstance(loaded_draft, dict):
+            loaded_draft = {}
+        st.session_state["_p1_loaded_keys"] = set(loaded_draft)
+        st.session_state["_p1_vault"] = {**ALL_PAGE1_DEFAULTS, **loaded_draft}
+    if st.session_state.get("_p1_pending_load") is not None:
+        pending = st.session_state.pop("_p1_pending_load")
+        if isinstance(pending, dict):
+            st.session_state["_p1_loaded_keys"] = set(pending)
+            for key, value in pending.items():
+                cloned = _clone_page1_value(value)
+                st.session_state["_p1_vault"][key] = cloned
+                st.session_state[key] = _clone_page1_value(cloned)
+    for key, default_val in ALL_PAGE1_DEFAULTS.items():
+        if key not in st.session_state:
+            st.session_state[key] = _clone_page1_value(st.session_state["_p1_vault"].get(key, default_val))
+    vault = st.session_state["_p1_vault"]
+    for key in PAGE1_EXTRA_SYNC_KEYS:
+        if key not in st.session_state and key in vault and vault.get(key) not in ("", None):
+            st.session_state[key] = vault.get(key)
+    for count_key in ("p1_acc_injuries", "p1_acc_deaths", "p1_parties_count"):
+        try:
+            st.session_state[count_key] = max(0, int(st.session_state.get(count_key) or 0))
+        except (TypeError, ValueError):
+            st.session_state[count_key] = 0
+    if not st.session_state.get("hijri_date") and st.session_state.get("p1_acc_date"):
+        st.session_state.hijri_date = st.session_state.p1_acc_date
+    def _saved_rows_win(rows):
+        if not isinstance(rows, list):
+            return False
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            for key, value in row.items():
+                if key == "الطرف":
+                    continue
+                if str(value or "").strip():
+                    return True
+        return False
+
+    party_records = vault.get("p1_parties_records")
+    if not _saved_rows_win(party_records):
+        party_records = _records_from_dynamic_parties(vault) or party_records
+    if not isinstance(party_records, list) or not party_records:
+        party_records = _blank_parties()
+    vehicle_records = vault.get("p1_vehicles_records")
+    if not _saved_rows_win(vehicle_records):
+        vehicle_records = _records_from_dynamic_vehicles(vault) or vehicle_records
+    if not isinstance(vehicle_records, list) or not vehicle_records:
+        vehicle_records = _blank_vehicles()
+    if "parties" not in st.session_state:
+        st.session_state.parties = _clone_page1_value(party_records)
+    if "vehicles" not in st.session_state:
+        st.session_state.vehicles = _clone_page1_value(vehicle_records)
+
+def sync_page1_to_vault(extra_keys: list = None):
+    if "_p1_vault" not in st.session_state:
+        st.session_state["_p1_vault"] = dict(ALL_PAGE1_DEFAULTS)
+    keys_to_sync = list(ALL_PAGE1_DEFAULTS.keys()) + list(PAGE1_EXTRA_SYNC_KEYS) + list(extra_keys or [])
+    for key in keys_to_sync:
+        if key in st.session_state:
+            st.session_state["_p1_vault"][key] = _clone_page1_value(st.session_state[key])
+    try:
+        P1_AUTOSAVE_PATH.write_text(
+            json.dumps(st.session_state["_p1_vault"], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+def _mirror_page1_fields():
+    hijri = str(st.session_state.get("hijri_date") or "")
+    st.session_state["p1_acc_date"] = hijri
+    parts = hijri.split("/")
+    if len(parts) == 3:
+        st.session_state["p1_acc_year"] = parts[0]
+        st.session_state["p1_acc_month"] = parts[1]
+        st.session_state["p1_acc_day"] = parts[2]
+    st.session_state["p1_acc_type"] = st.session_state.get("p1_acc_type_choice") or ""
+    st.session_state["p1_acc_weather"] = st.session_state.get("p1_acc_weather_choice") or ""
+    party_rows = list(st.session_state.get("p1_parties_records") or [])
+    vehicle_rows = list(st.session_state.get("p1_vehicles_records") or [])
+    st.session_state["p1_parties_count"] = max(len(party_rows), len(vehicle_rows))
+    for i in range(1, 11):
+        party = party_rows[i - 1] if i <= len(party_rows) else None
+        vehicle = vehicle_rows[i - 1] if i <= len(vehicle_rows) else None
+        party_map = (
+            ("p1_party_name_", "الاسم"),
+            ("p1_party_id_", "الهوية"),
+            ("p1_party_role_", "المشاركة"),
+            ("p1_party_health_", "الحالة"),
+            ("p1_party_qual_", "التأهيل"),
+        )
+        vehicle_map = (
+            ("p1_veh_type_", "نوع المركبة"),
+            ("p1_veh_plate_", "رقم اللوحة"),
+            ("p1_veh_serial_", "الرقم التسلسلي"),
+            ("p1_veh_reg_", "نوع الترخيص"),
+            ("p1_veh_ins_", "التأمين"),
+        )
+        for prefix, column in party_map:
+            key_name = f"{prefix}{i}"
+            if party is None:
+                st.session_state[key_name] = ALL_PAGE1_DEFAULTS[key_name]
+            else:
+                st.session_state[key_name] = str(party.get(column, "") or "")
+        for prefix, column in vehicle_map:
+            key_name = f"{prefix}{i}"
+            if vehicle is None:
+                st.session_state[key_name] = ALL_PAGE1_DEFAULTS[key_name]
+            else:
+                st.session_state[key_name] = str(vehicle.get(column, "") or "")
+
+def export_page1_payload(extra_keys: list = None) -> dict:
+    _mirror_page1_fields()
+    sync_page1_to_vault(extra_keys=extra_keys)
+    return dict(st.session_state["_p1_vault"])
+
+def queue_load_page1_payload(saved_dict: dict):
+    if not isinstance(saved_dict, dict):
+        return
+    p1_data = saved_dict.get("page1_data", saved_dict)
+    if not isinstance(p1_data, dict):
+        return
+    filtered = {key: p1_data[key] for key in ALL_PAGE1_DEFAULTS if key in p1_data}
+    for key in PAGE1_EXTRA_SYNC_KEYS:
+        if key in p1_data:
+            filtered[key] = p1_data[key]
+    if filtered:
+        st.session_state["_p1_pending_load"] = filtered
+
+def reset_page1_payload():
+    pending = {}
+    for key, value in ALL_PAGE1_DEFAULTS.items():
+        pending[key] = _clone_page1_value(value)
+    st.session_state["_p1_pending_load"] = pending
+    st.session_state.parties = _blank_parties()
+    st.session_state.vehicles = _blank_vehicles()
+    for key in (
+        "p1_parties_editor",
+        "p1_vehicles_editor",
+        "p1_acc_type_choice",
+        "p1_acc_weather_choice",
+        "hijri_month_label",
+        "hijri_year_label",
+    ):
+        st.session_state.pop(key, None)
+    if P1_AUTOSAVE_PATH.exists():
+        try:
+            P1_AUTOSAVE_PATH.unlink()
+        except Exception:
+            pass
+
 DRAFT_FILE_PATH = "bayyinah_autosave_draft.json"
 DEFAULT_REPORT_STATE = {
     "accident_results": "",
@@ -129,6 +422,7 @@ def init_and_load_state():
                 saved_data = json.load(draft_file)
             for key, default_val in DEFAULT_REPORT_STATE.items():
                 st.session_state[key] = saved_data.get(key, default_val)
+            queue_load_page1_payload(saved_data)
         except (OSError, json.JSONDecodeError, TypeError):
             for key, default_val in DEFAULT_REPORT_STATE.items():
                 st.session_state.setdefault(key, default_val)
@@ -168,6 +462,7 @@ def save_current_work():
         "analysis_api_key",
     ):
         data_to_save.pop(secret_key_name, None)
+    data_to_save["page1_data"] = export_page1_payload()
     now_str = datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d | %I:%M:%S %p")
     data_to_save["last_saved_time"] = now_str
     st.session_state["last_saved_time"] = now_str
@@ -189,6 +484,7 @@ def clear_all_work():
         st.session_state[key] = default_val
     st.session_state.law_selection_sig = ()
     st.session_state["confirm_clear"] = False
+    reset_page1_payload()
 
 def inject_bayyinah_blue_styles():
     st.markdown("""
@@ -238,8 +534,8 @@ def render_save_and_clear_toolbar():
             )
         with col_save:
             if st.button("💾 حفظ العمل الحالي", width="stretch", type="primary"):
-                if save_current_work():
-                    st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
+                sync_page1_to_vault()
+                st.session_state["_p1_save_requested"] = True
         with col_clear:
             if not st.session_state.get("confirm_clear", False):
                 if st.button("🗑️ مسح جميع الحقول", width="stretch"):
@@ -943,6 +1239,7 @@ def _reset_new_accident():
             pass
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    reset_page1_payload()
     try:
         adopted = SAVED_IMAGES_DIR / "adopted_sketch.png"
         if adopted.is_file():
@@ -2210,11 +2507,12 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 init_and_load_state()
+init_and_restore_page1_state()
 inject_bayyinah_blue_styles()
 if 'parties' not in st.session_state:
-    st.session_state.parties = _blank_parties()
+    st.session_state.parties = _clone_page1_value(st.session_state.get("p1_parties_records") or _blank_parties())
 if 'vehicles' not in st.session_state:
-    st.session_state.vehicles = _blank_vehicles()
+    st.session_state.vehicles = _clone_page1_value(st.session_state.get("p1_vehicles_records") or _blank_vehicles())
 with st.sidebar:
     if st.button("🔄 حادث جديد", type="primary", width="stretch", key="new_accident_btn"):
         _reset_new_accident()
@@ -2227,8 +2525,8 @@ with st.sidebar:
     st.markdown("### بَيِّنَةُ الذكي للحوادث")
     with st.container(key="glow-dept"):
         st.header("⚙️ الإعدادات الثابتة للقسم")
-        dept_region = st.text_input("إدارة مرور منطقة", value="")
-        dept_branch = st.text_input("القسم / الشعبة", value="")
+        dept_region = st.text_input("إدارة مرور منطقة", key="p1_dept_region")
+        dept_branch = st.text_input("القسم / الشعبة", key="p1_dept_branch")
     with st.container(key="glow-officers"):
         st.subheader("👮‍♂️ بيانات معدي التقرير (الصفحة 3)")
         officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", value="")
@@ -2266,9 +2564,13 @@ with tab1:
     st.subheader("معلومات الحادث الأساسية")
     col1, col2, col3, col4 = st.columns(4)
     with col1:
-        acc_num = st.text_input("رقم الحادث", value="")
+        acc_num = st.text_input("رقم الحادث", key="p1_acc_number")
         if "hijri_date" not in st.session_state:
             st.session_state.hijri_date = ""
+        if st.session_state.get("hijri_month_label") not in _HIJRI_MONTH_LABELS:
+            st.session_state.pop("hijri_month_label", None)
+        if st.session_state.get("hijri_year_label") not in _HIJRI_YEAR_LABELS:
+            st.session_state.pop("hijri_year_label", None)
         if st.session_state.get("acc_date_override"):
             st.session_state.hijri_date = st.session_state.pop("acc_date_override")
             st.session_state.hijri_parts_sync = True
@@ -2288,7 +2590,9 @@ with tab1:
                 st.session_state.hijri_date = get_today_hijri()
                 st.session_state.hijri_parts_sync = True
                 st.rerun()
-            if "hijri_manual_date" not in st.session_state:
+            if "hijri_manual_date" not in st.session_state or (
+                not st.session_state.get("hijri_manual_date") and st.session_state.get("hijri_date")
+            ):
                 st.session_state.hijri_manual_date = st.session_state.hijri_date or ""
             st.text_input(
                 "كتابة التاريخ يدوياً",
@@ -2325,31 +2629,48 @@ with tab1:
         accident_date = st.session_state.hijri_date
         acc_date = accident_date
     with col2:
-        accident_time = st.text_input("الوقت", value="")
+        accident_time = st.text_input("الوقت", key="p1_acc_time")
         acc_time = accident_time
-        if "acc_loc_value" not in st.session_state:
-            st.session_state.acc_loc_value = ""
         if st.session_state.get("acc_loc_override"):
-            st.session_state.acc_loc_value = st.session_state.pop("acc_loc_override")
-        acc_loc = st.text_input("موقع الحادث", key="acc_loc_value")
+            st.session_state.p1_acc_location = st.session_state.pop("acc_loc_override")
+        elif st.session_state.get("acc_loc_value") and not st.session_state.get("p1_acc_location"):
+            st.session_state.p1_acc_location = st.session_state.get("acc_loc_value")
+        acc_loc = st.text_input("موقع الحادث", key="p1_acc_location")
     with col3:
+        _acc_type_options = ["تصادم مركبتين", "دهس مشاة", "انقلاب", "تصادم متعدد", "اصطدام بجسم ثابت"]
+        _loaded_page1_keys = set(st.session_state.get("_p1_loaded_keys") or [])
+        if st.session_state.get("p1_acc_type_choice") not in _acc_type_options:
+            saved_type = st.session_state.get("p1_acc_type")
+            if "p1_acc_type" in _loaded_page1_keys and saved_type in _acc_type_options:
+                st.session_state.p1_acc_type_choice = saved_type
+            else:
+                st.session_state.pop("p1_acc_type_choice", None)
         acc_type = st.selectbox(
             "نوع الحادث",
-            ["تصادم مركبتين", "دهس مشاة", "انقلاب", "تصادم متعدد", "اصطدام بجسم ثابت"],
+            _acc_type_options,
             index=None,
             placeholder="اختر نوع الحادث",
+            key="p1_acc_type_choice",
         ) or ""
+        _acc_weather_options = ["صحو", "غائم", "ممطر", "غبار / عوالق ترابية", "ضباب"]
+        if st.session_state.get("p1_acc_weather_choice") not in _acc_weather_options:
+            saved_weather = st.session_state.get("p1_acc_weather")
+            if "p1_acc_weather" in _loaded_page1_keys and saved_weather in _acc_weather_options:
+                st.session_state.p1_acc_weather_choice = saved_weather
+            else:
+                st.session_state.pop("p1_acc_weather_choice", None)
         acc_weather = st.selectbox(
             "الطقس",
-            ["صحو", "غائم", "ممطر", "غبار / عوالق ترابية", "ضباب"],
+            _acc_weather_options,
             index=None,
             placeholder="اختر الطقس",
+            key="p1_acc_weather_choice",
         ) or ""
     with col4:
-        acc_injuries = st.number_input("عدد الإصابات", min_value=0, value=0)
-        acc_deaths = st.number_input("عدد الوفيات", min_value=0, value=0)
+        acc_injuries = st.number_input("عدد الإصابات", min_value=0, key="p1_acc_injuries")
+        acc_deaths = st.number_input("عدد الوفيات", min_value=0, key="p1_acc_deaths")
     
-    acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", value="")
+    acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", key="p1_acc_cause")
     st.divider()
     _party_columns = [
         ("الطرف", "الأطراف"),
@@ -2370,6 +2691,7 @@ with tab1:
     st.subheader("جدول معلومات أطراف الحادث")
     parties_df = st.data_editor(
         pd.DataFrame(st.session_state.parties),
+        key="p1_parties_editor",
         num_rows="dynamic",
         use_container_width=True,
         column_order=[key for key, _label in reversed(_party_columns)],
@@ -2386,6 +2708,7 @@ with tab1:
     st.subheader("جدول معلومات المركبات")
     vehicles_df = st.data_editor(
         pd.DataFrame(st.session_state.vehicles),
+        key="p1_vehicles_editor",
         num_rows="dynamic",
         use_container_width=True,
         column_order=[key for key, _label in reversed(_vehicle_columns)],
@@ -2398,6 +2721,15 @@ with tab1:
             "التأمين": st.column_config.SelectboxColumn("التأمين", options=["", "مؤمنة", "غير مؤمنة"]),
         }
     )
+    st.session_state.parties = _frame_records(parties_df)
+    st.session_state.vehicles = _frame_records(vehicles_df)
+    st.session_state.p1_parties_records = _clone_page1_value(st.session_state.parties)
+    st.session_state.p1_vehicles_records = _clone_page1_value(st.session_state.vehicles)
+    _mirror_page1_fields()
+    sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS))
+    if st.session_state.pop("_p1_save_requested", False):
+        if save_current_work():
+            st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
 TRAFFIC_LAW_ARTICLES = [
     {
         "id": "art_8_c",
@@ -3891,7 +4223,7 @@ else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabri
         return True
 
     with st.container(key="adopt-hidden"):
-        with st.form("adopt_sketch_form", clear_on_submit=True, border=False):
+        with st.form("adopt_sketch_form", clear_on_submit=False, border=False):
             adopted_payload = st.text_area(
                 "adopt_payload",
                 key="adopted_sketch_data",
