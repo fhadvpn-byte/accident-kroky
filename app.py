@@ -4064,6 +4064,19 @@ with tab5:
             padding: 15mm 18mm; box-sizing: border-box; position: relative;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
         }}
+        .page.report-page.page-one {{
+            padding: 8mm 12mm 10mm;
+            display: flex; flex-direction: column; justify-content: flex-start;
+            align-items: stretch; align-content: flex-start; gap: 2px;
+        }}
+        .page-one .header-Title {{ margin-bottom: 2px; }}
+        .page-one .header-box {{
+            min-height: 96px; margin-bottom: 4px; padding-bottom: 4px; align-items: center;
+        }}
+        .page-one .header-logo img {{ height: 84px; max-width: 92px; }}
+        .page-one .section-badge {{ margin: 2px auto; padding: 2px 12px; }}
+        .page-one table {{ margin-top: 0 !important; margin-bottom: 4px !important; }}
+        .page-one th, .page-one td {{ padding: 4px 3px; }}
         .photo-annex {{ page-break-before: always; overflow: visible; }}
         .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
         .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
@@ -4167,6 +4180,11 @@ with tab5:
                 margin-bottom: 15px;
                 box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
             }}
+            .page.report-page.page-one {{
+                padding: 8px 10px 10px; gap: 2px; justify-content: flex-start;
+            }}
+            .page-one .header-box {{ min-height: 72px; margin-bottom: 2px; }}
+            .page-one .section-badge {{ margin: 2px auto; }}
             .header-Title {{ font-size: 14px; }}
             .header-box {{ font-size: 11px; min-height: 88px; }}
             .header-logo img {{ height: 64px; max-width: 70px; }}
@@ -4216,6 +4234,12 @@ with tab5:
                 break-inside: avoid !important;
                 page-break-after: avoid !important;
             }}
+            .page.report-page.page-one {{
+                padding: 6mm 10mm 8mm; justify-content: flex-start; align-content: flex-start; gap: 2px;
+            }}
+            .page-one .header-box {{ min-height: 84px; margin-bottom: 2px; padding-bottom: 2px; }}
+            .page-one .section-badge {{ margin: 1px auto; }}
+            .page-one table {{ margin-bottom: 2px !important; }}
             .page-three {{ padding: 8mm 12mm 8mm 12mm; }}
             .page-three .sign-table th, .page-three .sign-table td {{ padding: 1px 3px !important; }}
             .photo-annex {{
@@ -4253,7 +4277,7 @@ with tab5:
         </div>
         <div class="report-viewport">
         <div class="report-sheet">
-        <div class="page report-page">
+        <div class="page report-page page-one">
             {build_header()}
             <div class="section-badge">تقرير حادث مروري</div>
             <div class="section-badge" style="font-size:15px;">معلومات الحادث</div>
