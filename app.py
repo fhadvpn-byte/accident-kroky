@@ -118,73 +118,94 @@ def inject_luxury_hijri_css():
     st.markdown(
         """
         <style>
-        /* تصميم الزر الرئيسي لمنتقي التاريخ الهجري فقط */
-        div:has(> [data-testid="stElementContainer"] #hijri-lux-trigger) [data-testid="stPopover"] > button {
-            background: linear-gradient(135deg, rgba(10, 25, 47, 0.92), rgba(15, 38, 68, 0.92)) !important;
-            border: 1px solid rgba(56, 189, 248, 0.45) !important;
+        /* تصميم الزر الرئيسي لمنتقي التاريخ الهجري وإظهار نصه بالأبيض الواضح */
+        html body div:has(> [data-testid="stElementContainer"] #hijri-lux-trigger) [data-testid="stPopover"] > button {
+            background: linear-gradient(135deg, #0a192f 0%, #112a4e 100%) !important;
+            border: 1.5px solid rgba(56, 189, 248, 0.55) !important;
             border-radius: 10px !important;
-            color: #f8fafc !important;
-            font-weight: 600 !important;
-            font-size: 14.5px !important;
             padding: 8px 14px !important;
-            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
-            transition: all 0.2s ease !important;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.3) !important;
         }
-        div:has(> [data-testid="stElementContainer"] #hijri-lux-trigger) [data-testid="stPopover"] > button:hover {
-            border-color: #38bdf8 !important;
-            box-shadow: 0 0 16px rgba(56, 189, 248, 0.35) !important;
+        html body div:has(> [data-testid="stElementContainer"] #hijri-lux-trigger) [data-testid="stPopover"] > button,
+        html body div:has(> [data-testid="stElementContainer"] #hijri-lux-trigger) [data-testid="stPopover"] > button * {
+            color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            font-weight: 700 !important;
+            font-size: 14.5px !important;
+            opacity: 1 !important;
         }
-        /* تصميم النافذة المنبثقة الزجاجية الفاخرة (Dark Glass HUD) */
-        [data-testid="stPopoverBody"]:has(#hijri-lux-scope),
-        [data-baseweb="popover"]:has(#hijri-lux-scope) > div {
-            background: linear-gradient(160deg, #071324 0%, #0c1f38 100%) !important;
-            border: 1px solid rgba(56, 189, 248, 0.35) !important;
+        /* تصميم النافذة المنبثقة الزجاجية الفاخرة */
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) {
+            background: linear-gradient(160deg, #071324 0%, #0d223d 100%) !important;
+            border: 1.5px solid rgba(56, 189, 248, 0.45) !important;
             border-radius: 16px !important;
-            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.65), 0 0 25px rgba(14, 165, 233, 0.15) !important;
+            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.7), 0 0 25px rgba(14, 165, 233, 0.2) !important;
             padding: 12px 14px !important;
-            width: 375px !important;
+            width: 380px !important;
             max-width: 94vw !important;
             direction: rtl !important;
         }
-        /* تقليص المسافات العمودية داخل النافذة المنبثقة لمنع التمدد المزعج */
-        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) [data-testid="stVerticalBlock"] {
-            gap: 0.4rem !important;
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) [data-testid="stVerticalBlock"] {
+            gap: 0.42rem !important;
         }
-        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) [data-testid="stHorizontalBlock"] {
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) [data-testid="stHorizontalBlock"] {
             gap: 0.35rem !important;
         }
-        /* أزرار الأيام العادية (زجاجي داكن هادئ بدلاً من السماوي الفاقع) */
-        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) button[kind="secondary"] {
-            background: rgba(255, 255, 255, 0.04) !important;
-            color: #e2e8f0 !important;
-            border: 1px solid rgba(148, 163, 184, 0.18) !important;
+        /* أزرار الأيام والأزرار السريعة: خلفية كحلية مؤطرة وأرقام بيضاء ناصعة وعريضة */
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) .stButton > button:not([kind="primary"]) {
+            background: rgba(18, 48, 86, 0.95) !important;
+            border: 1px solid rgba(56, 189, 248, 0.45) !important;
             border-radius: 9px !important;
-            height: 36px !important;
-            min-height: 36px !important;
-            padding: 0 !important;
-            font-size: 13.5px !important;
-            font-weight: 600 !important;
-            box-shadow: none !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            padding: 0 4px !important;
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.1) !important;
             transition: all 0.15s ease !important;
         }
-        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) button[kind="secondary"]:hover {
-            background: rgba(56, 189, 248, 0.16) !important;
-            border-color: rgba(56, 189, 248, 0.65) !important;
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) .stButton > button:not([kind="primary"]),
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) .stButton > button:not([kind="primary"]) * {
             color: #ffffff !important;
+            -webkit-text-fill-color: #ffffff !important;
+            font-size: 15px !important;
+            font-weight: 800 !important;
+            line-height: 1 !important;
+            white-space: nowrap !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            opacity: 1 !important;
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.65) !important;
+        }
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) .stButton > button:not([kind="primary"]):hover {
+            background: rgba(14, 116, 174, 0.95) !important;
+            border-color: #7dd3fc !important;
+            box-shadow: 0 0 12px rgba(56, 189, 248, 0.45) !important;
             transform: translateY(-1px) !important;
         }
-        /* زر اليوم المختار فقط (متدرج سماوي ملكي راقٍ) */
-        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) button[kind="primary"] {
-            background: linear-gradient(135deg, #0284c7 0%, #00e5ff 100%) !important;
-            color: #041322 !important;
-            border: 1px solid #7dd3fc !important;
+        /* زر اليوم المختار فعلياً: خلفية سماوية مضيئة ورقم كحلي داكن واضح */
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) .stButton > button[kind="primary"] {
+            background: linear-gradient(135deg, #38bdf8 0%, #00e5ff 100%) !important;
+            border: 1.5px solid #ffffff !important;
             border-radius: 9px !important;
-            height: 36px !important;
-            min-height: 36px !important;
+            height: 38px !important;
+            min-height: 38px !important;
+            padding: 0 4px !important;
+            box-shadow: 0 0 15px rgba(0, 229, 255, 0.6) !important;
+        }
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) .stButton > button[kind="primary"],
+        html body :is([data-testid="stPopoverBody"], [data-baseweb="popover"]):has(#hijri-lux-scope) .stButton > button[kind="primary"] * {
+            color: #020c1b !important;
+            -webkit-text-fill-color: #020c1b !important;
+            font-size: 16px !important;
+            font-weight: 900 !important;
+            line-height: 1 !important;
+            white-space: nowrap !important;
+            margin: 0 !important;
             padding: 0 !important;
-            font-size: 14px !important;
-            font-weight: 800 !important;
-            box-shadow: 0 0 14px rgba(0, 229, 255, 0.45) !important;
+            opacity: 1 !important;
+            text-shadow: none !important;
         }
         </style>
         """,
