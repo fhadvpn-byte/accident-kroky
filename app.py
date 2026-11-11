@@ -1681,7 +1681,7 @@ st.markdown("""
     [data-testid="stAppViewContainer"],
     section[data-testid="stSidebar"],
     [data-testid="stSidebarContent"] {
-        background: #0a192f !important;
+        background: #8B0000 !important;
         color: #e2eafc;
     }
     section[data-testid="stSidebar"] {
@@ -1692,7 +1692,7 @@ st.markdown("""
         width: 100% !important;
     }
     [data-testid="stHeader"] {
-        background: #0a192f !important;
+        background: #8B0000 !important;
     }
     h1, h2, h3,
     [data-testid="stHeading"],
@@ -4052,7 +4052,7 @@ with tab5:
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700&display=swap');
         html, body {{ height: 100%; margin: 0; }}
         body {{
-            font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0;
+            font-family: 'Tajawal', sans-serif; background: #8B0000; margin: 0;
             display: flex; flex-direction: column; overflow: hidden;
         }}
         .report-viewport {{
@@ -4061,20 +4061,21 @@ with tab5:
         }}
         .report-sheet {{
             width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
-            transform: none; zoom: 1; scale: 1;
+            transform: none;
         }}
-        .report-sheet .header-Title,
-        .report-sheet .section-badge {{
-            font-size: 18px !important; font-weight: 700;
-        }}
-        .report-sheet table,
-        .report-sheet th,
-        .report-sheet td,
+        .report-sheet .header-Title {{ font-size: 26px !important; font-weight: 700; }}
+        .report-sheet .section-badge {{ font-size: 22px !important; font-weight: 700; }}
+        .report-sheet .section-badge.badge-sub {{ font-size: 18px !important; }}
         .report-sheet .box-content,
+        .report-sheet .header-box,
         .report-sheet .photo-meta,
         .report-sheet p,
         .report-sheet li {{
             font-size: 15px !important; font-weight: 600;
+        }}
+        .report-sheet th,
+        .report-sheet td {{
+            font-size: 14px !important; font-weight: 600;
         }}
         .report-sheet th {{ font-weight: 700; }}
         .page, .report-page, .a4-page {{
@@ -4082,7 +4083,7 @@ with tab5:
             min-height: 297mm; height: auto; margin: 0 auto 8mm auto;
             padding: 15mm 18mm; box-sizing: border-box; position: relative;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
-            transform: none; zoom: 1; scale: 1;
+            transform: none;
         }}
         .report-sheet table,
         .report-sheet .table-scroll,
@@ -4139,7 +4140,7 @@ with tab5:
             height: 110px; width: auto; max-width: 120px; object-fit: contain;
             display: block; margin: 0 auto;
         }}
-        .header-Title {{ text-align: center; font-size: 18px; font-weight: 700; margin-bottom: 6px; }}
+        .header-Title {{ text-align: center; font-size: 26px; font-weight: 700; margin-bottom: 6px; }}
         .header-box {{
             position: relative; display: flex; justify-content: space-between; align-items: center;
             min-height: 128px; border-bottom: 3px double #1b4332; padding-bottom: 10px;
@@ -4153,10 +4154,10 @@ with tab5:
         }}
         .section-badge {{
             background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
-            padding: 5px 25px; font-weight: 700; font-size: 18px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
+            padding: 5px 25px; font-weight: 700; font-size: 22px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
         }}
-        table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 15px; }}
-        th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-weight: 600; }}
+        table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 14px; }}
+        th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-size: 14px; font-weight: 600; }}
         th {{ font-weight: 700; background-color: #d8f3dc; color: #1b4332; }}
         .box-content {{
             border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
@@ -4173,7 +4174,7 @@ with tab5:
             .report-sheet, .page, .report-page, .a4-page {{
                 width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
                 min-height: 297mm !important; height: auto !important;
-                transform: none !important; zoom: 1 !important; scale: 1 !important;
+                transform: none !important;
             }}
             .photo-annex, .photo-annex .photo-card, .photo-annex .photo-meta {{
                 overflow: visible; max-height: none;
@@ -4191,7 +4192,7 @@ with tab5:
             .report-sheet, .page, .report-page, .a4-page {{
                 width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
                 min-height: 297mm !important; height: auto !important;
-                transform: none !important; zoom: 1 !important; scale: 1 !important;
+                transform: none !important;
             }}
             .page.report-page.page-one {{
                 padding: 8mm 12mm 10mm; gap: 2px; justify-content: flex-start;
@@ -4218,7 +4219,7 @@ with tab5:
                 box-shadow: none; margin: 0; overflow: visible;
                 width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
                 min-height: 297mm !important; height: auto !important; max-height: none !important;
-                transform: none !important; zoom: 1 !important; scale: 1 !important;
+                transform: none !important;
                 page-break-after: always;
             }}
             .report-sheet > .report-page:last-child {{ page-break-after: auto; break-after: auto; }}
@@ -4229,19 +4230,18 @@ with tab5:
             }}
             table, .table-scroll table {{ border: 1px solid #000; }}
             th, td {{ border: 1px solid #000 !important; }}
-            .report-sheet .header-Title,
-            .report-sheet .section-badge {{
-                font-size: 18px !important; font-weight: 700;
-            }}
+            .report-sheet .header-Title {{ font-size: 26px !important; font-weight: 700; }}
+            .report-sheet .section-badge {{ font-size: 22px !important; font-weight: 700; }}
+            .report-sheet .section-badge.badge-sub {{ font-size: 18px !important; }}
             .report-sheet .box-content,
-            .report-sheet table,
-            .report-sheet th,
-            .report-sheet td,
+            .report-sheet .header-box,
             .report-sheet .photo-meta,
             .report-sheet p,
             .report-sheet li {{
                 font-size: 15px !important; font-weight: 600;
             }}
+            .report-sheet th,
+            .report-sheet td {{ font-size: 14px !important; font-weight: 600; }}
             .report-sheet th {{ font-weight: 700; }}
             .sign-table, .sign-table tr, .sign-table td {{
                 page-break-inside: avoid !important;
@@ -4294,7 +4294,7 @@ with tab5:
         <div class="page report-page page-one">
             {build_header()}
             <div class="section-badge">تقرير حادث مروري</div>
-            <div class="section-badge" style="font-size:18px;">معلومات الحادث</div>
+            <div class="section-badge badge-sub">معلومات الحادث</div>
             <div class="table-scroll"><table>
                 <tr>
                     <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
@@ -4305,12 +4305,12 @@ with tab5:
                     <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
                 </tr>
             </table></div>
-            <div class="section-badge" style="font-size:18px;">معلومات أطراف الحادث</div>
+            <div class="section-badge badge-sub">معلومات أطراف الحادث</div>
             <div class="table-scroll"><table>
                 <tr>{parties_head}</tr>
                 {parties_rows}
             </table></div>
-            <div class="section-badge" style="font-size:18px;">معلومات المركبات</div>
+            <div class="section-badge badge-sub">معلومات المركبات</div>
             <div class="table-scroll"><table>
                 <tr>{vehicles_head}</tr>
                 {vehicles_rows}
