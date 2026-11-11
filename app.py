@@ -4376,150 +4376,15 @@ def _load_remembered_sketch():
     if stored.startswith("data:image/"):
         st.session_state[SKETCH_DATA_URL_KEY] = stored
 
-def render_satellite_tactical_map(default_lat: float = 17.0369, default_lon: float = 43.0983, height: int = 680):
-    """خريطة قمر صناعي تكتيكية حية (Esri World Imagery) لرسم مسارات المركبات ونقطة الاصطدام مباشرة فوق الشارع الحقيقي."""
-    components.html(
-        f"""
-        <!DOCTYPE html>
-        <html dir="rtl" lang="ar">
-        <head>
-            <meta charset="utf-8"/>
-            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-            <style>
-                body {{ margin:0; padding:0; background:#071324; font-family:Tahoma, sans-serif; color:#f8fafc; }}
-                .toolbar {{
-                    display:flex; flex-wrap:wrap; gap:6px; padding:8px 10px;
-                    background:linear-gradient(135deg,#08172c,#0e2747);
-                    border:1px solid rgba(56,189,248,0.35); border-radius:10px 10px 0 0;
-                    align-items:center; justify-content:space-between;
-                }}
-                .tool-btn {{
-                    background:rgba(15,38,68,0.95); color:#ffffff; border:1px solid rgba(56,189,248,0.45);
-                    border-radius:7px; padding:6px 11px; font-size:12.5px; font-weight:700; cursor:pointer;
-                }}
-                .tool-btn.active {{ background:linear-gradient(135deg,#0284c7,#00e5ff); color:#031221; border-color:#fff; }}
-                .coord-in {{
-                    background:#061224; color:#fff; border:1px solid rgba(56,189,248,0.4);
-                    border-radius:6px; padding:5px 8px; width:185px; font-size:12px; direction:ltr;
-                }}
-                #mapWrap {{ position:relative; width:100%; height:{max(280, int(height) - 175)}px; border:1px solid rgba(56,189,248,0.35); border-top:none; }}
-                #satMap {{ width:100%; height:100%; }}
-                #drawCanvas {{ position:absolute; top:0; left:0; width:100%; height:100%; z-index:500; pointer-events:none; }}
-                .hint {{ font-size:11.5px; color:#bae6fd; padding:6px 10px; background:#071528; border-radius:0 0 10px 10px; border:1px solid rgba(56,189,248,0.25); border-top:none; }}
-            </style>
-        </head>
-        <body>
-            <div class="toolbar">
-                <div style="display:flex; gap:5px; flex-wrap:wrap;">
-                    <button class="tool-btn active" id="btnPan" onclick="setMode('pan')">🖐️ تحريك وتكبير الخريطة</button>
-                    <button class="tool-btn" id="btnV1" onclick="setMode('v1')">🔴 مسار الطرف (1)</button>
-                    <button class="tool-btn" id="btnV2" onclick="setMode('v2')">🔵 مسار الطرف (2)</button>
-                    <button class="tool-btn" id="btnImp" onclick="setMode('impact')">💥 نقطة الاصطدام</button>
-                    <button class="tool-btn" onclick="clearDrawings()">🗑️ مسح الرسم</button>
-                </div>
-                <div style="display:flex; gap:5px; align-items:center;">
-                    <input class="coord-in" id="coordBox" placeholder="إحداثيات: 17.0369, 43.0983"/>
-                    <button class="tool-btn" onclick="jumpToCoords()">📍 انتقال</button>
-                </div>
-            </div>
-            <div id="mapWrap">
-                <div id="satMap"></div>
-                <canvas id="drawCanvas"></canvas>
-            </div>
-            <div class="hint">
-                💡 كبّر الخريطة الفضائية على تقاطع/موقع الحادث الفعلي، ثم اختر <b>مسار الطرف (1)</b> واسحب بالماوس لرسم اتجاه المركبة، ثم التقط صورة الموقع أو ارفعه مباشرة للتقرير.
-            </div>
-            <script>
-                const map = L.map('satMap', {{ zoomControl: true }}).setView([{default_lat}, {default_lon}], 18);
-                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
-                    maxZoom: 20, attribution: 'Esri Satellite'
-                }}).addTo(map);
-                const canvas = document.getElementById('drawCanvas');
-                const ctx = canvas.getContext('2d');
-                let mode = 'pan';
-                let shapes = [];
-                let startPt = null;
-                function resizeCanvas() {{
-                    const rect = document.getElementById('mapWrap').getBoundingClientRect();
-                    canvas.width = rect.width;
-                    canvas.height = rect.height;
-                    redraw();
-                }}
-                window.addEventListener('resize', resizeCanvas);
-                setTimeout(resizeCanvas, 200);
-                function setMode(m) {{
-                    mode = m;
-                    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
-                    const mapIds = {{'pan':'btnPan','v1':'btnV1','v2':'btnV2','impact':'btnImp'}};
-                    if (mapIds[m]) document.getElementById(mapIds[m]).classList.add('active');
-                    canvas.style.pointerEvents = (m === 'pan') ? 'none' : 'auto';
-                }}
-                function jumpToCoords() {{
-                    const raw = document.getElementById('coordBox').value.trim();
-                    const parts = raw.split(/[ ,]+/).map(Number).filter(n => !isNaN(n));
-                    if (parts.length >= 2) map.setView([parts[0], parts[1]], 19);
-                }}
-                function clearDrawings() {{ shapes = []; redraw(); }}
-                function drawArrow(x1, y1, x2, y2, color, label) {{
-                    const head = 14;
-                    const angle = Math.atan2(y2 - y1, x2 - x1);
-                    ctx.save();
-                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 4;
-                    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
-                    ctx.beginPath();
-                    ctx.moveTo(x2, y2);
-                    ctx.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
-                    ctx.lineTo(x2 - head * Math.cos(angle + Math.PI / 6), y2 - head * Math.sin(angle + Math.PI / 6));
-                    ctx.closePath(); ctx.fill();
-                    ctx.beginPath(); ctx.arc(x1, y1, 12, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke();
-                    ctx.fillStyle = color; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                    ctx.fillText(label, x1, y1);
-                    ctx.restore();
-                }}
-                function redraw() {{
-                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    shapes.forEach(s => {{
-                        if (s.type === 'v1') drawArrow(s.x1, s.y1, s.x2, s.y2, '#ef4444', '1');
-                        else if (s.type === 'v2') drawArrow(s.x1, s.y1, s.x2, s.y2, '#3b82f6', '2');
-                        else if (s.type === 'impact') {{
-                            ctx.save();
-                            ctx.beginPath(); ctx.arc(s.x, s.y, 15, 0, Math.PI * 2);
-                            ctx.fillStyle = 'rgba(250, 204, 21, 0.9)'; ctx.fill();
-                            ctx.lineWidth = 3; ctx.strokeStyle = '#dc2626'; ctx.stroke();
-                            ctx.fillStyle = '#991b1b'; ctx.font = 'bold 15px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-                            ctx.fillText('X', s.x, s.y);
-                            ctx.restore();
-                        }}
-                    }});
-                }}
-                canvas.addEventListener('mousedown', e => {{
-                    const r = canvas.getBoundingClientRect();
-                    const x = e.clientX - r.left, y = e.clientY - r.top;
-                    if (mode === 'impact') {{ shapes.push({{type:'impact', x, y}}); redraw(); }}
-                    else startPt = {{x, y}};
-                }});
-                canvas.addEventListener('mouseup', e => {{
-                    if (!startPt) return;
-                    const r = canvas.getBoundingClientRect();
-                    const x2 = e.clientX - r.left, y2 = e.clientY - r.top;
-                    if (Math.hypot(x2 - startPt.x, y2 - startPt.y) > 12) {{
-                        shapes.push({{type: mode, x1: startPt.x, y1: startPt.y, x2, y2}});
-                    }}
-                    startPt = null; redraw();
-                }});
-            </script>
-        </body>
-        </html>
-        """,
-        height=int(height),
-    )
-
-
 _ASPHALT_COMP_DIR = Path(__file__).resolve().parent / "asphalt_studio_component"
 _asphalt_studio_component = components.declare_component(
     "asphalt_sketch_studio",
     path=str(_ASPHALT_COMP_DIR),
+)
+_SATELLITE_COMP_DIR = Path(__file__).resolve().parent / "satellite_studio_component"
+_satellite_studio_component = components.declare_component(
+    "satellite_tactical_studio",
+    path=str(_SATELLITE_COMP_DIR),
 )
 
 def _store_committed_sketch(data_uri: str, sketch_image_state_key: str):
@@ -4551,25 +4416,29 @@ def _accept_asphalt_commit(sketch_image_state_key: str, default_loc: str):
             st.toast("✅ تم اعتماد الكروكي في تقرير A4 بنجاح!")
 
 def _render_aerial_reference():
-    render_satellite_tactical_map(height=680)
-    st.caption("ابحث بالإحداثيات وكبّر التقاطع الحقيقي أثناء رسم الكروكي.")
     place = st.radio(
-        "موضع لقطة التصوير الجوي داخل ورقة الكروكي عند إرفاقها:",
+        "موضع لقطة التصوير الجوي داخل ورقة الكروكي عند اعتمادها:",
         ["أسفل الكروكي", "بجانب الكروكي"],
         horizontal=True,
         key="aerial_place_choice",
     )
     st.session_state["aerial_place"] = "beside" if str(place).startswith("بجانب") else "below"
-    sat_up = st.file_uploader(
-        "📥 إرفاق لقطة الموقع الجوي اختيارياً في ورقة الكروكي (لا تستبدل رسم الأسفلت):",
-        type=["png", "jpg", "jpeg", "webp"],
-        key="_sat_up_file",
+    sat_result = _satellite_studio_component(
+        saved_sat_state=st.session_state.get("_saved_satellite_state"),
+        key="bayyinah_satellite_studio_v1",
+        default=None,
     )
-    if sat_up is not None:
-        b64 = base64.b64encode(sat_up.getvalue()).decode("ascii")
-        mime = sat_up.type or "image/png"
-        st.session_state["aerial_data_url"] = f"data:{mime};base64,{b64}"
-        st.success("✅ أُرفقت لقطة التصوير الجوي مع الكروكي في التقرير.")
+    if isinstance(sat_result, dict) and str(sat_result.get("image") or "").startswith("data:image/"):
+        last_ts = st.session_state.get("_last_aerial_commit_ts")
+        if sat_result.get("ts") != last_ts:
+            st.session_state["_last_aerial_commit_ts"] = sat_result.get("ts")
+            st.session_state["aerial_sketch_data_url"] = sat_result["image"]
+            st.session_state["_saved_satellite_state"] = sat_result.get("state")
+            st.toast("✅ تم اعتماد التصوير الجوي في تقرير A4 بنجاح!")
+    if str(st.session_state.get("aerial_sketch_data_url") or "").startswith("data:image/"):
+        if st.button("🗑️ إزالة التصوير الجوي من التقرير", key="_remove_aerial_sketch"):
+            st.session_state["aerial_sketch_data_url"] = ""
+            st.rerun()
 
 def render_interactive_asphalt_studio(
     sketch_image_state_key: str = "sketch_data_url",
@@ -4923,31 +4792,38 @@ with tab5:
             except OSError:
                 sketch_src = ""
     safe_sketch_src = html.escape(sketch_src, quote=True)
-    sketch_img = (
-        f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="width:100%; max-height:145mm; height:auto; object-fit:contain; border:1px solid #ccc;">'
-        if safe_sketch_src else ""
-    )
-    aerial_src = str(st.session_state.get("aerial_data_url") or "").strip()
+    aerial_src = str(st.session_state.get("aerial_sketch_data_url") or st.session_state.get("aerial_data_url") or "").strip()
     safe_aerial_src = html.escape(aerial_src, quote=True) if aerial_src.startswith("data:image/") else ""
-    aerial_img = (
-        f'<img src="{safe_aerial_src}" alt="لقطة التصوير الجوي" style="width:100%; max-height:70mm; height:auto; object-fit:contain; border:1px solid #000;">'
-        if safe_aerial_src else ""
-    )
-    if sketch_img and aerial_img and st.session_state.get("aerial_place") == "beside":
-        sketch_figure = (
-            '<div style="display:flex; gap:3mm; align-items:flex-start;">'
-            f'<div style="flex:1.2;">{sketch_img}</div>'
-            f'<div style="flex:0.8;"><div style="font-weight:800; font-size:13px; margin-bottom:2px;">لقطة التصوير الجوي</div>{aerial_img}</div>'
+
+    def _framed_shot(title, src, alt, max_height):
+        return (
+            '<div style="border:1.4px solid #000; background:#fff; padding:1.6mm; box-sizing:border-box;">'
+            f'<div style="font-weight:800; font-size:12.5px; text-align:center; margin-bottom:1.2mm;">{title}</div>'
+            f'<img src="{src}" alt="{alt}" style="width:100%; max-height:{max_height}; height:auto; object-fit:contain; display:block;">'
             "</div>"
         )
-    elif sketch_img and aerial_img:
+
+    if safe_sketch_src and safe_aerial_src and st.session_state.get("aerial_place") == "beside":
         sketch_figure = (
-            f"{sketch_img}"
-            '<div style="font-weight:800; font-size:13px; margin-top:4mm;">لقطة التصوير الجوي</div>'
-            f"{aerial_img}"
+            '<div style="display:flex; justify-content:space-between; width:100%; align-items:stretch;">'
+            f'<div style="width:49%;">{_framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "82mm")}</div>'
+            f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "82mm")}</div>'
+            "</div>"
+        )
+    elif safe_sketch_src and safe_aerial_src:
+        sketch_figure = (
+            _framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "82mm")
+            + '<div style="height:3mm;"></div>'
+            + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "82mm")
+        )
+    elif safe_aerial_src:
+        sketch_figure = _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "145mm")
+    elif safe_sketch_src:
+        sketch_figure = (
+            f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="width:100%; max-height:145mm; height:auto; object-fit:contain; border:1px solid #ccc;">'
         )
     else:
-        sketch_figure = sketch_img
+        sketch_figure = ""
     logo_src = get_base64_image("traffic_logo.png")
     sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
     stored_sig = str(st.session_state.get("sig_base64") or "").strip()
