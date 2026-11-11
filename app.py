@@ -128,7 +128,7 @@ def get_dynamic_party_keys(max_parties: int = 10) -> dict:
         dyn_keys[f"p1_party_id_{i}"] = ""
         dyn_keys[f"p1_party_role_{i}"] = "سائق"
         dyn_keys[f"p1_party_health_{i}"] = "سليم"
-        dyn_keys[f"p1_party_qual_{i}"] = "مؤهل (رخصة سارية)"
+        dyn_keys[f"p1_party_qual_{i}"] = "مؤهل للقيادة"
         dyn_keys[f"p1_veh_type_{i}"] = ""
         dyn_keys[f"p1_veh_plate_{i}"] = ""
         dyn_keys[f"p1_veh_serial_{i}"] = ""
@@ -144,6 +144,50 @@ def _clone_page1_value(value):
     if isinstance(value, dict):
         return dict(value)
     return value
+
+QUALIFICATION_OPTIONS = [
+    "مؤهل للقيادة",
+    "غير مؤهل للقيادة",
+]
+
+def normalize_driving_qualification(val):
+    if val is None:
+        return "مؤهل للقيادة"
+    text = str(val).strip()
+    if not text or text.lower() == "none":
+        return "مؤهل للقيادة"
+    if "غير" in text:
+        return "غير مؤهل للقيادة"
+    if text in QUALIFICATION_OPTIONS:
+        return text
+    return "مؤهل للقيادة"
+
+def _normalize_party_qualification_rows(rows):
+    cleaned = []
+    changed = False
+    for row in rows or []:
+        item = dict(row) if isinstance(row, dict) else {}
+        current = item.get("التأهيل", "")
+        normalized = normalize_driving_qualification(current)
+        if current != normalized:
+            changed = True
+        item["التأهيل"] = normalized
+        cleaned.append(item)
+    return cleaned, changed
+
+def _page1_cell(value):
+    if value is None:
+        return ""
+    try:
+        missing = pd.isna(value)
+        if bool(missing) and getattr(missing, "shape", None) is None:
+            return ""
+    except (TypeError, ValueError):
+        pass
+    text = str(value)
+    if text.strip().lower() in ("none", "nan"):
+        return ""
+    return text
 
 def _frame_records(frame):
     rows = []
@@ -170,7 +214,7 @@ def _records_from_dynamic_parties(vault):
             id_no.strip(),
             role.strip() and role != "سائق",
             health.strip() and health != "سليم",
-            qual.strip() and qual != "مؤهل (رخصة سارية)",
+            qual.strip() and qual not in ("مؤهل (رخصة سارية)", "مؤهل للقيادة"),
         ))
         if meaningful:
             rows.append({
@@ -2689,8 +2733,22 @@ with tab1:
         ("التأمين", "التأمين"),
     ]
     st.subheader("جدول معلومات أطراف الحادث")
+    _normalized_parties, _qual_changed = _normalize_party_qualification_rows(st.session_state.get("parties"))
+    st.session_state.parties = _normalized_parties
+    _saved_party_records, _saved_qual_changed = _normalize_party_qualification_rows(st.session_state.get("p1_parties_records"))
+    if _saved_qual_changed:
+        st.session_state.p1_parties_records = _saved_party_records
+    _editor_parties = st.session_state.get("p1_parties_editor")
+    if isinstance(_editor_parties, pd.DataFrame) and "التأهيل" in _editor_parties.columns:
+        st.session_state.p1_parties_editor = _editor_parties.copy()
+        st.session_state.p1_parties_editor["التأهيل"] = st.session_state.p1_parties_editor["التأهيل"].apply(normalize_driving_qualification)
+    elif _qual_changed or _saved_qual_changed:
+        st.session_state.pop("p1_parties_editor", None)
+    parties_df = pd.DataFrame(st.session_state.parties)
+    if "التأهيل" in parties_df.columns:
+        parties_df["التأهيل"] = parties_df["التأهيل"].apply(normalize_driving_qualification)
     parties_df = st.data_editor(
-        pd.DataFrame(st.session_state.parties),
+        parties_df,
         key="p1_parties_editor",
         num_rows="dynamic",
         use_container_width=True,
@@ -2701,7 +2759,12 @@ with tab1:
             "الهوية": st.column_config.TextColumn("الهوية / الإقامة"),
             "المشاركة": st.column_config.SelectboxColumn("نوع المشاركة", options=["", "سائق", "راكب", "مشاة"]),
             "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=["", "سليم", "مصاب", "متوفي"]),
-            "التأهيل": st.column_config.TextColumn("تأهيل للقيادة"),
+            "التأهيل": st.column_config.SelectboxColumn(
+                "تأهيل للقيادة",
+                options=QUALIFICATION_OPTIONS,
+                default="مؤهل للقيادة",
+                required=True,
+            ),
         }
     )
     st.divider()
@@ -4558,10 +4621,10 @@ with tab5:
     vehicles_head = "".join(f"<th>{label}</th>" for _key, label in _vehicle_columns)
     parties_rows = ""
     for _, row in parties_df.iterrows():
-        parties_rows += "<tr>" + "".join(f"<td>{row.get(key, '')}</td>" for key, _label in _party_columns) + "</tr>"
+        parties_rows += "<tr>" + "".join(f"<td>{_page1_cell(row.get(key, ''))}</td>" for key, _label in _party_columns) + "</tr>"
     vehicles_rows = ""
     for _, row in vehicles_df.iterrows():
-        vehicles_rows += "<tr>" + "".join(f"<td>{row.get(key, '')}</td>" for key, _label in _vehicle_columns) + "</tr>"
+        vehicles_rows += "<tr>" + "".join(f"<td>{_page1_cell(row.get(key, ''))}</td>" for key, _label in _vehicle_columns) + "</tr>"
     results_html = "<br>".join(html.escape(line) for line in acc_results.split("\n") if line.strip())
     acc_how_html = html.escape(acc_how or "").replace("\n", "<br>")
     criminal_details_html = ""
