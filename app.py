@@ -5004,15 +5004,15 @@ _single_img = "width:100%; max-height:138mm; height:auto; object-fit:contain; di
 if safe_sketch_src and safe_aerial_src and st.session_state.get("aerial_place") == "beside":
     sketch_figure = (
         '<div style="display:flex; justify-content:space-between; width:100%; align-items:stretch;">'
-        f'<div style="width:49%;">{_framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "64mm", True)}</div>'
-        f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "64mm", True)}</div>'
+        f'<div style="width:49%;">{_framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "70mm", True)}</div>'
+        f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "70mm", True)}</div>'
         "</div>"
     )
 elif safe_sketch_src and safe_aerial_src:
     sketch_figure = (
-        _framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "64mm", True)
+        _framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "70mm", True)
         + '<div style="height:2mm;"></div>'
-        + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "64mm", True)
+        + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "70mm", True)
     )
 elif safe_aerial_src:
     sketch_figure = (
@@ -5074,6 +5074,10 @@ for _, row in vehicles_df.iterrows():
     vehicles_rows += "<tr>" + "".join(
         f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>" for key, _label in _vehicle_columns
     ) + "</tr>"
+_p1_party_count = int(parties_df.shape[0]) if isinstance(parties_df, pd.DataFrame) else 0
+p1_page_class = "page report-page page-flow page-p1"
+if _p1_party_count > 3:
+    p1_page_class += " compact-rows"
 acc_num = _page1_cell(acc_num)
 acc_date = _page1_cell(acc_date)
 acc_time = _page1_cell(acc_time)
@@ -5328,6 +5332,70 @@ full_report_html = f"""
         border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 15px; display: inline-block; margin-bottom: 25px;
     }}
     .table-scroll {{ width: 100%; max-width: 100%; }}
+    /* === توزيع الصفحة الأولى الموزون (يملأ الورقة بدون فراغ سفلي) === */
+    .page-p1 .p1-body-flex {{
+        flex: 1 1 auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        padding: 3mm 0 7mm 0 !important;
+        min-height: 0 !important;
+    }}
+    .page-p1:not(.compact-rows) .p1-section-group th {{
+        padding: 9px 8px !important;
+        font-size: 12.5px !important;
+    }}
+    .page-p1:not(.compact-rows) .p1-section-group td {{
+        padding: 12px 8px !important;
+        font-size: 12.5px !important;
+    }}
+    .page-p1:not(.compact-rows) .section-title,
+    .page-p1:not(.compact-rows) .badge-title,
+    .page-p1:not(.compact-rows) .section-badge {{
+        margin-bottom: 6px !important;
+        padding: 5px 18px !important;
+    }}
+    .page-p1.compact-rows .p1-section-group th,
+    .page-p1.compact-rows .p1-section-group td {{
+        padding: 5px 6px !important;
+        font-size: 11px !important;
+    }}
+    /* === توزيع الصفحة الثالثة ومساحة التوقيع والختم الرسمي === */
+    .page-p3 .p3-body-flex {{
+        flex: 1 1 auto !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: space-between !important;
+        padding: 4mm 0 7mm 0 !important;
+        min-height: 0 !important;
+    }}
+    .page-p3 table th {{
+        padding: 8px 10px !important;
+        font-size: 13px !important;
+    }}
+    .page-p3 table td {{
+        padding: 10px 12px !important;
+        font-size: 12.5px !important;
+        line-height: 1.75 !important;
+    }}
+    .page-p3 td.actions-body {{
+        min-height: 28mm !important;
+        height: 28mm !important;
+        line-height: 1.85 !important;
+        padding: 10px 14px !important;
+        vertical-align: top !important;
+    }}
+    .page-p3 tr.sig-row td {{
+        height: 28mm !important;
+        min-height: 28mm !important;
+        vertical-align: top !important;
+        padding-top: 8px !important;
+    }}
+    .page-p1 > .official-page-footer,
+    .page-p3 > .official-page-footer {{
+        margin-top: 0 !important;
+        flex-shrink: 0 !important;
+    }}
     @media screen {{
         html, body, .report-viewport {{ overflow: auto; }}
         .report-sheet, .page, .report-page, .a4-page {{
@@ -5345,6 +5413,11 @@ full_report_html = f"""
         th, td {{
             white-space: normal; overflow-wrap: anywhere; word-break: break-word;
         }}
+        .page.page-p1, .page.page-p3 {{
+            height: 297mm !important;
+            max-height: 297mm !important;
+            overflow: hidden !important;
+        }}
     }}
     @media screen and (max-width: 768px) {{
         .report-viewport {{ overflow: auto; width: 100%; max-width: none; }}
@@ -5359,6 +5432,11 @@ full_report_html = f"""
         }}
         th, td {{
             white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+        }}
+        .page.page-p1, .page.page-p3 {{
+            height: 297mm !important;
+            max-height: 297mm !important;
+            overflow: hidden !important;
         }}
     }}
     @media print {{
@@ -5458,6 +5536,68 @@ full_report_html = f"""
         .photo-annex .photo-card, .photo-annex .photo-meta {{ overflow: visible; max-height: none; }}
         .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
         .header-logo img {{ height: 110px; max-width: 120px; }}
+        .page-p1 .p1-body-flex {{
+            flex: 1 1 auto !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            padding: 3mm 0 7mm 0 !important;
+            min-height: 0 !important;
+        }}
+        .page-p1:not(.compact-rows) .p1-section-group th {{
+            padding: 9px 8px !important;
+            font-size: 12.5px !important;
+        }}
+        .page-p1:not(.compact-rows) .p1-section-group td {{
+            padding: 12px 8px !important;
+            font-size: 12.5px !important;
+        }}
+        .page-p1:not(.compact-rows) .section-title,
+        .page-p1:not(.compact-rows) .badge-title,
+        .page-p1:not(.compact-rows) .section-badge {{
+            margin-bottom: 6px !important;
+            padding: 5px 18px !important;
+        }}
+        .page-p1.compact-rows .p1-section-group th,
+        .page-p1.compact-rows .p1-section-group td {{
+            padding: 5px 6px !important;
+            font-size: 11px !important;
+        }}
+        .page-p3 .p3-body-flex {{
+            flex: 1 1 auto !important;
+            display: flex !important;
+            flex-direction: column !important;
+            justify-content: space-between !important;
+            padding: 4mm 0 7mm 0 !important;
+            min-height: 0 !important;
+        }}
+        .page-p3 table th {{
+            padding: 8px 10px !important;
+            font-size: 13px !important;
+        }}
+        .page-p3 table td {{
+            padding: 10px 12px !important;
+            font-size: 12.5px !important;
+            line-height: 1.75 !important;
+        }}
+        .page-p3 td.actions-body {{
+            min-height: 28mm !important;
+            height: 28mm !important;
+            line-height: 1.85 !important;
+            padding: 10px 14px !important;
+            vertical-align: top !important;
+        }}
+        .page-p3 tr.sig-row td {{
+            height: 28mm !important;
+            min-height: 28mm !important;
+            vertical-align: top !important;
+            padding-top: 8px !important;
+        }}
+        .page-p1 > .official-page-footer,
+        .page-p3 > .official-page-footer {{
+            margin-top: 0 !important;
+            flex-shrink: 0 !important;
+        }}
     }}
     {page_number_css}
     {OFFICIAL_A4_HIGH_CONTRAST_CSS}
@@ -5482,30 +5622,38 @@ setTimeout(fitReportFrame, 400);
 <body class="{body_class}">
     <div class="report-viewport">
     <div class="report-sheet">
-    <div class="page report-page page-flow">
+    <div class="{p1_page_class}">
         {build_header()}
-        <div class="section-badge">تقرير حادث مروري</div>
-        <div class="section-badge badge-sub">معلومات الحادث</div>
-        <div class="table-scroll"><table>
-            <tr>
-                <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
-                <th>نوع الحادث</th><th>عدد الإصابات</th><th>عدد الوفيات</th><th>الطقس</th><th>سبب الحادث</th>
-            </tr>
-            <tr>
-                <td>{acc_num}</td><td>{acc_date}</td><td>{acc_time}</td><td>{acc_loc}</td>
-                <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
-            </tr>
-        </table></div>
-        <div class="section-badge badge-sub">معلومات أطراف الحادث</div>
-        <div class="table-scroll"><table>
-            <tr>{parties_head}</tr>
-            {parties_rows}
-        </table></div>
-        <div class="section-badge badge-sub">معلومات المركبات</div>
-        <div class="table-scroll"><table>
-            <tr>{vehicles_head}</tr>
-            {vehicles_rows}
-        </table></div>
+        <div class="p1-body-flex">
+            <div class="p1-section-group">
+                <div class="section-badge">تقرير حادث مروري</div>
+                <div class="section-badge badge-sub">معلومات الحادث</div>
+                <div class="table-scroll"><table>
+                    <tr>
+                        <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
+                        <th>نوع الحادث</th><th>عدد الإصابات</th><th>عدد الوفيات</th><th>الطقس</th><th>سبب الحادث</th>
+                    </tr>
+                    <tr>
+                        <td>{acc_num}</td><td>{acc_date}</td><td>{acc_time}</td><td>{acc_loc}</td>
+                        <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
+                    </tr>
+                </table></div>
+            </div>
+            <div class="p1-section-group">
+                <div class="section-badge badge-sub">معلومات أطراف الحادث</div>
+                <div class="table-scroll"><table>
+                    <tr>{parties_head}</tr>
+                    {parties_rows}
+                </table></div>
+            </div>
+            <div class="p1-section-group">
+                <div class="section-badge badge-sub">معلومات المركبات</div>
+                <div class="table-scroll"><table>
+                    <tr>{vehicles_head}</tr>
+                    {vehicles_rows}
+                </table></div>
+            </div>
+        </div>
         {official_footer_html}
     </div>
     <div class="page report-page page-flow">
@@ -5517,28 +5665,30 @@ setTimeout(fitReportFrame, 400);
         {liability_html}
         {official_footer_html}
     </div>
-    <div class="page report-page page-three page-flow">
+    <div class="page report-page page-three page-flow page-p3">
         {build_header()}
-        <div class="table-scroll"><table>
-            <tr><th>طبيعة وتصنيف الحادث</th></tr>
-            <tr><td>{html.escape(accident_nature_val or "")}</td></tr>
-        </table></div>
-        <div class="table-scroll"><table>
-            <tr><th>الحقوق الخاصة والعامة</th></tr>
-            <tr><td>{html.escape(rights_status_val or "")}</td></tr>
-        </table></div>
-        <div class="table-scroll"><table>
-            <tr><th>الإجراءات المتخذة</th></tr>
-            <tr><td>{final_actions_html}</td></tr>
-        </table></div>
-        {criminal_details_html}
-        <div class="table-scroll"><table class="sign-table">
-            <tr><th colspan="3">معد التقرير</th></tr>
-            <tr><th>إجراءات الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
-            <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
-            <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
-            <tr><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
-        </table></div>
+        <div class="p3-body-flex">
+            <div class="table-scroll"><table>
+                <tr><th>طبيعة وتصنيف الحادث</th></tr>
+                <tr><td>{html.escape(accident_nature_val or "")}</td></tr>
+            </table></div>
+            <div class="table-scroll"><table>
+                <tr><th>الحقوق الخاصة والعامة</th></tr>
+                <tr><td>{html.escape(rights_status_val or "")}</td></tr>
+            </table></div>
+            <div class="table-scroll"><table>
+                <tr><th>الإجراءات المتخذة</th></tr>
+                <tr><td class="actions-body">{final_actions_html}</td></tr>
+            </table></div>
+            {criminal_details_html}
+            <div class="table-scroll"><table class="sign-table">
+                <tr><th colspan="3">معد التقرير</th></tr>
+                <tr><th>إجراءات الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
+                <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
+                <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
+                <tr class="sig-row"><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
+            </table></div>
+        </div>
         {official_footer_html}
     </div>
     {sketch_page_html}
