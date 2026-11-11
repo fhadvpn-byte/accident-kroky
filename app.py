@@ -1997,9 +1997,10 @@ def _reset_new_accident():
     reset_page1_payload()
     st.session_state["_restore_perm_sidebar"] = True
     try:
-        adopted = SAVED_IMAGES_DIR / "adopted_sketch.png"
-        if adopted.is_file():
-            adopted.unlink()
+        for adopted_name in ("adopted_sketch.png", "adopted_sketch_uri.txt"):
+            adopted = SAVED_IMAGES_DIR / adopted_name
+            if adopted.is_file():
+                adopted.unlink()
     except OSError:
         pass
 
@@ -3046,21 +3047,6 @@ st.markdown("""
     [data-testid="stBaseButton-secondary"] p,
     [data-testid="stBaseButton-primary"] p {
         color: #0a192f !important;
-    }
-    [class*="st-key-adopt-hidden"],
-    [class*="st-key-adopt_sketch_form"],
-    [class*="st-key-adopted_sketch_data"],
-    [class*="st-key-adopt_submit"],
-    [data-testid="stForm"]:has([class*="st-key-adopted_sketch_data"]) {
-        display: none !important;
-        height: 0 !important;
-        min-height: 0 !important;
-        max-height: 0 !important;
-        margin: 0 !important;
-        padding: 0 !important;
-        overflow: hidden !important;
-        border: 0 !important;
-        visibility: hidden !important;
     }
     iframe[title="st.iframe"] {
         background: #0d2137 !important;
@@ -4151,747 +4137,505 @@ def _sketch_availability_control(widget_key, on_change):
     )
     st.session_state.include_sketch = st.session_state.get(widget_key) == _SKETCH_ATTACH_LABEL
 
-with tab4:
-    st.subheader("🎨 محرر الكروكي التفاعلي (Fabric.js)")
-    _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
-    _fabric_html = r'''
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="utf-8"/>
-<link href="https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700&display=swap" rel="stylesheet"/>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js"></script>
-<style>
-  * { box-sizing: border-box; }
-  body { margin: 0; background: #0a192f; color: #e2eafc; font-family: Tajawal, sans-serif; }
-  html, body { overflow-x: hidden; max-width: 100%; }
-  .editor { background: #0b1220; border: 1px solid rgba(43, 147, 72, 0.65); border-radius: 14px; overflow: hidden; max-width: 100%; box-shadow: 0 0 16px rgba(0, 242, 254, 0.18); }
-  header { background: #2b9348; color: #fff; display: flex; gap: 8px; align-items: center; padding: 8px 12px; flex-wrap: wrap; }
-  header strong { margin-left: auto; font-size: 16px; color: #fff; }
-  header button { background: #ffffff; color: #14301c; border: 0; border-radius: 8px; padding: 6px 10px; font-size: 16px; cursor: pointer; font-family: inherit; font-weight: 700; }
-  header button:hover { transform: scale(1.06); }
-  .stage { display: flex; justify-content: center; padding: 12px 8px 4px; background: #0b1220; }
-  .canvas-wrap { background: #111; border: 1px solid #2b9348; border-radius: 8px; width: 600px; height: 550px; max-width: 100%; overflow: hidden; }
-  .canvas-wrap .canvas-container,
-  .canvas-wrap canvas { display: block !important; visibility: visible !important; opacity: 1 !important; max-width: 100%; }
-  .label { margin: 6px 12px 2px; color: #e2eafc; font-size: 13px; font-weight: 700; }
-  .carousel, .palette { display: flex; flex-wrap: wrap; gap: 5px; overflow: visible; padding: 4px 8px 8px; }
-  .carousel button, .palette button { background: #f8f9fa; color: #0a192f; border: 2px solid #2b9348; border-radius: 12px; padding: 8px 12px; cursor: pointer; font-family: inherit; font-weight: 700; transition: transform 0.2s ease; }
-  @media (max-width: 768px) {
-    .carousel button, .palette button { padding: 6px 8px; font-size: 12px; }
-  }
-  .carousel button:hover, .palette button:hover { transform: scale(1.05); }
-  .carousel button.active { background: #2b9348; color: #fff; border-color: #2b9348; }
-  #adopt { display: block; width: calc(100% - 24px); margin: 6px 12px 12px; background: #2b9348; color: #fff; border: 0; border-radius: 10px; padding: 12px; font-size: 18px; font-weight: 700; cursor: pointer; font-family: inherit; }
-</style>
-</head>
-<body>
-<div class="editor">
-<header>
-  <strong>محرر الكروكي التنظيمي</strong>
-  <button type="button" id="del" title="حذف المحدد">🗑️</button>
-  <button type="button" id="rr" title="تدوير يمين">↻</button>
-  <button type="button" id="rl" title="تدوير يسار">↺</button>
-  <button type="button" id="clear" title="مسح اللوحة">🔄</button>
-  <button type="button" id="zin" title="تكبير">🔍+</button>
-  <button type="button" id="zout" title="تصغير">🔍-</button>
-</header>
-<div class="stage"><div class="canvas-wrap"><canvas id="c" width="600" height="550"></canvas></div></div>
-<div class="label">قوالب الطريق</div>
-<div class="carousel" id="roads"></div>
-<div class="label">مكتبة المركبات والرموز</div>
-<div class="palette" id="palette"></div>
-<button type="button" id="adopt">💾 اعتماد الكروكي في التقرير</button>
-</div>
-<script>
-const ROADS = [
-  ["تقاطع T بجزيرة", "t"],
-  ["تقاطع رباعي", "cross"],
-  ["مزدوج بجزيرة", "dual"],
-  ["مفرد مسارين", "single"],
-  ["دوار", "round"],
-  ["طريق جبلي منحني", "curve"],
-  ["يوتيرن (U-Turn)", "uturn"]
-];
-const ROAD_PROPS = [
-  ["شجر", "tree"],
-  ["عمود إنارة", "lamp"],
-  ["حفرة في الطريق", "pothole"]
-];
-const ITEMS = [
-  ["سيدان أخضر", "sedan-green"],
-  ["سيدان أبيض", "sedan-white"],
-  ["دفع رباعي", "suv"],
-  ["وانيت غمارتين", "pickup"],
-  ["شاحنة", "truck"],
-  ["دراجة", "moto"],
-  ["آثار فرامل", "skid"],
-  ["نقطة اصطدام", "hit"],
-  ["سهم اتجاه", "arrow"]
-];
-for (let badge = 1; badge <= 10; badge += 1) ITEMS.push([String(badge), "b" + badge]);
-ITEMS.push(["شمال", "north"]);
-let canvas;
-let currentRoad = "t";
+SKETCH_DATA_URL_KEY = "sketch_data_url"
+SKETCH_URI_PATH = SAVED_IMAGES_DIR / "adopted_sketch_uri.txt"
 
-function mark(obj) {
-  obj.set({ selectable: false, evented: false, hoverCursor: "default", name: "road-bg", objectCaching: false });
-  return obj;
-}
-const ISO = { sx: 0.84, sy: 0.86, sh: 0.12, sz: 0.55, ox: 22, oy: 34 };
-const SIDEWALK = "#d9d1c4";
-const ASPH = "#3c434a";
-const YEL = "#f0c400";
-const ROAD_Z = 1.6;
-const ISLAND_Z = 10;
-function darken(hex, amt) {
-  const n = parseInt(hex.slice(1), 16);
-  const ch = function(v) { return Math.max(0, Math.min(255, Math.round(v * amt))); };
-  const r = ch((n >> 16) & 255), g = ch((n >> 8) & 255), b = ch(n & 255);
-  return "#" + [r, g, b].map(function(v) { return ("0" + v.toString(16)).slice(-2); }).join("");
-}
-function lighten(hex, amt) {
-  const n = parseInt(hex.slice(1), 16);
-  const ch = function(v) { return Math.max(0, Math.min(255, Math.round(v + (255 - v) * amt))); };
-  const r = ch((n >> 16) & 255), g = ch((n >> 8) & 255), b = ch(n & 255);
-  return "#" + [r, g, b].map(function(v) { return ("0" + v.toString(16)).slice(-2); }).join("");
-}
-function isoPoint(x, y, z) {
-  return {
-    x: ISO.ox + x * ISO.sx + y * ISO.sh,
-    y: ISO.oy + y * ISO.sy - (z || 0) * ISO.sz
-  };
-}
-function tone(poly, light, mid, dark) {
-  poly.set("fill", new fabric.Gradient({
-    type: "linear",
-    coords: { x1: 0, y1: 0, x2: Math.max(poly.width || 1, 1), y2: Math.max(poly.height || 1, 1) },
-    colorStops: [
-      { offset: 0, color: light },
-      { offset: 0.48, color: mid },
-      { offset: 1, color: dark }
-    ]
-  }));
-  return poly;
-}
-function face(pts, fill) {
-  const poly = mark(new fabric.Polygon(pts.map(function(p) {
-    return isoPoint(p[0], p[1], p[2] || 0);
-  }), { fill: fill, stroke: null, strokeWidth: 0, objectCaching: false }));
-  if (fill === ASPH) return tone(poly, "#66707a", "#343b42", "#59626b");
-  return poly;
-}
-function softShadow(pts) {
-  return mark(new fabric.Polygon(pts.map(function(p) {
-    const q = isoPoint(p[0], p[1], 0);
-    return { x: q.x + 5, y: q.y + 7 };
-  }), { fill: "rgba(0,0,0,0.24)", stroke: null, objectCaching: false }));
-}
-function pushAll(parts, items) {
-  items.forEach(function(obj) { parts.push(obj); });
-}
-function ground() {
-  const pts = [[0, 0], [600, 0], [600, 550], [0, 550]];
-  const top = face(pts.map(function(p) { return [p[0], p[1], 0]; }), SIDEWALK);
-  tone(top, "#f6f1e8", "#ddd4c6", "#c9bfb1");
-  return [softShadow(pts), top];
-}
-function asphalt(x, y, w, h) {
-  return [face([[x, y, ROAD_Z], [x + w, y, ROAD_Z], [x + w, y + h, ROAD_Z], [x, y + h, ROAD_Z]], ASPH)];
-}
-function island(x, y, w, h) {
-  const top = face([[x, y, ISLAND_Z], [x + w, y, ISLAND_Z], [x + w, y + h, ISLAND_Z], [x, y + h, ISLAND_Z]], "#e6dfd2");
-  tone(top, "#fbf7f0", "#e6dfd2", "#cfc6b6");
-  top.set({ stroke: "#b7ad9c", strokeWidth: 1 });
-  return [softShadow([[x, y], [x + w, y], [x + w, y + h], [x, y + h]]), top];
-}
-function rule(x1, y1, x2, y2, color, width, z) {
-  const a = isoPoint(x1, y1, z == null ? ROAD_Z + 0.4 : z);
-  const b = isoPoint(x2, y2, z == null ? ROAD_Z + 0.4 : z);
-  return mark(new fabric.Line([a.x, a.y, b.x, b.y], { stroke: color, strokeWidth: width, strokeLineCap: "butt", objectCaching: false }));
-}
-function ringPoints(cx, cy, r, z) {
-  const pts = [];
-  for (let i = 0; i < 18; i++) {
-    const t = (i / 18) * Math.PI * 2;
-    pts.push([cx + Math.cos(t) * r, cy + Math.sin(t) * r, z]);
-  }
-  return pts;
-}
-function asphaltDisk(cx, cy, r) {
-  return [face(ringPoints(cx, cy, r, ROAD_Z), ASPH)];
-}
-function islandDisk(cx, cy, r) {
-  const ring = ringPoints(cx, cy, r, ISLAND_Z);
-  const top = face(ring, "#e6dfd2");
-  tone(top, "#fbf7f0", "#e6dfd2", "#cfc6b6");
-  top.set({ stroke: YEL, strokeWidth: 3 });
-  return [softShadow(ring.map(function(p) { return [p[0], p[1]]; })), top];
-}
-function vDashes(x, y0, y1) {
-  const out = [];
-  for (let y = y0; y < y1 - 2; y += 18) out.push(rule(x, y, x, Math.min(y1, y + 10), "#ffffff", 2));
-  return out;
-}
-function hDashes(y, x0, x1) {
-  const out = [];
-  for (let x = x0; x < x1 - 2; x += 18) out.push(rule(x, y, Math.min(x1, x + 10), y, "#ffffff", 2));
-  return out;
-}
-function roadT() {
-  const parts = [];
-  pushAll(parts, ground());
-  pushAll(parts, asphalt(168, 0, 264, 550));
-  pushAll(parts, asphalt(0, 178, 168, 194));
-  pushAll(parts, island(18, 262, 110, 26));
-  parts.push(rule(168, 0, 168, 178, YEL, 4));
-  parts.push(rule(168, 372, 168, 550, YEL, 4));
-  parts.push(rule(432, 0, 432, 550, YEL, 4));
-  parts.push(rule(292, 0, 292, 550, YEL, 3));
-  parts.push(rule(304, 0, 304, 550, YEL, 3));
-  parts.push(rule(0, 178, 168, 178, YEL, 4));
-  parts.push(rule(0, 372, 168, 372, YEL, 4));
-  parts.push(rule(18, 262, 128, 262, YEL, 3, ISLAND_Z + 0.6));
-  parts.push(rule(18, 288, 128, 288, YEL, 3, ISLAND_Z + 0.6));
-  parts.push.apply(parts, vDashes(230, 8, 170));
-  parts.push.apply(parts, vDashes(230, 380, 542));
-  parts.push.apply(parts, vDashes(368, 8, 170));
-  parts.push.apply(parts, vDashes(368, 380, 542));
-  parts.push.apply(parts, hDashes(220, 8, 158));
-  parts.push.apply(parts, hDashes(330, 8, 158));
-  return parts;
-}
-function roadCross() {
-  const parts = [];
-  pushAll(parts, ground());
-  pushAll(parts, asphalt(168, 0, 264, 550));
-  pushAll(parts, asphalt(0, 178, 600, 194));
-  pushAll(parts, island(18, 262, 110, 26));
-  pushAll(parts, island(472, 262, 110, 26));
-  parts.push(rule(168, 0, 168, 178, YEL, 4));
-  parts.push(rule(168, 372, 168, 550, YEL, 4));
-  parts.push(rule(432, 0, 432, 178, YEL, 4));
-  parts.push(rule(432, 372, 432, 550, YEL, 4));
-  parts.push(rule(292, 0, 292, 178, YEL, 3));
-  parts.push(rule(304, 0, 304, 178, YEL, 3));
-  parts.push(rule(292, 372, 292, 550, YEL, 3));
-  parts.push(rule(304, 372, 304, 550, YEL, 3));
-  parts.push(rule(0, 178, 168, 178, YEL, 4));
-  parts.push(rule(432, 178, 600, 178, YEL, 4));
-  parts.push(rule(0, 372, 168, 372, YEL, 4));
-  parts.push(rule(432, 372, 600, 372, YEL, 4));
-  parts.push(rule(18, 262, 128, 262, YEL, 3, ISLAND_Z + 0.6));
-  parts.push(rule(18, 288, 128, 288, YEL, 3, ISLAND_Z + 0.6));
-  parts.push(rule(472, 262, 582, 262, YEL, 3, ISLAND_Z + 0.6));
-  parts.push(rule(472, 288, 582, 288, YEL, 3, ISLAND_Z + 0.6));
-  parts.push.apply(parts, vDashes(230, 8, 170));
-  parts.push.apply(parts, vDashes(230, 380, 542));
-  parts.push.apply(parts, vDashes(368, 8, 170));
-  parts.push.apply(parts, vDashes(368, 380, 542));
-  parts.push.apply(parts, hDashes(220, 8, 158));
-  parts.push.apply(parts, hDashes(220, 442, 592));
-  parts.push.apply(parts, hDashes(330, 8, 158));
-  parts.push.apply(parts, hDashes(330, 442, 592));
-  return parts;
-}
-function roadDual() {
-  const parts = [];
-  pushAll(parts, ground());
-  pushAll(parts, asphalt(120, 0, 360, 550));
-  pushAll(parts, island(282, 0, 36, 550));
-  parts.push(rule(120, 0, 120, 550, YEL, 4));
-  parts.push(rule(480, 0, 480, 550, YEL, 4));
-  parts.push(rule(282, 0, 282, 550, YEL, 3, ISLAND_Z + 0.6));
-  parts.push(rule(318, 0, 318, 550, YEL, 3, ISLAND_Z + 0.6));
-  parts.push.apply(parts, vDashes(201, 8, 542));
-  parts.push.apply(parts, vDashes(399, 8, 542));
-  return parts;
-}
-function roadSingle() {
-  const parts = [];
-  pushAll(parts, ground());
-  pushAll(parts, asphalt(190, 0, 220, 550));
-  parts.push(rule(190, 0, 190, 550, YEL, 4));
-  parts.push(rule(410, 0, 410, 550, YEL, 4));
-  parts.push.apply(parts, vDashes(300, 8, 542));
-  return parts;
-}
-function roadRound() {
-  const parts = [];
-  pushAll(parts, ground());
-  pushAll(parts, asphalt(250, 0, 100, 550));
-  pushAll(parts, asphalt(0, 225, 600, 100));
-  pushAll(parts, asphaltDisk(300, 275, 118));
-  pushAll(parts, islandDisk(300, 275, 54));
-  parts.push(rule(250, 0, 250, 160, YEL, 4));
-  parts.push(rule(350, 0, 350, 160, YEL, 4));
-  parts.push(rule(250, 390, 250, 550, YEL, 4));
-  parts.push(rule(350, 390, 350, 550, YEL, 4));
-  parts.push(rule(0, 225, 180, 225, YEL, 4));
-  parts.push(rule(0, 325, 180, 325, YEL, 4));
-  parts.push(rule(420, 225, 600, 225, YEL, 4));
-  parts.push(rule(420, 325, 600, 325, YEL, 4));
-  parts.push.apply(parts, vDashes(300, 8, 150));
-  parts.push.apply(parts, vDashes(300, 400, 542));
-  parts.push.apply(parts, hDashes(275, 8, 170));
-  parts.push.apply(parts, hDashes(275, 430, 592));
-  return parts;
-}
-function sampleCurve() {
-  function cubic(a, b, c, d, t) {
-    const u = 1 - t;
-    return [
-      u * u * u * a[0] + 3 * u * u * t * b[0] + 3 * u * t * t * c[0] + t * t * t * d[0],
-      u * u * u * a[1] + 3 * u * u * t * b[1] + 3 * u * t * t * c[1] + t * t * t * d[1]
-    ];
-  }
-  const spans = [
-    [[150, 8], [230, 130], [120, 230], [270, 330]],
-    [[270, 330], [420, 430], [430, 470], [470, 544]]
-  ];
-  const samples = [];
-  spans.forEach(function(s, si) {
-    const start = si === 0 ? 0 : 1;
-    for (let i = start; i <= 18; i++) samples.push(cubic(s[0], s[1], s[2], s[3], i / 18));
-  });
-  return samples;
-}
-function roadCurve() {
-  const samples = sampleCurve();
-  const left = [];
-  const right = [];
-  const half = 54;
-  for (let i = 0; i < samples.length; i++) {
-    const p0 = samples[Math.max(0, i - 1)];
-    const p1 = samples[Math.min(samples.length - 1, i + 1)];
-    let dx = p1[0] - p0[0];
-    let dy = p1[1] - p0[1];
-    const len = Math.sqrt(dx * dx + dy * dy) || 1;
-    dx /= len;
-    dy /= len;
-    left.push([samples[i][0] - dy * half, samples[i][1] + dx * half]);
-    right.push([samples[i][0] + dy * half, samples[i][1] - dx * half]);
-  }
-  const ribbon = left.concat(right.slice().reverse()).map(function(p) { return [p[0], p[1], ROAD_Z]; });
-  const parts = [];
-  pushAll(parts, ground());
-  parts.push(face(ribbon, ASPH));
-  for (let i = 0; i < left.length - 1; i++) {
-    parts.push(rule(left[i][0], left[i][1], left[i + 1][0], left[i + 1][1], YEL, 3));
-    parts.push(rule(right[i][0], right[i][1], right[i + 1][0], right[i + 1][1], YEL, 3));
-    if (i % 2 === 0) {
-      const a = samples[i];
-      const b = samples[Math.min(samples.length - 1, i + 1)];
-      parts.push(rule(a[0], a[1], b[0], b[1], "#ffffff", 2));
-    }
-  }
-  return parts;
-}
-function roadUturn() {
-  const parts = [];
-  pushAll(parts, ground());
-  pushAll(parts, asphalt(130, 0, 150, 550));
-  pushAll(parts, asphalt(320, 0, 150, 550));
-  pushAll(parts, asphalt(280, 200, 40, 150));
-  parts.push(face([[280, 200, ROAD_Z], [246, 168, ROAD_Z], [246, 228, ROAD_Z]], ASPH));
-  parts.push(face([[320, 200, ROAD_Z], [354, 168, ROAD_Z], [354, 228, ROAD_Z]], ASPH));
-  parts.push(face([[280, 350, ROAD_Z], [246, 382, ROAD_Z], [246, 322, ROAD_Z]], ASPH));
-  parts.push(face([[320, 350, ROAD_Z], [354, 382, ROAD_Z], [354, 322, ROAD_Z]], ASPH));
-  pushAll(parts, island(280, 0, 40, 168));
-  pushAll(parts, island(280, 382, 40, 168));
-  parts.push(rule(130, 0, 130, 550, YEL, 4));
-  parts.push(rule(470, 0, 470, 550, YEL, 4));
-  parts.push(rule(280, 0, 280, 168, YEL, 3, ISLAND_Z + 0.6));
-  parts.push(rule(320, 0, 320, 168, YEL, 3, ISLAND_Z + 0.6));
-  parts.push(rule(280, 382, 280, 550, YEL, 3, ISLAND_Z + 0.6));
-  parts.push(rule(320, 382, 320, 550, YEL, 3, ISLAND_Z + 0.6));
-  parts.push.apply(parts, vDashes(205, 8, 542));
-  parts.push.apply(parts, vDashes(395, 8, 542));
-  return parts;
-}
-const BUILDERS = { t: roadT, cross: roadCross, dual: roadDual, single: roadSingle, round: roadRound, curve: roadCurve, uturn: roadUturn };
+def _remember_sketch_data_url(data_uri: str, state_key: str = SKETCH_DATA_URL_KEY):
+    st.session_state[state_key] = data_uri
+    try:
+        SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        SKETCH_URI_PATH.write_text(data_uri, encoding="utf-8")
+    except OSError:
+        pass
 
-function applyRoad(kind) {
-  currentRoad = kind;
-  canvas.getObjects().slice().forEach(function(obj) {
-    if (obj.name === "road-bg") canvas.remove(obj);
-  });
-  const parts = BUILDERS[kind]();
-  parts.forEach(function(obj) { canvas.add(obj); });
-  parts.slice().reverse().forEach(function(obj) { canvas.sendToBack(obj); });
-  document.querySelectorAll("#roads button").forEach(function(btn) {
-    btn.classList.toggle("active", btn.dataset.kind === kind);
-  });
-  canvas.requestRenderAll();
-}
-function place(obj, point) {
-  obj.set({
-    left: point ? point.x : 300, top: point ? point.y : 275, originX: "center", originY: "center",
-    cornerColor: "#38b000", borderColor: "#38b000", transparentCorners: false,
-    cornerSize: 9, borderScaleFactor: 2, hasRotatingPoint: true,
-    rotatingPointOffset: 22, centeredRotation: true
-  });
-  canvas.add(obj);
-  canvas.setActiveObject(obj);
-  canvas.requestRenderAll();
-}
-function localIso(x, y, z) {
-  return {
-    x: x * ISO.sx + y * ISO.sh,
-    y: y * ISO.sy - (z || 0) * ISO.sz
-  };
-}
-function localFace(pts, fill) {
-  return new fabric.Polygon(pts.map(function(p) { return localIso(p[0], p[1], p[2] || 0); }), {
-    fill: fill, stroke: null, strokeWidth: 0, objectCaching: false
-  });
-}
-function sheet(x, y, w, h, z, hex) {
-  return tone(localFace([
-    [x, y, z], [x + w, y, z], [x + w, y + h, z], [x, y + h, z]
-  ], hex), lighten(hex, 0.34), hex, darken(hex, 0.74));
-}
-function groundEllipse(cx, cy, rx, ry, fill) {
-  const pts = [];
-  for (let i = 0; i < 14; i++) {
-    const t = (i / 14) * Math.PI * 2;
-    pts.push([cx + Math.cos(t) * rx, cy + Math.sin(t) * ry, 0.2]);
-  }
-  return localFace(pts, fill);
-}
-function wheel(cx, cy) {
-  const c = localIso(cx, cy, 0.4);
-  return new fabric.Ellipse({
-    left: c.x, top: c.y, originX: "center", originY: "center",
-    rx: 5.2, ry: 3.4, fill: "#1c1e22", stroke: "#3d4148", strokeWidth: 1, objectCaching: false
-  });
-}
-function buildVehicle(spec) {
-  const w = spec.w;
-  const len = spec.len;
-  const parts = [groundEllipse(4, 7, w * 0.58, len * 0.44, "rgba(0,0,0,0.30)")];
-  [[-w * 0.36, -len * 0.30], [w * 0.36, -len * 0.30], [-w * 0.36, len * 0.26], [w * 0.36, len * 0.26]].forEach(function(p) {
-    parts.push(wheel(p[0], p[1]));
-  });
-  parts.push(sheet(-w / 2, -len / 2, w, len, 2, spec.color));
-  if (spec.cargo) {
-    const c = spec.cargo;
-    parts.push(sheet(c.x, c.y, c.w, c.h, 4.5, c.color));
-  }
-  if (spec.cab) {
-    const c = spec.cab;
-    parts.push(sheet(c.x, c.y, c.w, c.h, 6, c.color || lighten(spec.color, 0.16)));
-    parts.push(localFace([
-      [c.x + 3, c.y + 3, 6.4],
-      [c.x + c.w - 3, c.y + 3, 6.4],
-      [c.x + c.w - 5, c.y + 12, 6.4],
-      [c.x + 5, c.y + 12, 6.4]
-    ], "#8ecae6"));
-  }
-  return new fabric.Group(parts, { objectCaching: false });
-}
-function buildMoto() {
-  const parts = [groundEllipse(2, 4, 10, 28, "rgba(0,0,0,0.28)")];
-  parts.push(wheel(0, -22));
-  parts.push(wheel(0, 20));
-  parts.push(sheet(-5, -16, 10, 34, 3, "#e76f51"));
-  parts.push(localFace([[-3, -6, 4], [3, -6, 4], [3, 6, 4], [-3, 6, 4]], "#b9d7e6"));
-  return new fabric.Group(parts, { objectCaching: false });
-}
-function isoSkid() {
-  const a = localIso(-8, -48, 0.8);
-  const b = localIso(-8, 48, 0.8);
-  const c = localIso(8, -48, 0.8);
-  const d = localIso(8, 48, 0.8);
-  return new fabric.Group([
-    new fabric.Line([a.x, a.y, b.x, b.y], { stroke: "#1a1a1a", strokeWidth: 5, strokeLineCap: "round" }),
-    new fabric.Line([c.x, c.y, d.x, d.y], { stroke: "#1a1a1a", strokeWidth: 5, strokeLineCap: "round" })
-  ], { objectCaching: false });
-}
-function isoHit() {
-  const pts = [];
-  for (let i = 0; i <= 18; i++) {
-    const t = (i / 18) * Math.PI * 2;
-    pts.push(localIso(Math.cos(t) * 28, Math.sin(t) * 18, 1));
-  }
-  return new fabric.Group([
-    groundEllipse(3, 5, 30, 20, "rgba(0,0,0,0.24)"),
-    groundEllipse(0, 0, 26, 16, "rgba(208,0,0,0.16)"),
-    new fabric.Polyline(pts, { fill: "", stroke: "#d00000", strokeWidth: 4, objectCaching: false })
-  ], { objectCaching: false });
-}
-function isoArrow() {
-  const flat = [[0, -42, 1], [16, -8, 1], [7, -8, 1], [7, 36, 1], [-7, 36, 1], [-7, -8, 1], [-16, -8, 1]];
-  return new fabric.Group([
-    localFace(flat, "rgba(0,0,0,0.28)"),
-    tone(localFace(flat.map(function(p) { return [p[0], p[1], 3]; }), "#1b4332"), "#2f6b4f", "#1b4332", "#0f291c")
-  ], { objectCaching: false });
-}
-function buildTree() {
-  return new fabric.Group([
-    new fabric.Ellipse({ rx: 16, ry: 6, fill: "rgba(0,0,0,0.28)", left: 3, top: 26, originX: "center", originY: "center" }),
-    new fabric.Rect({ width: 8, height: 26, fill: "#6b3e26", left: 0, top: 10, originX: "center", originY: "center", rx: 2, ry: 2 }),
-    new fabric.Circle({ radius: 18, fill: "#1b4332", left: 0, top: -6, originX: "center", originY: "center" }),
-    new fabric.Circle({ radius: 13, fill: "#2d6a4f", left: -7, top: -12, originX: "center", originY: "center" }),
-    new fabric.Circle({ radius: 9, fill: "#52b788", left: 7, top: -14, originX: "center", originY: "center" })
-  ], { objectCaching: false });
-}
-function buildLamp() {
-  return new fabric.Group([
-    new fabric.Ellipse({ rx: 12, ry: 5, fill: "rgba(0,0,0,0.28)", left: 4, top: 28, originX: "center", originY: "center" }),
-    new fabric.Rect({ width: 16, height: 5, fill: "#343a40", left: 0, top: 24, originX: "center", originY: "center", rx: 1, ry: 1 }),
-    new fabric.Rect({ width: 4, height: 42, fill: "#868e96", left: 0, top: 2, originX: "center", originY: "center" }),
-    new fabric.Rect({ width: 20, height: 4, fill: "#495057", left: 8, top: -18, originX: "center", originY: "center" }),
-    new fabric.Circle({ radius: 7, fill: "#ffd60a", stroke: "#e85d04", strokeWidth: 2, left: 16, top: -16, originX: "center", originY: "center" }),
-    new fabric.Circle({ radius: 3, fill: "#fff3bf", left: 16, top: -16, originX: "center", originY: "center" })
-  ], { objectCaching: false });
-}
-function buildPothole() {
-  return new fabric.Group([
-    new fabric.Ellipse({ rx: 24, ry: 14, fill: "rgba(0,0,0,0.28)", left: 2, top: 3, originX: "center", originY: "center" }),
-    new fabric.Ellipse({ rx: 22, ry: 13, fill: "#6c757d", left: 0, top: 0, originX: "center", originY: "center" }),
-    new fabric.Ellipse({ rx: 16, ry: 9, fill: "#212529", left: 0, top: 1, originX: "center", originY: "center" }),
-    new fabric.Ellipse({ rx: 8, ry: 4, fill: "#101214", left: -2, top: 2, originX: "center", originY: "center" }),
-    new fabric.Ellipse({ rx: 4, ry: 2, fill: "rgba(255,255,255,0.22)", left: -5, top: -3, originX: "center", originY: "center" })
-  ], { objectCaching: false });
-}
-function addRoadProp(kind, point) {
-  if (kind === "tree") place(buildTree(), point);
-  else if (kind === "lamp") place(buildLamp(), point);
-  else if (kind === "pothole") place(buildPothole(), point);
-}
-function badgeNumber(kind) {
-  if (!kind || kind.charAt(0) !== "b") return 0;
-  const n = Number(kind.slice(1));
-  return n >= 1 && n <= 10 && String(n) === kind.slice(1) ? n : 0;
-}
-function addBadge(num, point) {
-  const circle = new fabric.Circle({ radius: 16, fill: "#ffffff", stroke: "#9b2226", strokeWidth: 3, originX: "center", originY: "center" });
-  const text = new fabric.Text(String(num), { fontSize: 18, fill: "#9b2226", originX: "center", originY: "center", fontFamily: "Tajawal, sans-serif" });
-  place(new fabric.Group([circle, text]), point);
-}
-function addNorth() {
-  const plate = new fabric.Rect({ width: 54, height: 54, fill: "#ffffff", stroke: "#1b4332", strokeWidth: 2, originX: "center", originY: "center" });
-  const tri = new fabric.Triangle({ width: 22, height: 18, fill: "#1b4332", left: 0, top: -12, originX: "center", originY: "center" });
-  const text = new fabric.Text("شمال", { fontSize: 14, fill: "#1b4332", left: 0, top: 12, originX: "center", originY: "center", fontFamily: "Tajawal, sans-serif" });
-  place(new fabric.Group([plate, tri, text]));
-}
-function addItem(kind, point) {
-  if (kind === "sedan-green") place(buildVehicle({ w: 30, len: 64, z0: 6, z1: 14, color: "#2f9e44", cab: { x: -11, y: -18, w: 22, h: 28, zh: 10 } }));
-  else if (kind === "sedan-white") place(buildVehicle({ w: 30, len: 64, z0: 6, z1: 14, color: "#f4f6f8", cab: { x: -11, y: -18, w: 22, h: 28, zh: 10 } }));
-  else if (kind === "suv") place(buildVehicle({ w: 36, len: 68, z0: 7, z1: 18, color: "#6b705c", cab: { x: -14, y: -20, w: 28, h: 32, zh: 12 } }));
-  else if (kind === "pickup") place(buildVehicle({ w: 32, len: 76, z0: 6, z1: 14, color: "#f4f6f8", cab: { x: -12, y: -36, w: 24, h: 28, zh: 11 }, cargo: { x: -13, y: -4, w: 26, h: 36, zh: 8, color: "#d5dbe2" } }));
-  else if (kind === "truck") place(buildVehicle({ w: 34, len: 96, z0: 6, z1: 16, color: "#d5dbe3", cab: { x: -13, y: -46, w: 26, h: 30, zh: 12, color: "#e4e9ee" }, cargo: { x: -15, y: -12, w: 30, h: 56, zh: 18, color: "#6c757d" } }));
-  else if (kind === "moto") place(buildMoto());
-  else if (kind === "skid") place(isoSkid());
-  else if (kind === "hit") place(isoHit());
-  else if (kind === "arrow") place(isoArrow());
-  else if (badgeNumber(kind)) addBadge(badgeNumber(kind), point);
-  else if (kind === "north") addNorth();
-}
-function rotateActive(delta) {
-  const obj = canvas.getActiveObject();
-  if (!obj || obj.name === "road-bg") return;
-  obj.rotate(((obj.angle || 0) + delta + 360) % 360);
-  canvas.requestRenderAll();
-}
-function pushToParent(dataUrl) {
-  try {
-    const doc = window.parent.document;
-    const areas = Array.prototype.slice.call(doc.querySelectorAll("textarea"));
-    const area = areas.find(function(el) {
-      return (el.getAttribute("aria-label") || "").indexOf("adopt_payload") !== -1;
-    });
-    if (!area) return;
-    const proto = Object.getOwnPropertyDescriptor(window.parent.HTMLTextAreaElement.prototype, "value");
-    proto.set.call(area, dataUrl);
-    area.dispatchEvent(new Event("input", { bubbles: true }));
-    area.dispatchEvent(new Event("change", { bubbles: true }));
-    const root = area.closest("[class*='st-key-adopt-hidden']") || area.closest("form");
-    const btn = root ? root.querySelector("button") : null;
-    if (btn) setTimeout(function() { btn.click(); }, 120);
-  } catch (err) {}
-}
-function adopt() {
-  const dataUrl = canvas.toDataURL({ format: "png", multiplier: 1 });
-  pushToParent(dataUrl);
-}
-function boot() {
-  fabric.Object.prototype.borderColor = "#38b000";
-  fabric.Object.prototype.cornerColor = "#38b000";
-  fabric.Object.prototype.transparentCorners = false;
-  fabric.Object.prototype.cornerSize = 9;
-  fabric.Object.prototype.borderScaleFactor = 2;
-  fabric.Object.prototype.hasRotatingPoint = true;
-  fabric.Object.prototype.rotatingPointOffset = 22;
-  canvas = new fabric.Canvas("c", {
-    width: 600, height: 550, backgroundColor: "#1a2420", preserveObjectStacking: true, selection: true
-  });
-  const roads = document.getElementById("roads");
-  ROADS.forEach(function(pair) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = pair[0];
-    btn.dataset.kind = pair[1];
-    btn.onclick = function() { applyRoad(pair[1]); };
-    roads.appendChild(btn);
-  });
-  ROAD_PROPS.forEach(function(pair) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = pair[0];
-    btn.draggable = true;
-    btn.style.cursor = "grab";
-    btn.onclick = function() {
-      if (btn.dataset.dragging === "1") return;
-      addRoadProp(pair[1]);
-    };
-    btn.addEventListener("dragstart", function(ev) {
-      btn.dataset.dragging = "1";
-      ev.dataTransfer.setData("text/plain", pair[1]);
-      ev.dataTransfer.effectAllowed = "copy";
-    });
-    btn.addEventListener("dragend", function() {
-      setTimeout(function() { delete btn.dataset.dragging; }, 80);
-    });
-    roads.appendChild(btn);
-  });
-  const palette = document.getElementById("palette");
-  ITEMS.forEach(function(pair) {
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.textContent = pair[0];
-    btn.onclick = function() {
-      if (btn.dataset.dragging === "1") return;
-      addItem(pair[1]);
-    };
-    if (badgeNumber(pair[1])) {
-      btn.draggable = true;
-      btn.addEventListener("dragstart", function(ev) {
-        btn.dataset.dragging = "1";
-        ev.dataTransfer.setData("text/plain", pair[1]);
-        ev.dataTransfer.effectAllowed = "copy";
-      });
-      btn.addEventListener("dragend", function() {
-        setTimeout(function() { delete btn.dataset.dragging; }, 80);
-      });
-      btn.style.cursor = "grab";
-    }
-    palette.appendChild(btn);
-  });
-  const board = document.querySelector(".canvas-wrap");
-  board.addEventListener("dragover", function(ev) {
-    ev.preventDefault();
-    if (ev.dataTransfer) ev.dataTransfer.dropEffect = "copy";
-  });
-  board.addEventListener("drop", function(ev) {
-    ev.preventDefault();
-    const kind = ev.dataTransfer ? ev.dataTransfer.getData("text/plain") : "";
-    if (!canvas) return;
-    const n = badgeNumber(kind);
-    const point = canvas.getPointer(ev);
-    if (n) addBadge(n, point);
-    else if (kind === "tree" || kind === "lamp" || kind === "pothole") addRoadProp(kind, point);
-  });
-  document.getElementById("del").onclick = function() {
-    const obj = canvas.getActiveObject();
-    if (obj && obj.name !== "road-bg") canvas.remove(obj);
-    canvas.discardActiveObject();
-    canvas.requestRenderAll();
-  };
-  document.getElementById("rr").onclick = function() { rotateActive(15); };
-  document.getElementById("rl").onclick = function() { rotateActive(-15); };
-  document.getElementById("clear").onclick = function() {
-    canvas.getObjects().slice().forEach(function(obj) {
-      if (obj.name !== "road-bg") canvas.remove(obj);
-    });
-    canvas.discardActiveObject();
-    canvas.requestRenderAll();
-  };
-  document.getElementById("zin").onclick = function() {
-    const zoom = Math.min(2.4, canvas.getZoom() * 1.15);
-    canvas.zoomToPoint(new fabric.Point(300, 275), zoom);
-  };
-  document.getElementById("zout").onclick = function() {
-    const zoom = Math.max(0.5, canvas.getZoom() / 1.15);
-    canvas.zoomToPoint(new fabric.Point(300, 275), zoom);
-  };
-  document.getElementById("adopt").onclick = adopt;
-  applyRoad("t");
-  fitBoard();
-  window.addEventListener("resize", fitBoard);
-}
-function fitBoard() {
-  if (!canvas) return;
-  const viewW = window.innerWidth || document.documentElement.clientWidth || 600;
-  const wrap = document.querySelector(".canvas-wrap");
-  if (viewW >= 768) {
-    canvas.setViewportTransform([1, 0, 0, 1, 0, 0]);
-    canvas.setWidth(600);
-    canvas.setHeight(550);
-    if (wrap) {
-      wrap.style.width = "600px";
-      wrap.style.height = "550px";
-    }
-  } else {
-    const avail = Math.max(220, viewW - 24);
-    const scale = Math.min(1, avail / 600);
-    const w = Math.round(600 * scale);
-    const h = Math.round(550 * scale);
-    canvas.setViewportTransform([scale, 0, 0, scale, 0, 0]);
-    canvas.setWidth(w);
-    canvas.setHeight(h);
-    if (wrap) {
-      wrap.style.width = w + "px";
-      wrap.style.height = h + "px";
-      wrap.style.minHeight = "0";
-    }
-  }
-  canvas.allowTouchScrolling = false;
-  canvas.calcOffset();
-  canvas.requestRenderAll();
-}
-if (window.fabric) boot();
-else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabric.js</p>");
-</script>
-</body>
-</html>
-'''
-    st.components.v1.html(_fabric_html, height=980, scrolling=False)
+def _load_remembered_sketch():
+    current = str(st.session_state.get(SKETCH_DATA_URL_KEY) or "").strip()
+    if current.startswith("data:image/"):
+        return
+    if not SKETCH_URI_PATH.is_file():
+        return
+    try:
+        stored = SKETCH_URI_PATH.read_text(encoding="utf-8").strip()
+    except OSError:
+        return
+    if stored.startswith("data:image/"):
+        st.session_state[SKETCH_DATA_URL_KEY] = stored
 
-    def _store_adopted_sketch(payload):
-        if not isinstance(payload, str) or "base64," not in payload:
-            return False
-        try:
-            raw = base64.b64decode(payload.split(",", 1)[1])
-        except Exception:
-            return False
-        if not raw.startswith(b"\x89PNG"):
-            return False
-        try:
-            SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-            (SAVED_IMAGES_DIR / "adopted_sketch.png").write_bytes(raw)
-        except OSError:
-            return False
-        return True
+CAD_SCENARIOS = {
+    "rear_end": {
+        "label": "1. تصادم خلفي في مسار مستقيم (عدم ترك مسافة آمنة)",
+        "road": "straight_2lane",
+        "v1": {"x": 290, "y": 235, "angle": 0, "path": "M 130 235 L 265 235"},
+        "v2": {"x": 415, "y": 235, "angle": 0, "path": "M 360 235 L 415 235"},
+        "impact": {"x": 352, "y": 235},
+        "skid": "M 190 223 L 255 223 M 190 247 L 255 247",
+    },
+    "intersection_tbone": {
+        "label": "2. اعتراض مسار داخل تقاطع رباعي (تصادم جانبي متعامد)",
+        "road": "cross_4way",
+        "v1": {"x": 365, "y": 245, "angle": 0, "path": "M 140 245 L 335 245"},
+        "v2": {"x": 415, "y": 195, "angle": 90, "path": "M 415 65 L 415 165"},
+        "impact": {"x": 405, "y": 235},
+        "skid": "M 230 233 L 320 233 M 230 257 L 320 257",
+    },
+    "lane_change": {
+        "label": "3. انحراف مفاجئ وتغيير مسار خاطئ (احتكاك جانبي)",
+        "road": "divided_highway",
+        "v1": {"x": 370, "y": 188, "angle": -22, "path": "M 150 245 Q 260 240 345 198"},
+        "v2": {"x": 405, "y": 165, "angle": 0, "path": "M 180 165 L 385 165"},
+        "impact": {"x": 392, "y": 176},
+        "skid": "",
+    },
+    "uturn_crash": {
+        "label": "4. دوران للخلف (U-Turn) غير آمن واعتراض مركبة بالمسار",
+        "road": "uturn_median",
+        "v1": {"x": 385, "y": 175, "angle": -55, "path": "M 260 265 Q 375 265 385 195"},
+        "v2": {"x": 435, "y": 155, "angle": 180, "path": "M 640 155 L 465 155"},
+        "impact": {"x": 408, "y": 162},
+        "skid": "M 560 143 L 480 143 M 560 167 L 480 167",
+    },
+    "mountain_curve": {
+        "label": "5. تجاوز خاطئ أو انحراف في منعطف جبلي (تصادم مواجه)",
+        "road": "mountain_curve",
+        "v1": {"x": 375, "y": 195, "angle": -28, "path": "M 160 305 Q 275 245 355 205"},
+        "v2": {"x": 440, "y": 165, "angle": 152, "path": "M 640 95 Q 535 125 460 155"},
+        "impact": {"x": 408, "y": 180},
+        "skid": "",
+    },
+    "roundabout": {
+        "label": "6. عدم إعطاء أفضلية داخل الدوار",
+        "road": "roundabout",
+        "v1": {"x": 470, "y": 225, "angle": -115, "path": "M 650 235 L 495 230"},
+        "v2": {"x": 438, "y": 185, "angle": -35, "path": "M 365 140 Q 415 150 432 178"},
+        "impact": {"x": 454, "y": 205},
+        "skid": "",
+    },
+    "fixed_object": {
+        "label": "7. انحراف عن الطريق والاصطدام بجسم ثابت / عمود / حاجز",
+        "road": "straight_2lane",
+        "v1": {"x": 445, "y": 118, "angle": -35, "path": "M 160 235 Q 320 225 430 132"},
+        "v2": None,
+        "impact": {"x": 478, "y": 96},
+        "skid": "M 285 215 Q 365 190 420 140",
+    },
+    "t_junction": {
+        "label": "8. دخول طريق رئيسي من فرعي في تقاطع ثلاثي (T)",
+        "road": "t_junction",
+        "v1": {"x": 395, "y": 205, "angle": -75, "path": "M 395 365 L 395 235"},
+        "v2": {"x": 435, "y": 180, "angle": 180, "path": "M 650 180 L 465 180"},
+        "impact": {"x": 412, "y": 188},
+        "skid": "",
+    },
+}
 
-    with st.container(key="adopt-hidden"):
-        with st.form("adopt_sketch_form", clear_on_submit=False, border=False):
-            adopted_payload = st.text_area(
-                "adopt_payload",
-                key="adopted_sketch_data",
-                label_visibility="collapsed",
+def _svg_cad_vehicle(x: float, y: float, angle: float, label_num: str, stroke_col: str, fill_col: str) -> str:
+    """رسم هندسي معماري دقيق للمركبة من الأعلى (Top-Down CAD Vector)."""
+    return f"""
+    <g transform="translate({x},{y}) rotate({angle})">
+        <rect x="-24" y="-17" width="12" height="4" rx="1.5" fill="#0f172a"/>
+        <rect x="12" y="-17" width="12" height="4" rx="1.5" fill="#0f172a"/>
+        <rect x="-24" y="13" width="12" height="4" rx="1.5" fill="#0f172a"/>
+        <rect x="12" y="13" width="12" height="4" rx="1.5" fill="#0f172a"/>
+        <rect x="-32" y="-14" width="64" height="28" rx="6" fill="{fill_col}" stroke="{stroke_col}" stroke-width="2.2"/>
+        <polygon points="8,-11 20,-9 20,9 8,11" fill="#ffffff" fill-opacity="0.85" stroke="{stroke_col}" stroke-width="1.2"/>
+        <polygon points="-22,-9 -12,-11 -12,11 -22,9" fill="#ffffff" fill-opacity="0.75" stroke="{stroke_col}" stroke-width="1.2"/>
+        <rect x="-11" y="-10" width="18" height="20" rx="2" fill="#ffffff" fill-opacity="0.45" stroke="{stroke_col}" stroke-width="1"/>
+        <polygon points="24,-5 30,0 24,5" fill="{stroke_col}"/>
+        <circle cx="-2" cy="0" r="8.5" fill="#ffffff" stroke="{stroke_col}" stroke-width="1.6"/>
+        <text x="-2" y="3.8" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="900" fill="{stroke_col}">{label_num}</text>
+    </g>
+    """
+
+def _svg_road_geometry(road_type: str) -> str:
+    """توليد هندسة الطرق بمعايير مخططات هندسة المرور الرسمية (CAD)."""
+    if road_type == "cross_4way":
+        return """
+        <rect x="0" y="130" width="800" height="160" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
+        <rect x="315" y="0" width="170" height="420" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
+        <rect x="313" y="128" width="174" height="164" fill="#e2e8f0"/>
+        <line x1="0" y1="210" x2="310" y2="210" stroke="#0f172a" stroke-width="2.5"/>
+        <line x1="490" y1="210" x2="800" y2="210" stroke="#0f172a" stroke-width="2.5"/>
+        <line x1="400" y1="0" x2="400" y2="125" stroke="#0f172a" stroke-width="2.5"/>
+        <line x1="400" y1="295" x2="400" y2="420" stroke="#0f172a" stroke-width="2.5"/>
+        <line x1="0" y1="170" x2="310" y2="170" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
+        <line x1="0" y1="250" x2="310" y2="250" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
+        <line x1="490" y1="170" x2="800" y2="170" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
+        <line x1="490" y1="250" x2="800" y2="250" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
+        """
+    if road_type == "uturn_median":
+        return """
+        <rect x="0" y="110" width="800" height="200" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
+        <rect x="0" y="198" width="335" height="24" rx="6" fill="#cbd5e1" stroke="#1e293b" stroke-width="2"/>
+        <rect x="455" y="198" width="345" height="24" rx="6" fill="#cbd5e1" stroke="#1e293b" stroke-width="2"/>
+        <line x1="0" y1="154" x2="800" y2="154" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
+        <line x1="0" y1="266" x2="800" y2="266" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
+        """
+    if road_type == "mountain_curve":
+        return """
+        <path d="M 80 390 Q 290 220 740 110" fill="none" stroke="#334155" stroke-width="144" stroke-linecap="butt"/>
+        <path d="M 80 390 Q 290 220 740 110" fill="none" stroke="#e2e8f0" stroke-width="138" stroke-linecap="butt"/>
+        <path d="M 80 390 Q 290 220 740 110" fill="none" stroke="#b91c1c" stroke-width="2.5"/>
+        <path d="M 80 390 Q 290 220 740 110" fill="none" stroke="#0f172a" stroke-width="1.2" stroke-dasharray="14,10"/>
+        """
+    if road_type == "roundabout":
+        return """
+        <rect x="0" y="155" width="800" height="110" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
+        <rect x="345" y="0" width="110" height="420" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
+        <circle cx="400" cy="210" r="115" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
+        <circle cx="400" cy="210" r="52" fill="#cbd5e1" stroke="#0f172a" stroke-width="2.5"/>
+        <circle cx="400" cy="210" r="84" fill="none" stroke="#475569" stroke-width="1.4" stroke-dasharray="10,8"/>
+        """
+    if road_type == "t_junction":
+        return """
+        <rect x="0" y="125" width="800" height="130" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
+        <rect x="330" y="252" width="140" height="168" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
+        <rect x="332" y="248" width="136" height="10" fill="#e2e8f0"/>
+        <line x1="0" y1="190" x2="800" y2="190" stroke="#0f172a" stroke-width="2.2"/>
+        <line x1="400" y1="265" x2="400" y2="420" stroke="#475569" stroke-width="1.6" stroke-dasharray="10,8"/>
+        """
+    if road_type == "divided_highway":
+        return """
+        <rect x="0" y="115" width="800" height="190" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
+        <rect x="0" y="122" width="800" height="16" fill="#cbd5e1" stroke="#1e293b" stroke-width="1.6"/>
+        <line x1="0" y1="195" x2="800" y2="195" stroke="#475569" stroke-width="1.6" stroke-dasharray="14,10"/>
+        <line x1="0" y1="250" x2="800" y2="250" stroke="#475569" stroke-width="1.6" stroke-dasharray="14,10"/>
+        """
+    return """
+    <rect x="0" y="135" width="800" height="150" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
+    <line x1="0" y1="185" x2="800" y2="185" stroke="#0f172a" stroke-width="2.4"/>
+    <line x1="0" y1="235" x2="800" y2="235" stroke="#475569" stroke-width="1.5" stroke-dasharray="14,10"/>
+    <rect x="468" y="82" width="22" height="22" rx="3" fill="#cbd5e1" stroke="#0f172a" stroke-width="1.8"/>
+    """
+
+def build_autocad_blueprint_svg(
+    scenario_key: str,
+    road_name: str = "",
+    v1_offset_x: int = 0,
+    v1_angle_delta: int = 0,
+    v2_offset_x: int = 0,
+    v2_angle_delta: int = 0,
+    show_skid: bool = True,
+) -> str:
+    """بناء مخطط كروكي هندسي متجه (CAD Vector SVG) فائق الدقة وجاهز للطباعة الرسمية."""
+    sc = CAD_SCENARIOS.get(scenario_key, CAD_SCENARIOS["rear_end"])
+    road_svg = _svg_road_geometry(sc["road"])
+    road_label = html.escape(road_name.strip()) if road_name.strip() else "موقع الحادث الميداني"
+    v1 = sc["v1"]
+    v1_svg = _svg_cad_vehicle(
+        v1["x"] + v1_offset_x,
+        v1["y"],
+        v1["angle"] + v1_angle_delta,
+        "1",
+        "#991b1b",
+        "#fee2e2",
+    )
+    v2_svg = ""
+    v2_path_svg = ""
+    if sc.get("v2"):
+        v2 = sc["v2"]
+        v2_svg = _svg_cad_vehicle(
+            v2["x"] + v2_offset_x,
+            v2["y"],
+            v2["angle"] + v2_angle_delta,
+            "2",
+            "#1e3a8a",
+            "#dbeafe",
+        )
+        v2_path_svg = f'<path d="{v2["path"]}" fill="none" stroke="#1e3a8a" stroke-width="2.4" stroke-dasharray="7,5" marker-end="url(#arrowBlue)"/>'
+    skid_svg = ""
+    if show_skid and sc.get("skid"):
+        skid_svg = f'<path d="{sc["skid"]}" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="4,3"/>'
+    imp = sc["impact"]
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" width="100%" height="100%" style="background:#f8fafc; border:1.8px solid #0f172a; border-radius:6px;">
+        <defs>
+            <pattern id="cadGrid" width="25" height="25" patternUnits="userSpaceOnUse">
+                <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#cbd5e1" stroke-width="0.65"/>
+            </pattern>
+            <marker id="arrowRed" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#991b1b"/>
+            </marker>
+            <marker id="arrowBlue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M 0 1 L 10 5 L 0 9 z" fill="#1e3a8a"/>
+            </marker>
+        </defs>
+        <rect width="800" height="420" fill="url(#cadGrid)"/>
+        {road_svg}
+        {skid_svg}
+        <path d="{v1["path"]}" fill="none" stroke="#991b1b" stroke-width="2.6" stroke-dasharray="8,5" marker-end="url(#arrowRed)"/>
+        {v2_path_svg}
+        {v1_svg}
+        {v2_svg}
+        <g transform="translate({imp['x']},{imp['y']})">
+            <circle cx="0" cy="0" r="14" fill="#fef08a" fill-opacity="0.88" stroke="#b91c1c" stroke-width="2"/>
+            <path d="M -8 -8 L 8 8 M -8 8 L 8 -8" stroke="#b91c1c" stroke-width="2.4"/>
+            <circle cx="0" cy="-20" r="8" fill="#b91c1c"/>
+            <text x="0" y="-16.5" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#ffffff">X</text>
+        </g>
+        <g transform="translate(748, 52)">
+            <circle cx="0" cy="0" r="24" fill="#ffffff" stroke="#0f172a" stroke-width="1.6"/>
+            <polygon points="0,-18 -6,6 0,2 6,6" fill="#0f172a"/>
+            <text x="0" y="18" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="900" fill="#0f172a">N شمال</text>
+        </g>
+        <g transform="translate(16, 366)">
+            <rect x="0" y="0" width="768" height="40" rx="4" fill="#ffffff" fill-opacity="0.95" stroke="#0f172a" stroke-width="1.4"/>
+            <text x="752" y="25" text-anchor="end" font-family="Tahoma, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">الموقع: {road_label}</text>
+            <text x="395" y="25" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" font-size="12" font-weight="700" fill="#991b1b">(1) مسار ومركبة الطرف الأول</text>
+            <text x="205" y="25" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" font-size="12" font-weight="700" fill="#1e3a8a">(2) مسار ومركبة الطرف الثاني</text>
+            <text x="65" y="25" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" font-size="12" font-weight="700" fill="#b91c1c">(X) نقطة الاصطدام</text>
+        </g>
+    </svg>"""
+    return svg
+
+def svg_to_data_uri(svg_markup: str) -> str:
+    b64 = base64.b64encode(svg_markup.encode("utf-8")).decode("ascii")
+    return f"data:image/svg+xml;base64,{b64}"
+
+def render_satellite_tactical_map(default_lat: float = 17.0369, default_lon: float = 43.0983):
+    """خريطة قمر صناعي تكتيكية حية (Esri World Imagery) لرسم مسارات المركبات ونقطة الاصطدام مباشرة فوق الشارع الحقيقي."""
+    components.html(
+        f"""
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+            <meta charset="utf-8"/>
+            <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
+            <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+            <style>
+                body {{ margin:0; padding:0; background:#071324; font-family:Tahoma, sans-serif; color:#f8fafc; }}
+                .toolbar {{
+                    display:flex; flex-wrap:wrap; gap:6px; padding:8px 10px;
+                    background:linear-gradient(135deg,#08172c,#0e2747);
+                    border:1px solid rgba(56,189,248,0.35); border-radius:10px 10px 0 0;
+                    align-items:center; justify-content:space-between;
+                }}
+                .tool-btn {{
+                    background:rgba(15,38,68,0.95); color:#ffffff; border:1px solid rgba(56,189,248,0.45);
+                    border-radius:7px; padding:6px 11px; font-size:12.5px; font-weight:700; cursor:pointer;
+                }}
+                .tool-btn.active {{ background:linear-gradient(135deg,#0284c7,#00e5ff); color:#031221; border-color:#fff; }}
+                .coord-in {{
+                    background:#061224; color:#fff; border:1px solid rgba(56,189,248,0.4);
+                    border-radius:6px; padding:5px 8px; width:185px; font-size:12px; direction:ltr;
+                }}
+                #mapWrap {{ position:relative; width:100%; height:410px; border:1px solid rgba(56,189,248,0.35); border-top:none; }}
+                #satMap {{ width:100%; height:100%; }}
+                #drawCanvas {{ position:absolute; top:0; left:0; width:100%; height:100%; z-index:500; pointer-events:none; }}
+                .hint {{ font-size:11.5px; color:#bae6fd; padding:6px 10px; background:#071528; border-radius:0 0 10px 10px; border:1px solid rgba(56,189,248,0.25); border-top:none; }}
+            </style>
+        </head>
+        <body>
+            <div class="toolbar">
+                <div style="display:flex; gap:5px; flex-wrap:wrap;">
+                    <button class="tool-btn active" id="btnPan" onclick="setMode('pan')">🖐️ تحريك وتكبير الخريطة</button>
+                    <button class="tool-btn" id="btnV1" onclick="setMode('v1')">🔴 مسار الطرف (1)</button>
+                    <button class="tool-btn" id="btnV2" onclick="setMode('v2')">🔵 مسار الطرف (2)</button>
+                    <button class="tool-btn" id="btnImp" onclick="setMode('impact')">💥 نقطة الاصطدام</button>
+                    <button class="tool-btn" onclick="clearDrawings()">🗑️ مسح الرسم</button>
+                </div>
+                <div style="display:flex; gap:5px; align-items:center;">
+                    <input class="coord-in" id="coordBox" placeholder="إحداثيات: 17.0369, 43.0983"/>
+                    <button class="tool-btn" onclick="jumpToCoords()">📍 انتقال</button>
+                </div>
+            </div>
+            <div id="mapWrap">
+                <div id="satMap"></div>
+                <canvas id="drawCanvas"></canvas>
+            </div>
+            <div class="hint">
+                💡 كبّر الخريطة الفضائية على تقاطع/موقع الحادث الفعلي، ثم اختر <b>مسار الطرف (1)</b> واسحب بالماوس لرسم اتجاه المركبة، ثم التقط صورة الموقع أو ارفعه مباشرة للتقرير.
+            </div>
+            <script>
+                const map = L.map('satMap', {{ zoomControl: true }}).setView([{default_lat}, {default_lon}], 18);
+                L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{{z}}/{{y}}/{{x}}', {{
+                    maxZoom: 20, attribution: 'Esri Satellite'
+                }}).addTo(map);
+                const canvas = document.getElementById('drawCanvas');
+                const ctx = canvas.getContext('2d');
+                let mode = 'pan';
+                let shapes = [];
+                let startPt = null;
+                function resizeCanvas() {{
+                    const rect = document.getElementById('mapWrap').getBoundingClientRect();
+                    canvas.width = rect.width;
+                    canvas.height = rect.height;
+                    redraw();
+                }}
+                window.addEventListener('resize', resizeCanvas);
+                setTimeout(resizeCanvas, 200);
+                function setMode(m) {{
+                    mode = m;
+                    document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+                    const mapIds = {{'pan':'btnPan','v1':'btnV1','v2':'btnV2','impact':'btnImp'}};
+                    if (mapIds[m]) document.getElementById(mapIds[m]).classList.add('active');
+                    canvas.style.pointerEvents = (m === 'pan') ? 'none' : 'auto';
+                }}
+                function jumpToCoords() {{
+                    const raw = document.getElementById('coordBox').value.trim();
+                    const parts = raw.split(/[ ,]+/).map(Number).filter(n => !isNaN(n));
+                    if (parts.length >= 2) map.setView([parts[0], parts[1]], 19);
+                }}
+                function clearDrawings() {{ shapes = []; redraw(); }}
+                function drawArrow(x1, y1, x2, y2, color, label) {{
+                    const head = 14;
+                    const angle = Math.atan2(y2 - y1, x2 - x1);
+                    ctx.save();
+                    ctx.strokeStyle = color; ctx.fillStyle = color; ctx.lineWidth = 4;
+                    ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+                    ctx.beginPath();
+                    ctx.moveTo(x2, y2);
+                    ctx.lineTo(x2 - head * Math.cos(angle - Math.PI / 6), y2 - head * Math.sin(angle - Math.PI / 6));
+                    ctx.lineTo(x2 - head * Math.cos(angle + Math.PI / 6), y2 - head * Math.sin(angle + Math.PI / 6));
+                    ctx.closePath(); ctx.fill();
+                    ctx.beginPath(); ctx.arc(x1, y1, 12, 0, Math.PI * 2); ctx.fillStyle = '#ffffff'; ctx.fill(); ctx.stroke();
+                    ctx.fillStyle = color; ctx.font = 'bold 13px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.fillText(label, x1, y1);
+                    ctx.restore();
+                }}
+                function redraw() {{
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    shapes.forEach(s => {{
+                        if (s.type === 'v1') drawArrow(s.x1, s.y1, s.x2, s.y2, '#ef4444', '1');
+                        else if (s.type === 'v2') drawArrow(s.x1, s.y1, s.x2, s.y2, '#3b82f6', '2');
+                        else if (s.type === 'impact') {{
+                            ctx.save();
+                            ctx.beginPath(); ctx.arc(s.x, s.y, 15, 0, Math.PI * 2);
+                            ctx.fillStyle = 'rgba(250, 204, 21, 0.9)'; ctx.fill();
+                            ctx.lineWidth = 3; ctx.strokeStyle = '#dc2626'; ctx.stroke();
+                            ctx.fillStyle = '#991b1b'; ctx.font = 'bold 15px Arial'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                            ctx.fillText('X', s.x, s.y);
+                            ctx.restore();
+                        }}
+                    }});
+                }}
+                canvas.addEventListener('mousedown', e => {{
+                    const r = canvas.getBoundingClientRect();
+                    const x = e.clientX - r.left, y = e.clientY - r.top;
+                    if (mode === 'impact') {{ shapes.push({{type:'impact', x, y}}); redraw(); }}
+                    else startPt = {{x, y}};
+                }});
+                canvas.addEventListener('mouseup', e => {{
+                    if (!startPt) return;
+                    const r = canvas.getBoundingClientRect();
+                    const x2 = e.clientX - r.left, y2 = e.clientY - r.top;
+                    if (Math.hypot(x2 - startPt.x, y2 - startPt.y) > 12) {{
+                        shapes.push({{type: mode, x1: startPt.x, y1: startPt.y, x2, y2}});
+                    }}
+                    startPt = null; redraw();
+                }});
+            </script>
+        </body>
+        </html>
+        """,
+        height=515,
+    )
+
+def render_modern_tactical_sketch_studio(sketch_image_state_key: str = "sketch_data_url", location_state_key: str = "p1_acc_location"):
+    """الواجهة الموحدة لاستوديو الكروكي الحديث (المولد الهندسي التلقائي CAD + خريطة القمر الصناعي)."""
+    st.markdown(
+        """
+        <div style="background:linear-gradient(135deg,rgba(8,23,44,0.95),rgba(14,39,71,0.95));
+                    border:1px solid rgba(56,189,248,0.4); border-radius:14px; padding:12px 18px; margin-bottom:12px;
+                    display:flex; justify-content:space-between; align-items:center;">
+            <div>
+                <div style="font-size:17px; font-weight:800; color:#f8fafc;">📐 استوديو التخطيط الهندسي والفضائي الذكي</div>
+                <div style="font-size:12.5px; color:#7dd3fc;">توليد مخطط مروري هندسي (CAD Vector) بضغطة زر أو تخطيط مباشر فوق صورة الأقمار الصناعية</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    mode_choice = st.radio(
+        "اختر نمط إعداد الكروكي المعتمد للتقرير:",
+        options=[
+            "⚡ المخطط الهندسي التلقائي (Auto-CAD Blueprint)",
+            "🛰️ خريطة القمر الصناعي التكتيكية + إرفاق لقطة جوية",
+        ],
+        horizontal=True,
+        key="_modern_sketch_mode",
+    )
+    default_loc = str(st.session_state.get(location_state_key, "") or "")
+    if mode_choice.startswith("⚡"):
+        c_scen, c_road = st.columns([1.6, 1])
+        with c_scen:
+            scen_key = st.selectbox(
+                "اختر سيناريو هندسة الحادث (يرسم المسارات والمركبات تلقائياً):",
+                options=list(CAD_SCENARIOS.keys()),
+                format_func=lambda k: CAD_SCENARIOS[k]["label"],
+                key="_cad_scen_sel",
             )
-            adopted_submitted = st.form_submit_button("حفظ", key="adopt_submit")
-    if adopted_submitted:
-        _store_adopted_sketch(adopted_payload)
-    road_name_sign = st.text_input("اسم الطريق الرئيسي", value="")
-    legend_keys = [
-        st.text_input(f"مدلول رقم ({number})", key=f"legend_key_{number}")
-        for number in range(1, 11)
-    ]
-    adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
-    sketch_img = Image.open(adopted_path).convert("RGB") if adopted_path.is_file() else None
+        with c_road:
+            if "_cad_road_title" not in st.session_state:
+                st.session_state["_cad_road_title"] = default_loc
+            road_title = st.text_input(
+                "مسمى الطريق / التقاطع على المخطط:",
+                placeholder="مثال: طريق الملك عبدالعزيز - تقاطع...",
+                key="_cad_road_title",
+            )
+        with st.expander("⚙️ ضبط دقيق لمواضع وزوايا المركبات وآثار الفرامل (اختياري)", expanded=False):
+            for _slider_key, _slider_default in (
+                ("_cad_v1_dx", 0),
+                ("_cad_v1_da", 0),
+                ("_cad_v2_dx", 0),
+                ("_cad_v2_da", 0),
+            ):
+                st.session_state.setdefault(_slider_key, _slider_default)
+            st.session_state.setdefault("_cad_skid", True)
+            adj1, adj2, adj3, adj4, adj5 = st.columns([1, 1, 1, 1, 0.8])
+            with adj1:
+                st.slider("إزاحة المركبة (1)", -80, 80, key="_cad_v1_dx")
+            with adj2:
+                st.slider("زاوية المركبة (1)", -45, 45, key="_cad_v1_da")
+            with adj3:
+                st.slider("إزاحة المركبة (2)", -80, 80, key="_cad_v2_dx")
+            with adj4:
+                st.slider("زاوية المركبة (2)", -45, 45, key="_cad_v2_da")
+            with adj5:
+                st.checkbox("إظهار آثار الفرملة", key="_cad_skid")
+        svg_code = build_autocad_blueprint_svg(
+            scenario_key=scen_key,
+            road_name=road_title,
+            v1_offset_x=int(st.session_state.get("_cad_v1_dx", 0) or 0),
+            v1_angle_delta=int(st.session_state.get("_cad_v1_da", 0) or 0),
+            v2_offset_x=int(st.session_state.get("_cad_v2_dx", 0) or 0),
+            v2_angle_delta=int(st.session_state.get("_cad_v2_da", 0) or 0),
+            show_skid=bool(st.session_state.get("_cad_skid", True)),
+        )
+        st.markdown(svg_code, unsafe_allow_html=True)
+        _remember_sketch_data_url(svg_to_data_uri(svg_code), sketch_image_state_key)
+        st.caption("✅ هذا المخطط الهندسي معتمد تلقائياً بدقة متجهة (Vector HD) في صفحة الكروكي داخل تقرير A4.")
+    else:
+        render_satellite_tactical_map()
+        sat_upload = st.file_uploader(
+            "📥 أرفق لقطة الخريطة الفضائية المرسومة أو صورة الكروكي الجوي لاعتمادها في ورقة A4:",
+            type=["png", "jpg", "jpeg", "webp"],
+            key="_sat_sketch_uploader",
+        )
+        if sat_upload is not None:
+            raw_bytes = sat_upload.getvalue()
+            mime = sat_upload.type or "image/png"
+            b64_img = base64.b64encode(raw_bytes).decode("ascii")
+            _remember_sketch_data_url(f"data:{mime};base64,{b64_img}", sketch_image_state_key)
+            st.success("✅ تم اعتماد الكروكي الفضائي في صفحة التقرير بنجاح.")
+
+with tab4:
+    _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
+    _load_remembered_sketch()
+    render_modern_tactical_sketch_studio(
+        sketch_image_state_key="sketch_data_url",
+        location_state_key="p1_acc_location",
+    )
+    if "sketch_road_name" not in st.session_state:
+        st.session_state["sketch_road_name"] = str(st.session_state.get("_cad_road_title") or "")
+    road_name_sign = st.text_input("اسم الطريق الرئيسي", key="sketch_road_name")
+    st.markdown("**مدلولات الكروكي**")
+    legend_keys = []
+    for row_start in (1, 3, 5, 7, 9):
+        legend_left, legend_right = st.columns(2)
+        with legend_left:
+            legend_keys.append(st.text_input(f"مدلول رقم ({row_start})", key=f"legend_key_{row_start}"))
+        with legend_right:
+            legend_keys.append(st.text_input(f"مدلول رقم ({row_start + 1})", key=f"legend_key_{row_start + 1}"))
+
 def convert_gallery_image(uploaded_file):
     try:
         uploaded_file.seek(0)
@@ -5192,14 +4936,18 @@ with tab5:
         ]
         st.rerun()
     
-    def img_to_b64(img_obj):
-        buf = io.BytesIO()
-        img_obj.save(buf, format="PNG")
-        return base64.b64encode(buf.getvalue()).decode()
-    sketch_b64 = img_to_b64(sketch_img) if sketch_img is not None else ""
+    sketch_src = str(st.session_state.get("sketch_data_url") or "").strip()
+    if not sketch_src.startswith("data:image/"):
+        adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
+        if adopted_path.is_file():
+            try:
+                sketch_src = "data:image/png;base64," + base64.b64encode(adopted_path.read_bytes()).decode("ascii")
+            except OSError:
+                sketch_src = ""
+    safe_sketch_src = html.escape(sketch_src, quote=True)
     sketch_figure = (
-        f'<img src="data:image/png;base64,{sketch_b64}" style="max-width:100%; height:440px; border:1px solid #ccc;">'
-        if sketch_b64 else ""
+        f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="width:100%; max-height:118mm; height:auto; object-fit:contain; border:1px solid #ccc;">'
+        if safe_sketch_src else ""
     )
     logo_src = get_base64_image("traffic_logo.png")
     sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
@@ -5323,19 +5071,12 @@ with tab5:
         <div class="page report-page">
             {build_header()}
             <div class="section-badge">كروكي الحادث</div>
-            <div style="text-align:center; font-weight:bold; font-size:15px; margin-bottom:15px;">رسم كروكي {road_name_sign}</div>
-            <div style="display:flex; justify-content:space-around; align-items:center; margin-top:20px;">
-                <div style="text-align:center; width:35%;">
-                    <div class="road-sign">{road_name_sign}</div>
-                    <div style="font-size:75px; line-height:1; margin:20px 0;">✥</div>
-                    <div style="font-weight:bold;">اتجاهات الطريق</div>
-                </div>
-                <div style="width:55%; text-align:center;">
-                    {sketch_figure}
-                </div>
+            <div style="text-align:center; font-weight:bold; font-size:15px; margin-bottom:8px;">رسم كروكي {html.escape(str(road_name_sign or ""))}</div>
+            <div style="width:100%; text-align:center; margin-top:6px;">
+                {sketch_figure}
             </div>
             <div style="margin-top:30px; font-weight:bold; font-size:15px; line-height:2; padding-right:30px;">
-                {"".join(f"<div>{line}</div>" for line in legend_keys)}
+                {"".join(f"<div>{html.escape(str(line or "")).replace("{", "&#123;").replace("}", "&#125;")}</div>" for line in legend_keys)}
             </div>
             {official_footer_html}
         </div>
