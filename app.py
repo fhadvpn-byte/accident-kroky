@@ -1342,11 +1342,76 @@ def inject_bayyinah_blue_styles():
     </style>
     """, unsafe_allow_html=True)
 
-def render_direct_print_button(full_report_html: str, label: str = "🖨️ طباعة فورية A4", btn_id: str = "top"):
-    """زر طباعة فوري يعمل بنقرة الماوس داخل المتصفح حتى لو كان التقرير فارغاً."""
-    safe_html_json = json.dumps(full_report_html or "")
-    safe_label = html.escape(label)
-    safe_id = re.sub(r"[^A-Za-z0-9_-]", "", str(btn_id or "top")) or "top"
+def render_direct_print_button(
+    full_report_html: str,
+    label: str = "🖨️ طباعة فورية A4",
+    btn_id: str = "top",
+):
+    """زر طباعة فوري محصن بتشفير Base64 يمنع تسرب أي وسوم أو أكواد إلى الشاشة ويعمل في أي نسبة إنجاز (0% - 100%)."""
+    raw_html = str(full_report_html or "")
+    auto_print_addon = """
+    <style>
+        @media print {
+            button, .no-print, .print-btn, .toolbar, .bayyinah-print-bar { display: none !important; }
+            @page { size: A4 portrait; margin: 0; }
+            html, body {
+                background: #ffffff !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+        .bayyinah-print-bar {
+            position: sticky; top: 0; z-index: 9999;
+            background: #071528; color: #f8fafc; padding: 10px 20px;
+            display: flex; justify-content: space-between; align-items: center;
+            font-family: Tahoma, Arial, sans-serif; direction: rtl;
+            border-bottom: 2px solid #38bdf8;
+        }
+        .bayyinah-print-bar button {
+            background: #38bdf8; color: #031527; border: none;
+            border-radius: 8px; padding: 7px 18px; font-weight: 900;
+            font-size: 14px; cursor: pointer; margin-left: 8px;
+        }
+    </style>
+    <script>
+        window.addEventListener("load", function() {
+            var imgs = Array.prototype.slice.call(document.images || []).filter(function(im) {
+                return im.getAttribute("src") && im.getAttribute("src").trim() !== "";
+            });
+            var waitAll = Promise.all(imgs.map(function(im) {
+                if (im.complete) return Promise.resolve();
+                return new Promise(function(res) { im.onload = res; im.onerror = res; });
+            }));
+            Promise.race([waitAll, new Promise(function(r) { setTimeout(r, 650); })]).then(function() {
+                setTimeout(function() {
+                    window.focus();
+                    window.print();
+                }, 180);
+            });
+        });
+    </script>
+    """
+    top_bar_ui = """
+    <div class="bayyinah-print-bar no-print">
+        <span>🛡️ معاينة الطباعة الرسمية لمنظومة بَيِّنَة (مقاس A4 معتمد)</span>
+        <div>
+            <button onclick="window.print()">🖨️ طباعة / حفظ كـ PDF</button>
+            <button onclick="window.close()" style="background:#ef4444;color:#fff;">✖ إغلاق</button>
+        </div>
+    </div>
+    """
+    if "<body" in raw_html:
+        body_open_end = raw_html.find(">", raw_html.find("<body"))
+        printable_html = raw_html[: body_open_end + 1] + top_bar_ui + raw_html[body_open_end + 1 :]
+    else:
+        printable_html = top_bar_ui + raw_html
+    if "</body>" in printable_html:
+        printable_html = printable_html.replace("</body>", auto_print_addon + "</body>", 1)
+    else:
+        printable_html = printable_html + auto_print_addon
+    b64_payload = base64.b64encode(printable_html.encode("utf-8")).decode("ascii")
     components.html(
         f"""
         <!DOCTYPE html>
@@ -1355,12 +1420,12 @@ def render_direct_print_button(full_report_html: str, label: str = "🖨️ طب
         <meta charset="utf-8"/>
         <style>
             * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }}
-            body {{ background: transparent; overflow: hidden; display: flex; align-items: center; height: 44px; }}
+            html, body {{ background: transparent !important; overflow: hidden !important; width: 100%; height: 44px; }}
             .instant-print-btn {{
                 width: 100%;
                 height: 42px;
                 background: linear-gradient(135deg, #38bdf8 0%, #00e5ff 100%);
-                color: #031527;
+                color: #031527 !important;
                 border: 1.5px solid #bae6fd;
                 border-radius: 10px;
                 font-size: 14px;
@@ -1370,86 +1435,45 @@ def render_direct_print_button(full_report_html: str, label: str = "🖨️ طب
                 align-items: center;
                 justify-content: center;
                 gap: 6px;
-                box-shadow: 0 4px 14px rgba(0, 229, 255, 0.3);
+                white-space: nowrap;
+                box-shadow: 0 4px 14px rgba(0, 229, 255, 0.28);
                 transition: 0.15s ease;
             }}
-            .instant-print-btn:hover {{
-                filter: brightness(1.08);
-                transform: translateY(-1px);
-            }}
-            .instant-print-btn:active {{
-                transform: translateY(0px);
-            }}
+            .instant-print-btn:hover {{ filter: brightness(1.07); }}
         </style>
         </head>
         <body>
-            <button class="instant-print-btn" id="pBtn_{safe_id}" onclick="printReportNow()">
-                {safe_label}
+            <button type="button" class="instant-print-btn" id="pBtn_{btn_id}" onclick="openAndPrintA4()">
+                {label}
             </button>
             <script>
-            const REPORT_HTML = {safe_html_json};
-            function injectCleanPrintRules(raw) {{
-                const rules = `<style>
-                    @media print {{
-                        button, .no-print, .print-btn, .toolbar {{ display: none !important; }}
-                        @page {{ size: A4 portrait; margin: 0; }}
-                        html, body {{
-                            background: #ffffff !important;
-                            margin: 0 !important;
-                            padding: 0 !important;
-                            -webkit-print-color-adjust: exact !important;
-                            print-color-adjust: exact !important;
-                        }}
-                    }}
-                </style>`;
-                return raw.includes("</head>") ? raw.replace("</head>", rules + "</head>") : (rules + raw);
-            }}
-            function printReportNow() {{
-                const finalHtml = injectCleanPrintRules(REPORT_HTML);
-                const printWin = window.open("", "_blank", "width=950,height=850");
-                if (printWin && printWin.document) {{
-                    printWin.document.open();
-                    printWin.document.write(finalHtml);
-                    printWin.document.close();
-                    const validImgs = Array.from(printWin.document.images || []).filter(
-                        img => img.getAttribute("src") && img.getAttribute("src").trim() !== ""
-                    );
-                    const waitImgs = Promise.all(validImgs.map(img => {{
-                        if (img.complete) return Promise.resolve();
-                        return new Promise(res => {{ img.onload = res; img.onerror = res; }});
-                    }}));
-                    Promise.race([waitImgs, new Promise(r => setTimeout(r, 600))]).then(() => {{
-                        setTimeout(() => {{
-                            printWin.focus();
-                            printWin.print();
-                        }}, 150);
-                    }});
-                    printWin.onafterprint = function() {{
-                        try {{ printWin.close(); }} catch (e) {{}}
-                    }};
-                    return;
+            const B64_REPORT = "{b64_payload}";
+            function openAndPrintA4() {{
+                const binStr = atob(B64_REPORT);
+                const bytes = new Uint8Array(binStr.length);
+                for (let i = 0; i < binStr.length; i++) {{
+                    bytes[i] = binStr.charCodeAt(i);
                 }}
-                let localFrame = document.getElementById("local_a4_frame");
-                if (localFrame) localFrame.remove();
-                localFrame = document.createElement("iframe");
-                localFrame.id = "local_a4_frame";
-                localFrame.style.cssText = "position:fixed;width:1px;height:1px;left:-999px;top:0;border:0;";
-                document.body.appendChild(localFrame);
-                const fDoc = localFrame.contentWindow.document;
-                fDoc.open();
-                fDoc.write(finalHtml);
-                fDoc.close();
-                setTimeout(() => {{
-                    localFrame.contentWindow.focus();
-                    localFrame.contentWindow.print();
-                }}, 300);
+                const blob = new Blob([bytes], {{ type: "text/html;charset=utf-8" }});
+                const blobUrl = URL.createObjectURL(blob);
+                const printWin = window.open(blobUrl, "_blank");
+                if (!printWin) {{
+                    let f = document.getElementById("fallback_print_iframe");
+                    if (f) f.remove();
+                    f = document.createElement("iframe");
+                    f.id = "fallback_print_iframe";
+                    f.style.cssText = "position:fixed;left:-9999px;top:0;width:210mm;height:297mm;border:0;";
+                    f.src = blobUrl;
+                    document.body.appendChild(f);
+                }}
             }}
             </script>
         </body>
         </html>
         """,
-        height=46,
+        height=44,
     )
+
 
 def render_compact_command_header(on_save_callback=None, on_reset_callback=None, report_html: str = ""):
     """شريط علوي زجاجي رفيع يوفر ثلث مساحة الشاشة ويضع الحفظ والطباعة الفورية أمام العين."""
