@@ -1,5 +1,6 @@
 import html
 import streamlit as st
+import streamlit.components.v1 as components
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import io
@@ -188,6 +189,71 @@ def _page1_cell(value):
     if text.strip().lower() in ("none", "nan"):
         return ""
     return text
+
+def inject_rtl_tab_for_data_editors():
+    """عكس اتجاه زر Tab داخل جداول st.data_editor ليتحرك من اليمين إلى اليسار (RTL)."""
+    components.html(
+        """
+        <script>
+        (function () {
+            const parentWin = window.parent;
+            if (!parentWin || !parentWin.document) return;
+            // إخفاء الحاوية الوهمية للمكون حتى لا تضيف أي فراغ في الصفحة أو الطباعة
+            if (window.frameElement) {
+                const container = window.frameElement.closest('[data-testid="stElementContainer"], .element-container');
+                if (container) {
+                    container.style.cssText = "height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;";
+                }
+            }
+            // إزالة أي مستمع سابق لمنع التكرار عند تحديث Streamlit
+            if (parentWin.__bayyinahRtlTabHandler) {
+                parentWin.removeEventListener("keydown", parentWin.__bayyinahRtlTabHandler, true);
+            }
+            function isInsideDataEditor(el) {
+                if (!el || typeof el.closest !== "function") return false;
+                return Boolean(
+                    el.closest('[data-testid="stDataFrame"]') ||
+                    el.closest('.stDataFrame') ||
+                    el.closest('#portal') ||
+                    el.closest('[class*="gdg-"]') ||
+                    el.closest('.dvn-scroller')
+                );
+            }
+            function rtlTabHandler(e) {
+                if (e.key !== "Tab" || e.__rtlTabFlipped) return;
+                const activeEl = parentWin.document.activeElement;
+                if (!isInsideDataEditor(e.target) && !isInsideDataEditor(activeEl)) {
+                    return;
+                }
+                e.__rtlTabFlipped = true;
+                const invertedShift = !e.shiftKey;
+                try {
+                    Object.defineProperty(e, "shiftKey", {
+                        get: function () { return invertedShift; },
+                        configurable: true
+                    });
+                    if (typeof e.getModifierState === "function") {
+                        const origGetMod = e.getModifierState.bind(e);
+                        Object.defineProperty(e, "getModifierState", {
+                            value: function (keyArg) {
+                                if (keyArg === "Shift") return invertedShift;
+                                return origGetMod(keyArg);
+                            },
+                            configurable: true
+                        });
+                    }
+                } catch (err) {
+                    console.warn("RTL Tab override warning:", err);
+                }
+            }
+            parentWin.__bayyinahRtlTabHandler = rtlTabHandler;
+            parentWin.addEventListener("keydown", rtlTabHandler, true);
+        })();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
 
 def _frame_records(frame):
     rows = []
@@ -2784,6 +2850,7 @@ with tab1:
             "التأمين": st.column_config.SelectboxColumn("التأمين", options=["", "مؤمنة", "غير مؤمنة"]),
         }
     )
+    inject_rtl_tab_for_data_editors()
     st.session_state.parties = _frame_records(parties_df)
     st.session_state.vehicles = _frame_records(vehicles_df)
     st.session_state.p1_parties_records = _clone_page1_value(st.session_state.parties)
