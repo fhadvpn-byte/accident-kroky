@@ -622,6 +622,10 @@ def fill_smart_table_defaults(df, defaults_map: dict):
             )
     return df_clean
 
+def _official_article_cite(code: str) -> str:
+    """يحذف اللاحقة المختصرة داخل القوس مثل «- إشارة» ويبقي رقم المادة النظامي."""
+    return re.sub(r"\s*-\s*[^)]+", "", str(code or "").strip())
+
 def render_legal_articles_inserter(selected_articles: list, p1_reasons_key: str = "p1_reasons_area", p2_reasons_key: str = "p2_reasons_area"):
     if not selected_articles:
         return
@@ -630,7 +634,8 @@ def render_legal_articles_inserter(selected_articles: list, p1_reasons_key: str 
         existing = str(st.session_state.get(target_key, "") or "").strip()
         existing_lines = [ln.strip() for ln in existing.splitlines() if ln.strip()]
         for art in selected_articles:
-            formatted_art = f"استناداً إلى {art} من نظام المرور ولائحته التنفيذية." if "المادة" in str(art) and "نظام المرور" not in str(art) else str(art)
+            cite = _official_article_cite(art)
+            formatted_art = f"استناداً إلى {cite} من نظام المرور ولائحته التنفيذية." if "المادة" in cite and "نظام المرور" not in cite else cite
             if formatted_art not in existing_lines:
                 existing_lines.append(formatted_art)
         st.session_state[target_key] = "\n".join(existing_lines)
@@ -1382,7 +1387,7 @@ def render_direct_print_button(
                 min-height: 294mm !important;
                 max-height: 294mm !important;
                 margin: 0 auto !important;
-                padding: 7mm 11mm 6mm 11mm !important;
+                padding: 6mm 11mm 5mm 11mm !important;
                 box-sizing: border-box !important;
                 overflow: hidden !important;
                 border: none !important;
@@ -1390,11 +1395,21 @@ def render_direct_print_button(
                 position: relative !important;
                 display: flex !important;
                 flex-direction: column !important;
-                justify-content: space-between !important;
+                justify-content: flex-start !important;
                 page-break-after: always !important;
                 break-after: page !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
+            }
+            .official-page-footer, .official-footer, .page-footer, .footer {
+                position: relative !important;
+                bottom: auto !important;
+                left: auto !important;
+                right: auto !important;
+                width: 100% !important;
+                margin-top: auto !important;
+                padding-top: 5mm !important;
+                flex-shrink: 0 !important;
             }
             .page:last-of-type, .a4-page:last-of-type, .report-page:last-of-type {
                 page-break-after: auto !important;
@@ -4120,7 +4135,7 @@ def generate_accident_report_fields(selected_article_ids):
         }
     has_criminal_suspicion = any(article["isQuasiCriminal"] for article in selected_articles)
     results_text = "\n".join(
-        f"{index}- {article['resultPoint']} ({article['code']})."
+        f"{index}- {article['resultPoint']} ({_official_article_cite(article['code'])})."
         for index, article in enumerate(selected_articles, start=1)
     )
     technical_draft_text = " كما تبين من المعاينة الفنية أنه ".join(
@@ -4129,7 +4144,7 @@ def generate_accident_report_fields(selected_article_ids):
     opinion_lines = "\n".join(f"• {article['legalOpinion']}" for article in selected_articles)
     if has_criminal_suspicion:
         criminal_codes = "، ".join(
-            article["code"] for article in selected_articles if article["isQuasiCriminal"]
+            _official_article_cite(article["code"]) for article in selected_articles if article["isQuasiCriminal"]
         )
         legal_opinion_text = (
             "⚠️ تنبيه نظامي (شبهة جنائية / مخالفة جسيمة):\n"
@@ -4138,7 +4153,7 @@ def generate_accident_report_fields(selected_article_ids):
             "وعليه يوصى باستكمال محضر الاستدلال النظامي وإحالة كامل ملف القضية والأطراف إلى (الشرطة المختصة / النيابة العامة) لإعمال شؤونها النظامية."
         )
     else:
-        all_codes = "، ".join(article["code"] for article in selected_articles)
+        all_codes = "، ".join(_official_article_cite(article["code"]) for article in selected_articles)
         legal_opinion_text = (
             f"بناءً على المعاينة الفنية وتطبيق قواعد المساءلة المرورية واستناداً إلى ({all_codes}) من نظام المرور ولائحته التنفيذية:\n"
             f"{opinion_lines}"
@@ -4989,15 +5004,15 @@ _single_img = "width:100%; max-height:138mm; height:auto; object-fit:contain; di
 if safe_sketch_src and safe_aerial_src and st.session_state.get("aerial_place") == "beside":
     sketch_figure = (
         '<div style="display:flex; justify-content:space-between; width:100%; align-items:stretch;">'
-        f'<div style="width:49%;">{_framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "110mm", True)}</div>'
-        f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "110mm", True)}</div>'
+        f'<div style="width:49%;">{_framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "64mm", True)}</div>'
+        f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "64mm", True)}</div>'
         "</div>"
     )
 elif safe_sketch_src and safe_aerial_src:
     sketch_figure = (
-        _framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "70mm", True)
+        _framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "64mm", True)
         + '<div style="height:2mm;"></div>'
-        + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "70mm", True)
+        + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "64mm", True)
     )
 elif safe_aerial_src:
     sketch_figure = (
@@ -5204,7 +5219,8 @@ full_report_html = f"""
     .page, .report-page, .a4-page {{
         background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
         min-height: 297mm; height: auto; margin: 0 auto 8mm auto;
-        padding: 15mm 18mm; box-sizing: border-box; position: relative;
+        padding: 6mm 11mm 5mm 11mm; box-sizing: border-box; position: relative;
+        display: flex; flex-direction: column; justify-content: flex-start;
         box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
         transform: none;
     }}
@@ -5218,14 +5234,17 @@ full_report_html = f"""
         width: 100%; max-width: 100%; box-sizing: border-box;
     }}
     .page-flow {{
-        display: flex; flex-direction: column; justify-content: space-between;
+        display: flex; flex-direction: column; justify-content: flex-start;
+    }}
+    .page-flow .section-badge {{
+        margin: 4px auto;
+    }}
+    .page-flow th, .page-flow td {{
+        padding: 4px 7px;
     }}
     .page-flow > .table-scroll,
     .page-flow > .box-content {{
-        flex: 1 1 auto;
-    }}
-    .page-flow > .table-scroll > table {{
-        height: 100%;
+        flex: 0 0 auto;
     }}
     .photo-annex {{ page-break-before: always; overflow: visible; }}
     .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
@@ -5279,9 +5298,10 @@ full_report_html = f"""
         line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
     }}
     .page-num {{ display: none !important; }}
-    .official-page-footer {{
-        position: absolute; left: 18mm; right: 18mm; bottom: 3mm; width: auto;
-        margin: 0; padding-top: 6px; box-sizing: border-box; direction: rtl;
+    .official-page-footer, .official-footer, .page-footer, .footer {{
+        position: relative; bottom: auto; left: auto; right: auto;
+        width: 100%; margin-top: auto; padding-top: 5mm; flex-shrink: 0;
+        box-sizing: border-box; direction: rtl;
         page-break-inside: avoid; break-inside: avoid; page-break-before: avoid; break-before: avoid;
         -webkit-print-color-adjust: exact; print-color-adjust: exact;
     }}
@@ -5333,7 +5353,7 @@ full_report_html = f"""
             min-height: 297mm !important; height: auto !important;
             transform: none !important;
         }}
-        .page-flow {{ justify-content: space-between; }}
+        .page-flow {{ justify-content: flex-start; }}
         .table-scroll, table, .table-scroll table {{
             table-layout: fixed; width: 100% !important; max-width: 100% !important;
         }}
@@ -5368,7 +5388,7 @@ full_report_html = f"""
             min-height: 294mm !important;
             max-height: 294mm !important;
             margin: 0 auto !important;
-            padding: 7mm 11mm 6mm 11mm !important;
+            padding: 6mm 11mm 5mm 11mm !important;
             box-sizing: border-box !important;
             overflow: hidden !important;
             border: none !important;
@@ -5376,7 +5396,7 @@ full_report_html = f"""
             position: relative !important;
             display: flex !important;
             flex-direction: column !important;
-            justify-content: space-between !important;
+            justify-content: flex-start !important;
             page-break-after: always !important;
             break-after: page !important;
             page-break-inside: avoid !important;
@@ -5416,11 +5436,20 @@ full_report_html = f"""
             break-inside: avoid !important;
             page-break-after: avoid !important;
         }}
-        .page-flow {{ justify-content: space-between; }}
-        .official-page-footer {{
-            position: absolute !important; bottom: 3mm !important;
-            left: 18mm !important; right: 18mm !important; margin: 0 !important;
-            page-break-before: avoid !important; break-before: avoid !important;
+        .page-flow {{ justify-content: flex-start !important; }}
+        .page-flow .section-badge {{ margin: 4px auto !important; }}
+        .page-flow th, .page-flow td {{ padding: 4px 7px !important; }}
+        .official-page-footer, .official-footer, .page-footer, .footer {{
+            position: relative !important;
+            bottom: auto !important;
+            left: auto !important;
+            right: auto !important;
+            width: 100% !important;
+            margin-top: auto !important;
+            padding-top: 5mm !important;
+            flex-shrink: 0 !important;
+            page-break-before: avoid !important;
+            break-before: avoid !important;
         }}
         .photo-annex {{
             overflow: hidden; height: 294mm; max-height: 294mm; min-height: 294mm;
