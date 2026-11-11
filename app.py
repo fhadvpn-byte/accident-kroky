@@ -4709,6 +4709,7 @@ def render_interactive_asphalt_studio(
                 <button class="t-btn" onclick="addExtraItem('obstacle')">🚧 حاجز / عمود</button>
                 <button class="t-btn" onclick="addExtraItem('skid')">〰️ أثر فرامل</button>
                 <button class="t-btn danger" onclick="deleteSelected()">🗑️ حذف المحدد</button>
+                <button class="t-btn" onclick="resetCompass()">🧭 إعادة ضبط الشمال</button>
             </div>
             <div class="btn-group">
                 <button class="t-btn" onclick="rotateSelected(-15)">↺ تدوير يسار</button>
@@ -4920,11 +4921,24 @@ def render_interactive_asphalt_studio(
             }));
         } catch (err) {}
     }
+    function defaultCompass() {
+        return { type: "compass", x: 895, y: 55, angle: 0 };
+    }
+    function keptCompass(source) {
+        const found = (source || []).find(it => it && it.type === "compass");
+        if (!found) return defaultCompass();
+        return { type: "compass", x: Number(found.x) || 895, y: Number(found.y) || 55, angle: Number(found.angle) || 0 };
+    }
+    function ensureCompass() {
+        if (!items.some(it => it && it.type === "compass")) items.push(defaultCompass());
+    }
     function loadScenario(idx) {
+        const compass = keptCompass(items);
         const sc = SCENARIOS[idx] || SCENARIOS[0];
         currentRoad = sc.road;
         roadSel.value = currentRoad;
-        items = JSON.parse(JSON.stringify(sc.items));
+        items = JSON.parse(JSON.stringify(sc.items)).filter(it => it.type !== "compass");
+        items.push(compass);
         selectedIdx = -1;
         renderAll(false);
         scheduleAutoCommit();
@@ -5180,16 +5194,52 @@ def render_interactive_asphalt_studio(
         }
         ctx.restore();
     }
-    function drawHudOverlay() {
+    function drawCompassItem(it, isSelected, hideHandles) {
         ctx.save();
-        ctx.translate(895, 52);
-        ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(0, 0, 28, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.translate(it.x, it.y);
+        ctx.fillStyle = "rgba(0,0,0,0.28)";
+        ctx.beginPath(); ctx.arc(2, 3, 29, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
+        ctx.strokeStyle = isSelected && !hideHandles ? "#38bdf8" : "#0f172a";
+        ctx.lineWidth = isSelected && !hideHandles ? 2.8 : 2;
+        ctx.beginPath(); ctx.arc(0, 0, 29, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        const rad = ((it.angle || 0) * Math.PI) / 180;
+        ctx.save();
+        ctx.rotate(rad);
         ctx.fillStyle = "#dc2626";
-        ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(-7, 5); ctx.lineTo(0, 0); ctx.lineTo(7, 5); ctx.closePath(); ctx.fill();
-        ctx.fillStyle = "#0f172a"; ctx.font = "900 11px Tahoma"; ctx.textAlign = "center";
-        ctx.fillText("شمال N", 0, 18);
+        ctx.beginPath();
+        ctx.moveTo(0, -22);
+        ctx.lineTo(-7, 2);
+        ctx.lineTo(0, -3);
+        ctx.lineTo(7, 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "#64748b";
+        ctx.beginPath();
+        ctx.moveTo(0, 18);
+        ctx.lineTo(-5, 2);
+        ctx.lineTo(0, -1);
+        ctx.lineTo(5, 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "900 10px Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText("شمال", 0, 11);
+        ctx.fillText("N", 0, -26);
+        if (isSelected && !hideHandles) {
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, -29); ctx.lineTo(0, -44); ctx.stroke();
+            ctx.fillStyle = "#38bdf8";
+            ctx.strokeStyle = "#ffffff";
+            ctx.beginPath(); ctx.arc(0, -46, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
         ctx.restore();
+        ctx.restore();
+    }
+    function drawHudOverlay() {
         ctx.save();
         ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
         ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 1.8;
@@ -5216,13 +5266,15 @@ def render_interactive_asphalt_studio(
             }
         });
         items.forEach((it, idx) => {
-            if (it.type !== "impact") {
-                if (["car","truck","bike"].includes(it.type)) drawVehicleShape(it, idx === selectedIdx, hideSelectionHandles);
-                else drawSpecialItem(it, idx === selectedIdx, hideSelectionHandles);
-            }
+            if (it.type === "impact" || it.type === "compass") return;
+            if (["car","truck","bike"].includes(it.type)) drawVehicleShape(it, idx === selectedIdx, hideSelectionHandles);
+            else drawSpecialItem(it, idx === selectedIdx, hideSelectionHandles);
         });
         items.forEach((it, idx) => {
             if (it.type === "impact") drawSpecialItem(it, idx === selectedIdx, hideSelectionHandles);
+        });
+        items.forEach((it, idx) => {
+            if (it.type === "compass") drawCompassItem(it, idx === selectedIdx, hideSelectionHandles);
         });
         drawHudOverlay();
     }
@@ -5235,12 +5287,19 @@ def render_interactive_asphalt_studio(
     }
     canvas.addEventListener("mousedown", e => {
         const p = getCanvasPos(e);
-        if (selectedIdx >= 0 && ["car","truck","bike"].includes(items[selectedIdx].type)) {
+        if (selectedIdx >= 0 && ["car","truck","bike","compass"].includes(items[selectedIdx].type)) {
             const sel = items[selectedIdx];
-            const w = sel.type === "truck" ? 104 : (sel.type === "bike" ? 44 : 68);
             const rad = (sel.angle || 0) * Math.PI / 180;
-            const hx = sel.x + Math.cos(rad) * (w/2 + 26);
-            const hy = sel.y + Math.sin(rad) * (w/2 + 26);
+            let hx;
+            let hy;
+            if (sel.type === "compass") {
+                hx = sel.x + Math.sin(rad) * 46;
+                hy = sel.y - Math.cos(rad) * 46;
+            } else {
+                const w = sel.type === "truck" ? 104 : (sel.type === "bike" ? 44 : 68);
+                hx = sel.x + Math.cos(rad) * (w/2 + 26);
+                hy = sel.y + Math.sin(rad) * (w/2 + 26);
+            }
             if (Math.hypot(p.x - hx, p.y - hy) <= 15) {
                 dragMode = "rotate";
                 return;
@@ -5254,7 +5313,7 @@ def render_interactive_asphalt_studio(
         }
         for (let i = items.length - 1; i >= 0; i--) {
             const it = items[i];
-            const hitR = it.type === "truck" ? 46 : 32;
+            const hitR = it.type === "truck" ? 46 : (it.type === "compass" ? 34 : 32);
             if (Math.hypot(p.x - it.x, p.y - it.y) <= hitR) {
                 selectedIdx = i;
                 dragMode = "body";
@@ -5277,7 +5336,8 @@ def render_interactive_asphalt_studio(
             it.tailX = Math.max(15, Math.min(945, p.x));
             it.tailY = Math.max(15, Math.min(440, p.y));
         } else if (dragMode === "rotate") {
-            it.angle = Math.round(Math.atan2(p.y - it.y, p.x - it.x) * 180 / Math.PI);
+            const pointer = Math.atan2(p.y - it.y, p.x - it.x) * 180 / Math.PI;
+            it.angle = Math.round(it.type === "compass" ? pointer + 90 : pointer);
         }
         renderAll(false);
     });
@@ -5291,7 +5351,8 @@ def render_interactive_asphalt_studio(
         const p = getCanvasPos(e);
         for (let i = items.length - 1; i >= 0; i--) {
             const it = items[i];
-            if (["car","truck","bike"].includes(it.type) && Math.hypot(p.x - it.x, p.y - it.y) <= 42) {
+            const reach = it.type === "compass" ? 52 : 42;
+            if (["car","truck","bike","compass"].includes(it.type) && Math.hypot(p.x - it.x, p.y - it.y) <= reach) {
                 e.preventDefault();
                 selectedIdx = i;
                 it.angle = ((it.angle || 0) + (e.deltaY > 0 ? 8 : -8)) % 360;
@@ -5302,13 +5363,31 @@ def render_interactive_asphalt_studio(
         }
     }, { passive: false });
     window.rotateSelected = function(delta) {
-        if (selectedIdx >= 0) {
+        if (selectedIdx >= 0 && ["car","truck","bike","compass"].includes(items[selectedIdx].type)) {
             items[selectedIdx].angle = ((items[selectedIdx].angle || 0) + delta) % 360;
             renderAll(false);
             scheduleAutoCommit();
         }
     };
+    window.resetCompass = function() {
+        let compass = items.find(it => it.type === "compass");
+        if (!compass) {
+            compass = defaultCompass();
+            items.push(compass);
+        } else {
+            compass.x = 895;
+            compass.y = 55;
+            compass.angle = 0;
+        }
+        selectedIdx = items.indexOf(compass);
+        renderAll(false);
+        scheduleAutoCommit();
+    };
     window.deleteSelected = function() {
+        if (selectedIdx >= 0 && items[selectedIdx].type === "compass") {
+            document.getElementById("saveStatus").textContent = "البوصلة تبقى على اللوحة؛ يمكن سحبها أو تدويرها أو إعادة ضبطها";
+            return;
+        }
         if (selectedIdx >= 0) {
             items.splice(selectedIdx, 1);
             selectedIdx = -1;
@@ -5372,6 +5451,7 @@ def render_interactive_asphalt_studio(
                         }
                         if (typeof saved.roadName === "string") roadNameIn.value = saved.roadName;
                         items = saved.items;
+                        ensureCompass();
                         restored = true;
                         renderAll(false);
                     }
