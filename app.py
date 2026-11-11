@@ -2100,12 +2100,25 @@ st.markdown("""
         h3 { font-size: 1rem !important; }
     }
     @media print {
+        @page { size: A4; margin: 0; }
         section[data-testid="stSidebar"],
+        [data-testid="stSidebar"],
+        [data-testid="stSidebarContent"],
+        [data-testid="stSidebarHeader"],
+        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="collapsedControl"],
         [data-testid="stHeader"],
         [data-testid="stToolbar"],
-        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="stDecoration"],
+        [data-testid="stStatusWidget"],
         .stButton, .stDownloadButton, button {
             display: none !important;
+        }
+        .main .block-container {
+            max-width: 210mm !important;
+            width: 210mm !important;
+            padding: 0 !important;
+            margin: 0 !important;
         }
     }
 </style>
@@ -4043,12 +4056,12 @@ with tab5:
             display: flex; flex-direction: column; overflow: hidden;
         }}
         .report-viewport {{
-            flex: 1 1 auto; width: 100%; min-width: 0; max-width: 100%;
+            flex: 1 1 auto; width: 100%; max-width: none;
             overflow: auto; -webkit-overflow-scrolling: touch;
-            container-type: inline-size; container-name: report;
         }}
         .report-sheet {{
-            width: 210mm; min-width: 750px; margin: 12px auto 20px auto;
+            width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
+            transform: none; zoom: 1; scale: 1;
         }}
         .report-sheet .box-content,
         .report-sheet table,
@@ -4059,10 +4072,21 @@ with tab5:
         .report-sheet li {{
             font-size: 11px !important;
         }}
-        .page {{
-            background: white; width: 210mm; min-width: 750px; min-height: 297mm; margin: 0 auto 20px auto;
+        .page, .report-page, .a4-page {{
+            background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
+            min-height: 297mm; height: auto; margin: 0 auto 8mm auto;
             padding: 15mm 18mm; box-sizing: border-box; position: relative;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
+            transform: none; zoom: 1; scale: 1;
+        }}
+        .report-sheet table,
+        .report-sheet .table-scroll,
+        .report-sheet .box-content,
+        .report-sheet .header-box,
+        .report-sheet .photo-grid,
+        .report-sheet p,
+        .report-sheet li {{
+            width: 100%; max-width: 100%; box-sizing: border-box;
         }}
         .page.report-page.page-one {{
             padding: 8mm 12mm 10mm;
@@ -4140,85 +4164,65 @@ with tab5:
         }}
         .table-scroll {{ width: 100%; max-width: 100%; }}
         @media screen {{
-            html, body, .report-viewport {{ overflow: hidden; }}
-            .report-sheet {{
-                width: 100%; min-width: 0; max-width: 850px; margin-left: auto; margin-right: auto;
-            }}
-            .report-viewport {{ max-width: 100%; }}
-            .page, .report-page, .a4-page {{
-                width: 100%; min-width: 0; max-width: 850px;
-                min-height: 0; height: auto; overflow: hidden; box-sizing: border-box;
+            html, body, .report-viewport {{ overflow: auto; }}
+            .report-sheet, .page, .report-page, .a4-page {{
+                width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
+                min-height: 297mm !important; height: auto !important;
+                transform: none !important; zoom: 1 !important; scale: 1 !important;
             }}
             .photo-annex, .photo-annex .photo-card, .photo-annex .photo-meta {{
-                overflow: visible; height: auto; max-height: none;
+                overflow: visible; max-height: none;
             }}
-            .table-scroll {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
-            table, .table-scroll table {{
-                table-layout: fixed; width: 100%; min-width: 0; max-width: 100%;
+            .table-scroll, table, .table-scroll table, .box-content, .header-box {{
+                width: 100% !important; max-width: 100% !important; box-sizing: border-box;
             }}
+            table, .table-scroll table {{ table-layout: fixed; }}
             th, td {{
                 white-space: normal; overflow-wrap: anywhere; word-break: break-word;
             }}
         }}
         @media screen and (max-width: 768px) {{
-            html, body {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
-            .report-viewport {{ overflow: hidden; width: 100%; max-width: 100%; }}
-            .report-sheet {{
-                width: 100%; min-width: 0; max-width: 850px;
-                margin: 0 auto 12px auto; zoom: 1;
-            }}
-            .page, .report-page, .a4-page {{
-                width: 100%; min-width: 0; max-width: 850px;
-                min-height: 0; height: auto; overflow: hidden; font-size: 12px;
-            }}
-            .report-page {{
-                box-sizing: border-box;
-                background: #fff;
-                color: #000;
-                border-radius: 8px;
-                padding: 12px;
-                margin-bottom: 15px;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+            .report-viewport {{ overflow: auto; width: 100%; max-width: none; }}
+            .report-sheet, .page, .report-page, .a4-page {{
+                width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
+                min-height: 297mm !important; height: auto !important;
+                transform: none !important; zoom: 1 !important; scale: 1 !important;
             }}
             .page.report-page.page-one {{
-                padding: 8px 10px 10px; gap: 2px; justify-content: flex-start;
+                padding: 8mm 12mm 10mm; gap: 2px; justify-content: flex-start;
             }}
-            .page-one .header-box {{ min-height: 72px; margin-bottom: 2px; }}
-            .page-one .section-badge {{ margin: 2px auto; }}
-            .header-Title {{ font-size: 14px; }}
-            .header-box {{ font-size: 11px; min-height: 88px; }}
-            .header-logo img {{ height: 64px; max-width: 70px; }}
-            .section-badge {{ font-size: 13px; padding: 4px 10px; }}
-            .box-content {{ font-size: 12px; min-height: 0; padding: 8px; }}
-            .table-scroll {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
-            table, .table-scroll table {{
-                table-layout: fixed; width: 100%; min-width: 0; max-width: 100%; font-size: 11px;
+            .table-scroll, table, .table-scroll table {{
+                table-layout: fixed; width: 100% !important; max-width: 100% !important;
             }}
             th, td {{
-                font-size: 11px; padding: 4px 3px;
                 white-space: normal; overflow-wrap: anywhere; word-break: break-word;
             }}
         }}
         @media print {{
-            @page {{ size: A4; margin: 8mm; }}
-            html, body {{ height: auto; display: block; overflow: visible; background: white; padding: 0; }}
+            @page {{ size: A4; margin: 0; }}
+            html, body {{ height: auto; display: block; overflow: visible; background: white; margin: 0; padding: 0; }}
             button, .no-print, .stButton, .stDownloadButton,
-            [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"] {{
+            section[data-testid="stSidebar"], [data-testid="stSidebar"],
+            [data-testid="stSidebarContent"], [data-testid="stSidebarHeader"],
+            [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"],
+            [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"] {{
                 display: none !important;
             }}
-            .report-viewport {{ overflow: visible; height: auto; }}
-            .report-sheet {{ width: auto; min-width: 0; margin: 0; zoom: 1; }}
-            .page, .report-page, .a4-page {{
-                box-shadow: none; margin: 0 auto; zoom: 1; overflow: hidden;
-                width: 210mm; height: 297mm; max-width: 210mm; max-height: 297mm;
-                min-width: 0; min-height: 297mm; page-break-after: always;
+            .report-viewport {{ overflow: visible; height: auto; width: 210mm; max-width: 210mm; }}
+            .report-sheet, .page, .report-page, .a4-page {{
+                box-shadow: none; margin: 0; overflow: visible;
+                width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
+                min-height: 297mm !important; height: auto !important; max-height: none !important;
+                transform: none !important; zoom: 1 !important; scale: 1 !important;
+                page-break-after: always;
             }}
             .report-sheet > .report-page:last-child {{ page-break-after: auto; break-after: auto; }}
             .table-scroll {{ overflow: visible; max-width: none; }}
-            table, .table-scroll table {{
-                width: 99.6% !important; min-width: 0 !important; border-collapse: collapse;
-                border: 1px solid #000;
+            table, .table-scroll, .table-scroll table, .box-content, .header-box, .photo-grid {{
+                width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+                box-sizing: border-box; border-collapse: collapse;
             }}
+            table, .table-scroll table {{ border: 1px solid #000; }}
             th, td {{ border: 1px solid #000 !important; }}
             .report-sheet .box-content,
             .report-sheet table,
@@ -4371,8 +4375,10 @@ with tab5:
         st.markdown(
             """
             <style>
+            @media screen {
             section[data-testid="stSidebar"] {
                 display: flex !important;
+            }
             }
             .main .block-container {
                 max-width: 100% !important;
