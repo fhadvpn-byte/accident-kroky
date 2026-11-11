@@ -96,6 +96,7 @@ DEFAULT_REPORT_STATE = {
     "video_injected_text": "",
     "auto_analyze_video": False,
     "show_page_numbers": False,
+    "include_sketch": True,
     "confirm_clear": False,
     "last_saved_time": "لم يتم الحفظ بعد",
 }
@@ -126,6 +127,8 @@ def init_and_load_state():
         st.session_state.show_page_numbers = False
     if not isinstance(st.session_state.get("auto_analyze_video"), bool):
         st.session_state.auto_analyze_video = False
+    if not isinstance(st.session_state.get("include_sketch"), bool):
+        st.session_state.include_sketch = True
     _normalize_loaded_video_state()
     st.session_state.law_selection_sig = tuple(st.session_state.get("selected_articles") or [])
     st.session_state["state_initialized"] = True
@@ -2839,8 +2842,34 @@ with tab3:
     selected_actions = list(taken_procedures)
     if extra_procedure:
         selected_actions.append(extra_procedure)
+_SKETCH_ATTACH_LABEL = "إرفاق صفحة الكروكي في التقرير"
+_SKETCH_OMIT_LABEL = "حذف صفحة الكروكي من التقرير (حادث قديم بدون كروكي)"
+
+def _on_sketch_choice_tab4():
+    st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab4") == _SKETCH_ATTACH_LABEL
+    save_current_work()
+
+def _on_sketch_choice_tab5():
+    st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab5") == _SKETCH_ATTACH_LABEL
+    save_current_work()
+
+def _sketch_availability_control(widget_key, on_change):
+    if not isinstance(st.session_state.get("include_sketch"), bool):
+        st.session_state.include_sketch = True
+    selected = _SKETCH_ATTACH_LABEL if st.session_state.include_sketch else _SKETCH_OMIT_LABEL
+    if st.session_state.get(widget_key) != selected:
+        st.session_state[widget_key] = selected
+    st.radio(
+        "هل يتوفر رسم كروكي للحادث؟",
+        (_SKETCH_ATTACH_LABEL, _SKETCH_OMIT_LABEL),
+        key=widget_key,
+        on_change=on_change,
+    )
+    st.session_state.include_sketch = st.session_state.get(widget_key) == _SKETCH_ATTACH_LABEL
+
 with tab4:
     st.subheader("🎨 محرر الكروكي التفاعلي (Fabric.js)")
+    _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
     _fabric_html = r'''
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -3913,17 +3942,19 @@ with tab5:
     criminal_details_html = ""
     if "جنائي" in (accident_nature or ""):
         criminal_details_html = f"""
-            <div class="table-scroll"><table style="margin-top:25px;">
+            <div class="table-scroll"><table>
                 <tr><th style="font-size:16px;">تفاصيل الشق الجنائي والأمني</th></tr>
-                <tr><td style="padding:14px; font-size:16px; text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
-                <tr><td style="padding:14px; font-size:16px; text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
-                <tr><td style="padding:14px; font-size:16px; text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
-                <tr><td style="padding:14px; font-size:16px; text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
+                <tr><td style="font-size:16px; text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
+                <tr><td style="font-size:16px; text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
+                <tr><td style="font-size:16px; text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
+                <tr><td style="font-size:16px; text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
             </table></div>
         """
     photos_list = list(st.session_state.gallery_photos or [])
+    include_sketch = st.session_state.get("include_sketch", True) is True
     photos_pages_html = ""
-    photos_per_page = 4
+    photos_per_page = 6
+    annex_first_page = 5 if include_sketch else 4
     for page_idx in range(0, len(photos_list), photos_per_page):
         page_photos = photos_list[page_idx:page_idx + photos_per_page]
         if not page_photos:
@@ -3938,7 +3969,7 @@ with tab5:
             <div class="photo-meta">{number}<br>{safe_caption}</div>
         </div>
         """
-        page_number = 5 + (page_idx // photos_per_page)
+        page_number = annex_first_page + (page_idx // photos_per_page)
         photos_pages_html += f"""
         <div class="page report-page photo-annex">
             {build_header()}
@@ -3975,6 +4006,29 @@ with tab5:
             @page { size: A4; margin: 8mm 8mm 16mm 8mm; }
             @page { @bottom-center { content: counter(page); font-family: "Tajawal", sans-serif; font-size: 11pt; } }
         }
+        """
+    sketch_page_html = ""
+    if include_sketch:
+        sketch_page_html = f"""
+        <div class="page report-page">
+            {build_header()}
+            <div class="section-badge">كروكي الحادث</div>
+            <div style="text-align:center; font-weight:bold; font-size:18px; margin-bottom:15px;">رسم كروكي {road_name_sign}</div>
+            <div style="display:flex; justify-content:space-around; align-items:center; margin-top:20px;">
+                <div style="text-align:center; width:35%;">
+                    <div class="road-sign">{road_name_sign}</div>
+                    <div style="font-size:75px; line-height:1; margin:20px 0;">✥</div>
+                    <div style="font-weight:bold;">اتجاهات الطريق</div>
+                </div>
+                <div style="width:55%; text-align:center;">
+                    {sketch_figure}
+                </div>
+            </div>
+            <div style="margin-top:30px; font-weight:bold; font-size:16px; line-height:2; padding-right:30px;">
+                {"".join(f"<div>{line}</div>" for line in legend_keys)}
+            </div>
+            <div class="page-num">4</div>
+        </div>
         """
     full_report_html = f"""
     <!DOCTYPE html>
@@ -4014,9 +4068,11 @@ with tab5:
         .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; }}
         .photo-card {{ width: 48%; margin-bottom: 18px; text-align: center; }}
         .photo-card img {{
-            width: auto; max-width: 100%; max-height: 350px; height: auto; object-fit: contain;
+            width: auto; max-width: 100%; max-height: 185px; height: auto; object-fit: contain;
             border: 2px solid #1b4332; border-radius: 6px; background: #fff;
         }}
+        .page-three table {{ margin-top: 6px !important; margin-bottom: 6px !important; }}
+        .page-three th, .page-three td {{ padding: 4px 4px !important; }}
         .photo-card .photo-meta {{ margin-top: 6px; font-weight: bold; font-size: 14px; line-height: 1.6; }}
         .logo-fallback {{
             border: 2px solid #1b4332; border-radius: 50%; width: 80px; height: 80px;
@@ -4211,22 +4267,22 @@ with tab5:
             </div>
             <div class="page-num">2</div>
         </div>
-        <div class="page report-page">
+        <div class="page report-page page-three">
             {build_header()}
             <div class="table-scroll"><table>
                 <tr><th style="font-size:16px;">طبيعة وتصنيف الحادث</th></tr>
-                <tr><td style="padding:14px; font-size:16px;">{html.escape(accident_nature or "")}</td></tr>
+                <tr><td style="font-size:16px;">{html.escape(accident_nature or "")}</td></tr>
             </table></div>
-            <div class="table-scroll"><table style="margin-top:25px;">
+            <div class="table-scroll"><table>
                 <tr><th style="font-size:16px;">الحقوق الخاصة والعامة</th></tr>
-                <tr><td style="padding:14px; font-size:16px;">{html.escape("" if rights_status == "اختر الحالة" else rights_status)}</td></tr>
+                <tr><td style="font-size:16px;">{html.escape("" if rights_status == "اختر الحالة" else rights_status)}</td></tr>
             </table></div>
-            <div class="table-scroll"><table style="margin-top:25px;">
+            <div class="table-scroll"><table>
                 <tr><th style="font-size:16px;">الإجراءات المتخذة</th></tr>
                 {actions_html}
             </table></div>
             {criminal_details_html}
-            <div class="table-scroll"><table class="sign-table" style="margin-top:35px;">
+            <div class="table-scroll"><table class="sign-table">
                 <tr><th colspan="3" style="font-size:16px;">معد التقرير</th></tr>
                 <tr><th>إجراء الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
                 <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
@@ -4235,25 +4291,7 @@ with tab5:
             </table></div>
             <div class="page-num">3</div>
         </div>
-        <div class="page report-page">
-            {build_header()}
-            <div class="section-badge">كروكي الحادث</div>
-            <div style="text-align:center; font-weight:bold; font-size:18px; margin-bottom:15px;">رسم كروكي {road_name_sign}</div>
-            <div style="display:flex; justify-content:space-around; align-items:center; margin-top:20px;">
-                <div style="text-align:center; width:35%;">
-                    <div class="road-sign">{road_name_sign}</div>
-                    <div style="font-size:75px; line-height:1; margin:20px 0;">✥</div>
-                    <div style="font-weight:bold;">اتجاهات الطريق</div>
-                </div>
-                <div style="width:55%; text-align:center;">
-                    {sketch_figure}
-                </div>
-            </div>
-            <div style="margin-top:30px; font-weight:bold; font-size:16px; line-height:2; padding-right:30px;">
-                {"".join(f"<div>{line}</div>" for line in legend_keys)}
-            </div>
-            <div class="page-num">4</div>
-        </div>
+        {sketch_page_html}
         {photos_pages_html}
         </div>
         </div>
@@ -4296,6 +4334,7 @@ with tab5:
             """,
             unsafe_allow_html=True,
         )
+    _sketch_availability_control("include_sketch_choice_tab5", _on_sketch_choice_tab5)
     st.subheader("معاينة حية للتقرير قبل الطباعة:")
     st.components.v1.html(full_report_html, height=850, scrolling=False)
 st.markdown("""
