@@ -4376,247 +4376,6 @@ def _load_remembered_sketch():
     if stored.startswith("data:image/"):
         st.session_state[SKETCH_DATA_URL_KEY] = stored
 
-CAD_SCENARIOS = {
-    "rear_end": {
-        "label": "1. تصادم خلفي في مسار مستقيم (عدم ترك مسافة آمنة)",
-        "road": "straight_2lane",
-        "v1": {"x": 290, "y": 235, "angle": 0, "path": "M 130 235 L 265 235"},
-        "v2": {"x": 415, "y": 235, "angle": 0, "path": "M 360 235 L 415 235"},
-        "impact": {"x": 352, "y": 235},
-        "skid": "M 190 223 L 255 223 M 190 247 L 255 247",
-    },
-    "intersection_tbone": {
-        "label": "2. اعتراض مسار داخل تقاطع رباعي (تصادم جانبي متعامد)",
-        "road": "cross_4way",
-        "v1": {"x": 365, "y": 245, "angle": 0, "path": "M 140 245 L 335 245"},
-        "v2": {"x": 415, "y": 195, "angle": 90, "path": "M 415 65 L 415 165"},
-        "impact": {"x": 405, "y": 235},
-        "skid": "M 230 233 L 320 233 M 230 257 L 320 257",
-    },
-    "lane_change": {
-        "label": "3. انحراف مفاجئ وتغيير مسار خاطئ (احتكاك جانبي)",
-        "road": "divided_highway",
-        "v1": {"x": 370, "y": 188, "angle": -22, "path": "M 150 245 Q 260 240 345 198"},
-        "v2": {"x": 405, "y": 165, "angle": 0, "path": "M 180 165 L 385 165"},
-        "impact": {"x": 392, "y": 176},
-        "skid": "",
-    },
-    "uturn_crash": {
-        "label": "4. دوران للخلف (U-Turn) غير آمن واعتراض مركبة بالمسار",
-        "road": "uturn_median",
-        "v1": {"x": 385, "y": 175, "angle": -55, "path": "M 260 265 Q 375 265 385 195"},
-        "v2": {"x": 435, "y": 155, "angle": 180, "path": "M 640 155 L 465 155"},
-        "impact": {"x": 408, "y": 162},
-        "skid": "M 560 143 L 480 143 M 560 167 L 480 167",
-    },
-    "mountain_curve": {
-        "label": "5. تجاوز خاطئ أو انحراف في منعطف جبلي (تصادم مواجه)",
-        "road": "mountain_curve",
-        "v1": {"x": 375, "y": 195, "angle": -28, "path": "M 160 305 Q 275 245 355 205"},
-        "v2": {"x": 440, "y": 165, "angle": 152, "path": "M 640 95 Q 535 125 460 155"},
-        "impact": {"x": 408, "y": 180},
-        "skid": "",
-    },
-    "roundabout": {
-        "label": "6. عدم إعطاء أفضلية داخل الدوار",
-        "road": "roundabout",
-        "v1": {"x": 470, "y": 225, "angle": -115, "path": "M 650 235 L 495 230"},
-        "v2": {"x": 438, "y": 185, "angle": -35, "path": "M 365 140 Q 415 150 432 178"},
-        "impact": {"x": 454, "y": 205},
-        "skid": "",
-    },
-    "fixed_object": {
-        "label": "7. انحراف عن الطريق والاصطدام بجسم ثابت / عمود / حاجز",
-        "road": "straight_2lane",
-        "v1": {"x": 445, "y": 118, "angle": -35, "path": "M 160 235 Q 320 225 430 132"},
-        "v2": None,
-        "impact": {"x": 478, "y": 96},
-        "skid": "M 285 215 Q 365 190 420 140",
-    },
-    "t_junction": {
-        "label": "8. دخول طريق رئيسي من فرعي في تقاطع ثلاثي (T)",
-        "road": "t_junction",
-        "v1": {"x": 395, "y": 205, "angle": -75, "path": "M 395 365 L 395 235"},
-        "v2": {"x": 435, "y": 180, "angle": 180, "path": "M 650 180 L 465 180"},
-        "impact": {"x": 412, "y": 188},
-        "skid": "",
-    },
-}
-
-def _svg_cad_vehicle(x: float, y: float, angle: float, label_num: str, stroke_col: str, fill_col: str) -> str:
-    """رسم هندسي معماري دقيق للمركبة من الأعلى (Top-Down CAD Vector)."""
-    return f"""
-    <g transform="translate({x},{y}) rotate({angle})">
-        <rect x="-24" y="-17" width="12" height="4" rx="1.5" fill="#0f172a"/>
-        <rect x="12" y="-17" width="12" height="4" rx="1.5" fill="#0f172a"/>
-        <rect x="-24" y="13" width="12" height="4" rx="1.5" fill="#0f172a"/>
-        <rect x="12" y="13" width="12" height="4" rx="1.5" fill="#0f172a"/>
-        <rect x="-32" y="-14" width="64" height="28" rx="6" fill="{fill_col}" stroke="{stroke_col}" stroke-width="2.2"/>
-        <polygon points="8,-11 20,-9 20,9 8,11" fill="#ffffff" fill-opacity="0.85" stroke="{stroke_col}" stroke-width="1.2"/>
-        <polygon points="-22,-9 -12,-11 -12,11 -22,9" fill="#ffffff" fill-opacity="0.75" stroke="{stroke_col}" stroke-width="1.2"/>
-        <rect x="-11" y="-10" width="18" height="20" rx="2" fill="#ffffff" fill-opacity="0.45" stroke="{stroke_col}" stroke-width="1"/>
-        <polygon points="24,-5 30,0 24,5" fill="{stroke_col}"/>
-        <circle cx="-2" cy="0" r="8.5" fill="#ffffff" stroke="{stroke_col}" stroke-width="1.6"/>
-        <text x="-2" y="3.8" text-anchor="middle" font-family="Arial, sans-serif" font-size="11" font-weight="900" fill="{stroke_col}">{label_num}</text>
-    </g>
-    """
-
-def _svg_road_geometry(road_type: str) -> str:
-    """توليد هندسة الطرق بمعايير مخططات هندسة المرور الرسمية (CAD)."""
-    if road_type == "cross_4way":
-        return """
-        <rect x="0" y="130" width="800" height="160" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
-        <rect x="315" y="0" width="170" height="420" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
-        <rect x="313" y="128" width="174" height="164" fill="#e2e8f0"/>
-        <line x1="0" y1="210" x2="310" y2="210" stroke="#0f172a" stroke-width="2.5"/>
-        <line x1="490" y1="210" x2="800" y2="210" stroke="#0f172a" stroke-width="2.5"/>
-        <line x1="400" y1="0" x2="400" y2="125" stroke="#0f172a" stroke-width="2.5"/>
-        <line x1="400" y1="295" x2="400" y2="420" stroke="#0f172a" stroke-width="2.5"/>
-        <line x1="0" y1="170" x2="310" y2="170" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
-        <line x1="0" y1="250" x2="310" y2="250" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
-        <line x1="490" y1="170" x2="800" y2="170" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
-        <line x1="490" y1="250" x2="800" y2="250" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
-        """
-    if road_type == "uturn_median":
-        return """
-        <rect x="0" y="110" width="800" height="200" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
-        <rect x="0" y="198" width="335" height="24" rx="6" fill="#cbd5e1" stroke="#1e293b" stroke-width="2"/>
-        <rect x="455" y="198" width="345" height="24" rx="6" fill="#cbd5e1" stroke="#1e293b" stroke-width="2"/>
-        <line x1="0" y1="154" x2="800" y2="154" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
-        <line x1="0" y1="266" x2="800" y2="266" stroke="#475569" stroke-width="1.4" stroke-dasharray="12,10"/>
-        """
-    if road_type == "mountain_curve":
-        return """
-        <path d="M 80 390 Q 290 220 740 110" fill="none" stroke="#334155" stroke-width="144" stroke-linecap="butt"/>
-        <path d="M 80 390 Q 290 220 740 110" fill="none" stroke="#e2e8f0" stroke-width="138" stroke-linecap="butt"/>
-        <path d="M 80 390 Q 290 220 740 110" fill="none" stroke="#b91c1c" stroke-width="2.5"/>
-        <path d="M 80 390 Q 290 220 740 110" fill="none" stroke="#0f172a" stroke-width="1.2" stroke-dasharray="14,10"/>
-        """
-    if road_type == "roundabout":
-        return """
-        <rect x="0" y="155" width="800" height="110" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
-        <rect x="345" y="0" width="110" height="420" fill="#e2e8f0" stroke="#334155" stroke-width="2"/>
-        <circle cx="400" cy="210" r="115" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
-        <circle cx="400" cy="210" r="52" fill="#cbd5e1" stroke="#0f172a" stroke-width="2.5"/>
-        <circle cx="400" cy="210" r="84" fill="none" stroke="#475569" stroke-width="1.4" stroke-dasharray="10,8"/>
-        """
-    if road_type == "t_junction":
-        return """
-        <rect x="0" y="125" width="800" height="130" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
-        <rect x="330" y="252" width="140" height="168" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
-        <rect x="332" y="248" width="136" height="10" fill="#e2e8f0"/>
-        <line x1="0" y1="190" x2="800" y2="190" stroke="#0f172a" stroke-width="2.2"/>
-        <line x1="400" y1="265" x2="400" y2="420" stroke="#475569" stroke-width="1.6" stroke-dasharray="10,8"/>
-        """
-    if road_type == "divided_highway":
-        return """
-        <rect x="0" y="115" width="800" height="190" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
-        <rect x="0" y="122" width="800" height="16" fill="#cbd5e1" stroke="#1e293b" stroke-width="1.6"/>
-        <line x1="0" y1="195" x2="800" y2="195" stroke="#475569" stroke-width="1.6" stroke-dasharray="14,10"/>
-        <line x1="0" y1="250" x2="800" y2="250" stroke="#475569" stroke-width="1.6" stroke-dasharray="14,10"/>
-        """
-    return """
-    <rect x="0" y="135" width="800" height="150" fill="#e2e8f0" stroke="#334155" stroke-width="2.2"/>
-    <line x1="0" y1="185" x2="800" y2="185" stroke="#0f172a" stroke-width="2.4"/>
-    <line x1="0" y1="235" x2="800" y2="235" stroke="#475569" stroke-width="1.5" stroke-dasharray="14,10"/>
-    <rect x="468" y="82" width="22" height="22" rx="3" fill="#cbd5e1" stroke="#0f172a" stroke-width="1.8"/>
-    """
-
-def build_autocad_blueprint_svg(
-    scenario_key: str,
-    road_name: str = "",
-    v1_offset_x: int = 0,
-    v1_angle_delta: int = 0,
-    v2_offset_x: int = 0,
-    v2_angle_delta: int = 0,
-    show_skid: bool = True,
-) -> str:
-    """بناء مخطط كروكي هندسي متجه (CAD Vector SVG) فائق الدقة وجاهز للطباعة الرسمية."""
-    sc = CAD_SCENARIOS.get(scenario_key, CAD_SCENARIOS["rear_end"])
-    road_svg = _svg_road_geometry(sc["road"])
-    road_label = html.escape(road_name.strip()) if road_name.strip() else "موقع الحادث الميداني"
-    v1 = sc["v1"]
-    v1_svg = _svg_cad_vehicle(
-        v1["x"] + v1_offset_x,
-        v1["y"],
-        v1["angle"] + v1_angle_delta,
-        "1",
-        "#991b1b",
-        "#fee2e2",
-    )
-    v2_svg = ""
-    v2_path_svg = ""
-    if sc.get("v2"):
-        v2 = sc["v2"]
-        v2_svg = _svg_cad_vehicle(
-            v2["x"] + v2_offset_x,
-            v2["y"],
-            v2["angle"] + v2_angle_delta,
-            "2",
-            "#1e3a8a",
-            "#dbeafe",
-        )
-        v2_path_svg = f'<path d="{v2["path"]}" fill="none" stroke="#1e3a8a" stroke-width="2.4" stroke-dasharray="7,5" marker-end="url(#arrowBlue)"/>'
-    skid_svg = ""
-    if show_skid and sc.get("skid"):
-        skid_svg = f'<path d="{sc["skid"]}" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="4,3"/>'
-    imp = sc["impact"]
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420" style="background:#f8fafc; border:1.8px solid #0f172a; border-radius:6px;">
-        <defs>
-            <pattern id="cadGrid" width="25" height="25" patternUnits="userSpaceOnUse">
-                <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#cbd5e1" stroke-width="0.65"/>
-            </pattern>
-            <marker id="arrowRed" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1 L 10 5 L 0 9 z" fill="#991b1b"/>
-            </marker>
-            <marker id="arrowBlue" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                <path d="M 0 1 L 10 5 L 0 9 z" fill="#1e3a8a"/>
-            </marker>
-        </defs>
-        <rect width="800" height="420" fill="url(#cadGrid)"/>
-        {road_svg}
-        {skid_svg}
-        <path d="{v1["path"]}" fill="none" stroke="#991b1b" stroke-width="2.6" stroke-dasharray="8,5" marker-end="url(#arrowRed)"/>
-        {v2_path_svg}
-        {v1_svg}
-        {v2_svg}
-        <g transform="translate({imp['x']},{imp['y']})">
-            <circle cx="0" cy="0" r="14" fill="#fef08a" fill-opacity="0.88" stroke="#b91c1c" stroke-width="2"/>
-            <path d="M -8 -8 L 8 8 M -8 8 L 8 -8" stroke="#b91c1c" stroke-width="2.4"/>
-            <circle cx="0" cy="-20" r="8" fill="#b91c1c"/>
-            <text x="0" y="-16.5" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="bold" fill="#ffffff">X</text>
-        </g>
-        <g transform="translate(748, 52)">
-            <circle cx="0" cy="0" r="24" fill="#ffffff" stroke="#0f172a" stroke-width="1.6"/>
-            <polygon points="0,-18 -6,6 0,2 6,6" fill="#0f172a"/>
-            <text x="0" y="18" text-anchor="middle" font-family="Arial, sans-serif" font-size="10" font-weight="900" fill="#0f172a">N شمال</text>
-        </g>
-        <g transform="translate(16, 366)">
-            <rect x="0" y="0" width="768" height="40" rx="4" fill="#ffffff" fill-opacity="0.95" stroke="#0f172a" stroke-width="1.4"/>
-            <text x="752" y="25" text-anchor="end" font-family="Tahoma, Arial, sans-serif" font-size="13" font-weight="700" fill="#0f172a">الموقع: {road_label}</text>
-            <text x="395" y="25" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" font-size="12" font-weight="700" fill="#991b1b">(1) مسار ومركبة الطرف الأول</text>
-            <text x="205" y="25" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" font-size="12" font-weight="700" fill="#1e3a8a">(2) مسار ومركبة الطرف الثاني</text>
-            <text x="65" y="25" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" font-size="12" font-weight="700" fill="#b91c1c">(X) نقطة الاصطدام</text>
-        </g>
-    </svg>"""
-    compact_lines = [line.strip() for line in svg.splitlines() if line.strip()]
-    return " ".join(compact_lines)
-
-def svg_to_data_uri(svg_markup: str) -> str:
-    """تنظيف كود الـ SVG من المسافات المكسورة وتحويله إلى رابط صورة متجهة عالية الدقة."""
-    compact_lines = [line.strip() for line in svg_markup.splitlines() if line.strip()]
-    clean_svg = " ".join(compact_lines)
-    clean_svg = clean_svg.replace(
-        'viewBox="0 0 800 420" width="100%" height="100%"',
-        'viewBox="0 0 800 420" width="800" height="420"',
-    )
-    clean_svg = clean_svg.replace(
-        'width="100%" height="100%" viewBox="0 0 800 420"',
-        'width="800" height="420" viewBox="0 0 800 420"',
-    )
-    b64 = base64.b64encode(clean_svg.encode("utf-8")).decode("ascii")
-    return f"data:image/svg+xml;base64,{b64}"
-
 def render_satellite_tactical_map(default_lat: float = 17.0369, default_lon: float = 43.0983):
     """خريطة قمر صناعي تكتيكية حية (Esri World Imagery) لرسم مسارات المركبات ونقطة الاصطدام مباشرة فوق الشارع الحقيقي."""
     components.html(
@@ -4756,108 +4515,890 @@ def render_satellite_tactical_map(default_lat: float = 17.0369, default_lon: flo
         height=515,
     )
 
-def render_modern_tactical_sketch_studio(sketch_image_state_key: str = "sketch_data_url", location_state_key: str = "p1_acc_location"):
-    """الواجهة الموحدة لاستوديو الكروكي الحديث (المولد الهندسي التلقائي CAD + خريطة القمر الصناعي)."""
+
+def render_interactive_asphalt_studio(
+    sketch_image_state_key: str = "sketch_data_url",
+    location_state_key: str = "p1_acc_location",
+):
+    """استوديو كروكي أسفلتي تفاعلي بالماوس مع اعتماد مباشر في تقرير A4."""
+    default_loc = str(st.session_state.get(location_state_key, "") or "").strip()
     st.markdown(
         """
-        <div style="background:linear-gradient(135deg,rgba(8,23,44,0.95),rgba(14,39,71,0.95));
-                    border:1px solid rgba(56,189,248,0.4); border-radius:14px; padding:12px 18px; margin-bottom:12px;
-                    display:flex; justify-content:space-between; align-items:center;">
-            <div>
-                <div style="font-size:17px; font-weight:800; color:#f8fafc;">📐 استوديو التخطيط الهندسي والفضائي الذكي</div>
-                <div style="font-size:12.5px; color:#7dd3fc;">توليد مخطط مروري هندسي (CAD Vector) بضغطة زر أو تخطيط مباشر فوق صورة الأقمار الصناعية</div>
-            </div>
-        </div>
+        <style>
+        div[data-testid="stElementContainer"]:has(textarea[aria-label="__sketch_bridge_receiver__"]) {
+            position: absolute !important;
+            width: 1px !important;
+            height: 1px !important;
+            overflow: hidden !important;
+            opacity: 0 !important;
+            pointer-events: none !important;
+        }
+        </style>
         """,
         unsafe_allow_html=True,
     )
-    mode_choice = st.radio(
-        "اختر نمط إعداد الكروكي المعتمد للتقرير:",
+
+    def _on_bridge_receive():
+        val = str(st.session_state.get("_sketch_bridge_box", "") or "").strip()
+        if val.startswith("data:image/"):
+            st.session_state[sketch_image_state_key] = val
+            _remember_sketch_data_url(val, sketch_image_state_key)
+
+    st.text_area(
+        "__sketch_bridge_receiver__",
+        key="_sketch_bridge_box",
+        on_change=_on_bridge_receive,
+        label_visibility="collapsed",
+    )
+    mode_sel = st.radio(
+        "اختر نمط تخطيط موقع الحادث:",
         options=[
-            "⚡ المخطط الهندسي التلقائي (Auto-CAD Blueprint)",
-            "🛰️ خريطة القمر الصناعي التكتيكية + إرفاق لقطة جوية",
+            "🛣️ استوديو الأسفلت التفاعلي الحر بالماوس (22 سيناريو + 12 طريقاً)",
+            "🛰️ خريطة القمر الصناعي التكتيكية الحية",
         ],
         horizontal=True,
-        key="_modern_sketch_mode",
+        key="_studio_top_mode",
     )
-    default_loc = str(st.session_state.get(location_state_key, "") or "")
-    if mode_choice.startswith("⚡"):
-        c_scen, c_road = st.columns([1.6, 1])
-        with c_scen:
-            scen_key = st.selectbox(
-                "اختر سيناريو هندسة الحادث (يرسم المسارات والمركبات تلقائياً):",
-                options=list(CAD_SCENARIOS.keys()),
-                format_func=lambda k: CAD_SCENARIOS[k]["label"],
-                key="_cad_scen_sel",
-            )
-        with c_road:
-            if "_cad_road_title" not in st.session_state:
-                st.session_state["_cad_road_title"] = default_loc
-            road_title = st.text_input(
-                "مسمى الطريق / التقاطع على المخطط:",
-                placeholder="مثال: طريق الملك عبدالعزيز - تقاطع...",
-                key="_cad_road_title",
-            )
-        with st.expander("⚙️ ضبط دقيق لمواضع وزوايا المركبات وآثار الفرامل (اختياري)", expanded=False):
-            for _slider_key, _slider_default in (
-                ("_cad_v1_dx", 0),
-                ("_cad_v1_da", 0),
-                ("_cad_v2_dx", 0),
-                ("_cad_v2_da", 0),
-            ):
-                st.session_state.setdefault(_slider_key, _slider_default)
-            st.session_state.setdefault("_cad_skid", True)
-            adj1, adj2, adj3, adj4, adj5 = st.columns([1, 1, 1, 1, 0.8])
-            with adj1:
-                st.slider("إزاحة المركبة (1)", -80, 80, key="_cad_v1_dx")
-            with adj2:
-                st.slider("زاوية المركبة (1)", -45, 45, key="_cad_v1_da")
-            with adj3:
-                st.slider("إزاحة المركبة (2)", -80, 80, key="_cad_v2_dx")
-            with adj4:
-                st.slider("زاوية المركبة (2)", -45, 45, key="_cad_v2_da")
-            with adj5:
-                st.checkbox("إظهار آثار الفرملة", key="_cad_skid")
-        svg_code = build_autocad_blueprint_svg(
-            scenario_key=scen_key,
-            road_name=road_title,
-            v1_offset_x=int(st.session_state.get("_cad_v1_dx", 0) or 0),
-            v1_angle_delta=int(st.session_state.get("_cad_v1_da", 0) or 0),
-            v2_offset_x=int(st.session_state.get("_cad_v2_dx", 0) or 0),
-            v2_angle_delta=int(st.session_state.get("_cad_v2_da", 0) or 0),
-            show_skid=bool(st.session_state.get("_cad_skid", True)),
-        )
-        data_uri = svg_to_data_uri(svg_code)
-        st.session_state[sketch_image_state_key] = data_uri
-        _remember_sketch_data_url(data_uri, sketch_image_state_key)
-        st.markdown(
-            f'<div style="background:#f8fafc;padding:6px;border-radius:10px;border:1.5px solid #38bdf8;box-shadow:0 6px 20px rgba(0,0,0,0.35);"><img src="{data_uri}" alt="المخطط الهندسي للحادث" style="width:100%;height:auto;display:block;border-radius:6px;"/></div>',
-            unsafe_allow_html=True,
-        )
-        st.caption("✅ المخطط الهندسي معتمد تلقائياً بدقة متجهة (Vector HD) في صفحة الكروكي داخل تقرير A4.")
-    else:
+    if mode_sel.startswith("🛰️"):
         render_satellite_tactical_map()
-        sat_upload = st.file_uploader(
-            "📥 أرفق لقطة الخريطة الفضائية المرسومة أو صورة الكروكي الجوي لاعتمادها في ورقة A4:",
+        sat_up = st.file_uploader(
+            "📥 أرفق لقطة الخريطة الفضائية لاعتمادها في ورقة A4:",
             type=["png", "jpg", "jpeg", "webp"],
-            key="_sat_sketch_uploader",
+            key="_sat_up_file",
         )
-        if sat_upload is not None:
-            raw_bytes = sat_upload.getvalue()
-            mime = sat_upload.type or "image/png"
-            b64_img = base64.b64encode(raw_bytes).decode("ascii")
-            _remember_sketch_data_url(f"data:{mime};base64,{b64_img}", sketch_image_state_key)
-            st.success("✅ تم اعتماد الكروكي الفضائي في صفحة التقرير بنجاح.")
+        if sat_up is not None:
+            b64 = base64.b64encode(sat_up.getvalue()).decode("ascii")
+            mime = sat_up.type or "image/png"
+            _remember_sketch_data_url(f"data:{mime};base64,{b64}", sketch_image_state_key)
+            st.success("✅ تم اعتماد الكروكي الفضائي في التقرير.")
+        return
+    loc_escaped = json.dumps(default_loc, ensure_ascii=False)
+    keep_editor = "true" if str(st.session_state.get(sketch_image_state_key) or "").startswith("data:image/") else "false"
+    studio_html = """
+    <!DOCTYPE html>
+    <html dir="rtl" lang="ar">
+    <head>
+    <meta charset="utf-8"/>
+    <style>
+        * { box-sizing: border-box; user-select: none; font-family: 'Segoe UI', Tahoma, Arial, sans-serif; }
+        body { margin: 0; padding: 0; background: transparent; color: #f8fafc; }
+        .studio-shell {
+            background: linear-gradient(160deg, #071324 0%, #0d213a 100%);
+            border: 1.5px solid rgba(56, 189, 248, 0.45);
+            border-radius: 14px;
+            padding: 12px;
+            box-shadow: 0 12px 32px rgba(0,0,0,0.5);
+        }
+        .controls-grid {
+            display: grid;
+            grid-template-columns: 1.4fr 1.1fr 1fr;
+            gap: 8px;
+            margin-bottom: 8px;
+        }
+        .ctrl-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 700;
+            color: #7dd3fc;
+            margin-bottom: 4px;
+        }
+        select, input[type="text"] {
+            width: 100%;
+            background: #061224;
+            color: #ffffff;
+            border: 1px solid rgba(56, 189, 248, 0.45);
+            border-radius: 8px;
+            padding: 7px 10px;
+            font-size: 13px;
+            font-weight: 700;
+            outline: none;
+        }
+        select:focus, input[type="text"]:focus { border-color: #38bdf8; box-shadow: 0 0 10px rgba(56,189,248,0.3); }
+        .toolbar-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            padding: 7px 9px;
+            background: rgba(15, 35, 62, 0.85);
+            border: 1px solid rgba(56, 189, 248, 0.25);
+            border-radius: 10px;
+        }
+        .btn-group { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+        .t-btn {
+            background: rgba(18, 48, 86, 0.95);
+            color: #ffffff;
+            border: 1px solid rgba(56, 189, 248, 0.42);
+            border-radius: 7px;
+            padding: 5px 10px;
+            font-size: 12px;
+            font-weight: 700;
+            cursor: pointer;
+            transition: 0.15s;
+        }
+        .t-btn:hover { background: #0284c7; border-color: #ffffff; }
+        .t-btn.danger { background: rgba(153, 27, 27, 0.85); border-color: #f87171; }
+        .t-btn.commit {
+            background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+            color: #ffffff;
+            border: 1.5px solid #a7f3d0;
+            padding: 6px 16px;
+            font-size: 13px;
+            font-weight: 900;
+            box-shadow: 0 0 14px rgba(16, 185, 129, 0.45);
+        }
+        .canvas-wrap {
+            position: relative;
+            width: 100%;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 2px solid #38bdf8;
+            background: #1e293b;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            cursor: grab;
+        }
+        canvas:active { cursor: grabbing; }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 7px;
+            font-size: 12px;
+            color: #bae6fd;
+        }
+        .badge-saved {
+            color: #34d399;
+            font-weight: 800;
+            background: rgba(16,185,129,0.15);
+            padding: 3px 10px;
+            border-radius: 99px;
+            border: 1px solid rgba(52,211,153,0.4);
+        }
+    </style>
+    </head>
+    <body>
+    <div class="studio-shell">
+        <div class="controls-grid">
+            <div class="ctrl-group">
+                <label>⚡ اختر سيناريو الحادث الشامل (22 سيناريو جاهز وقابل للتحريك بالماوس):</label>
+                <select id="scenarioSelect"></select>
+            </div>
+            <div class="ctrl-group">
+                <label>🛣️ اختر هندسة الطريق والأسفلت (يمكن تغيير الطريق مع بقاء السيارات):</label>
+                <select id="roadSelect"></select>
+            </div>
+            <div class="ctrl-group">
+                <label>📍 مسمى الطريق / الموقع على الكروكي:</label>
+                <input type="text" id="roadNameInput" placeholder="مثال: طريق الملك فهد - تقاطع..." />
+            </div>
+        </div>
+        <div class="toolbar-row">
+            <div class="btn-group">
+                <span style="font-size:11.5px;color:#93c5fd;font-weight:800;margin-left:4px;">➕ إضافة بالماوس:</span>
+                <button class="t-btn" onclick="addExtraItem('sedan3')">🚗 مركبة (3)</button>
+                <button class="t-btn" onclick="addExtraItem('truck')">🚛 شاحنة</button>
+                <button class="t-btn" onclick="addExtraItem('bike')">🏍️ دراجة</button>
+                <button class="t-btn" onclick="addExtraItem('pedestrian')">🚶 مشاة</button>
+                <button class="t-btn" onclick="addExtraItem('animal')">🐪 حيوان سائب</button>
+                <button class="t-btn" onclick="addExtraItem('obstacle')">🚧 حاجز / عمود</button>
+                <button class="t-btn" onclick="addExtraItem('skid')">〰️ أثر فرامل</button>
+                <button class="t-btn danger" onclick="deleteSelected()">🗑️ حذف المحدد</button>
+            </div>
+            <div class="btn-group">
+                <button class="t-btn" onclick="rotateSelected(-15)">↺ تدوير يسار</button>
+                <button class="t-btn" onclick="rotateSelected(15)">↻ تدوير يمين</button>
+                <button class="t-btn commit" onclick="commitToStreamlit(true)">✅ اعتماد الكروكي في التقرير</button>
+            </div>
+        </div>
+        <div class="canvas-wrap">
+            <canvas id="asphaltCanvas" width="960" height="500"></canvas>
+        </div>
+        <div class="status-bar">
+            <span>🖱️ <b>تحكم حر بالماوس:</b> اسحب أي سيارة لتحريكها • اسحب الدائرة البيضاء أمام السيارة (أو حرّك عجلة الماوس فوقها) لتدويرها • اسحب ذيل السهم لتعديل المسار.</span>
+            <span id="saveStatus" class="badge-saved">● معتمد تلقائياً في تقرير A4</span>
+        </div>
+    </div>
+    <script>
+    const KEEP_EDITOR = __KEEP_EDITOR__;
+    if (!CanvasRenderingContext2D.prototype.roundRect) {
+        CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
+            const radius = Math.max(0, Math.min(r || 0, w / 2, h / 2));
+            this.moveTo(x + radius, y);
+            this.arcTo(x + w, y, x + w, y + h, radius);
+            this.arcTo(x + w, y + h, x, y + h, radius);
+            this.arcTo(x, y + h, x, y, radius);
+            this.arcTo(x, y, x + w, y, radius);
+            this.closePath();
+            return this;
+        };
+    }
+    const ROADS = {
+        straight_2lane: "1. طريق أسفلتي مفرد (مساران متعاكسان)",
+        divided_4lane: "2. طريق مزدوج بجزيرة وسطية ورصيف",
+        highway_6lane: "3. طريق سريع عريض (3 مسارات + أكتاف)",
+        cross_4way: "4. تقاطع رباعي أسفلتي كامل",
+        t_junction: "5. تقاطع ثلاثي (حرف T - رئيسي وفرعي)",
+        y_junction: "6. تقاطع انسيابي فرعي (حرف Y)",
+        roundabout: "7. دوار مروري أسفلتي بجزيرة وسطى",
+        uturn_median: "8. طريق مزدوج بفتحة دوران للخلف (U-Turn)",
+        mountain_scurve: "9. طريق جبلي متعرج (منعطف مزدوج خطير)",
+        mountain_hairpin: "10. عقبة / منحدر جبلي حاد بحواجز حماية",
+        service_exit: "11. طريق رئيسي مع مخرج / مدخل طريق خدمة",
+        parking_lot: "12. مواقف مركبات جانبية / ساحة وقوف",
+        dirt_shoulder: "13. طريق أسفلتي مع منطقة ترابية / صحراوية جانبية"
+    };
+    const SCENARIOS = [
+        { id:"s1", name:"1. تصادم خلفي في مسار مستقيم (عدم ترك مسافة آمنة)", road:"divided_4lane",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:360, y:190, angle:0, tailX:170, tailY:190, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:465, y:190, angle:0, tailX:395, tailY:190},
+             {type:"impact", x:412, y:190}
+           ]},
+        { id:"s2", name:"2. تصادم متعامد داخل تقاطع رباعي (قطع تقاطع / عدم أفضلية)", road:"cross_4way",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:445, y:275, angle:0, tailX:210, tailY:275, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:500, y:225, angle:90, tailX:500, tailY:65},
+             {type:"impact", x:492, y:268}
+           ]},
+        { id:"s3", name:"3. انحراف مفاجئ وتغيير مسار خاطئ (احتكاك جانبي)", road:"highway_6lane",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:455, y:212, angle:-22, tailX:210, tailY:275},
+             {type:"car", label:"2", color:"#3b82f6", x:495, y:175, angle:0, tailX:240, tailY:175},
+             {type:"impact", x:480, y:192}
+           ]},
+        { id:"s4", name:"4. تجاوز خاطئ في مسار معاكس (تصادم مواجه وجهاً لوجه)", road:"straight_2lane",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:455, y:215, angle:-12, tailX:200, tailY:285, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:545, y:210, angle:180, tailX:760, tailY:210, skid:true},
+             {type:"impact", x:500, y:212}
+           ]},
+        { id:"s5", name:"5. دوران للخلف (U-Turn) غير آمن واعتراض مركبة بالمسار", road:"uturn_median",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:465, y:195, angle:-60, tailX:320, tailY:305},
+             {type:"car", label:"2", color:"#3b82f6", x:525, y:175, angle:180, tailX:760, tailY:175, skid:true},
+             {type:"impact", x:492, y:182}
+           ]},
+        { id:"s6", name:"6. دخول طريق رئيسي من فرعي بدون توقف (تقاطع T)", road:"t_junction",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:470, y:235, angle:-78, tailX:475, tailY:430},
+             {type:"car", label:"2", color:"#3b82f6", x:520, y:198, angle:180, tailX:760, tailY:198, skid:true},
+             {type:"impact", x:488, y:205}
+           ]},
+        { id:"s7", name:"7. عدم إعطاء أفضلية لمن بداخل الدوار", road:"roundabout",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:565, y:265, angle:-155, tailX:770, tailY:280},
+             {type:"car", label:"2", color:"#3b82f6", x:525, y:215, angle:55, tailX:455, tailY:140},
+             {type:"impact", x:542, y:242}
+           ]},
+        { id:"s8", name:"8. تجاوز أو انحراف في منعطف جبلي متعرج", road:"mountain_scurve",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:455, y:240, angle:-28, tailX:220, tailY:345},
+             {type:"car", label:"2", color:"#3b82f6", x:530, y:205, angle:152, tailX:745, tailY:125},
+             {type:"impact", x:492, y:222}
+           ]},
+        { id:"s9", name:"9. فقدان سيطرة في عقبة جبلية واصطدام بالحاجز الواقي", road:"mountain_hairpin",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:605, y:165, angle:-35, tailX:320, tailY:145, skid:true},
+             {type:"obstacle", label:"حاجز", x:650, y:142, angle:25},
+             {type:"impact", x:632, y:152}
+           ]},
+        { id:"s10", name:"10. اصطدام بمركبة متوقفة بوسط/جانب الطريق بدون وسائل سلامة", road:"highway_6lane",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:435, y:238, angle:-10, tailX:190, tailY:250, skid:true},
+             {type:"car", label:"2", color:"#f59e0b", x:530, y:235, angle:0, tailX:530, tailY:235},
+             {type:"impact", x:482, y:236}
+           ]},
+        { id:"s11", name:"11. رجوع للخلف (ريوس) خاطئ والاصطدام بمركبة عابرة", road:"parking_lot",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:465, y:195, angle:65, tailX:435, tailY:115},
+             {type:"car", label:"2", color:"#3b82f6", x:410, y:245, angle:0, tailX:190, tailY:245},
+             {type:"impact", x:452, y:232}
+           ]},
+        { id:"s12", name:"12. فتح باب المركبة فجأة باتجاه مسار السيارات", road:"parking_lot",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:470, y:145, angle:0, tailX:470, tailY:145},
+             {type:"car", label:"2", color:"#3b82f6", x:455, y:185, angle:-5, tailX:210, tailY:195},
+             {type:"impact", x:472, y:166}
+           ]},
+        { id:"s13", name:"13. خروج عن الأسفلت لمنطقة ترابية والاصطدام بجسم ثابت / شجرة", road:"dirt_shoulder",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:555, y:105, angle:-38, tailX:260, tailY:235, skid:true},
+             {type:"obstacle", label:"ثابت", x:598, y:80, angle:0},
+             {type:"impact", x:580, y:92}
+           ]},
+        { id:"s14", name:"14. حادث دهس مشاة أثناء عبور الطريق", road:"divided_4lane",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:445, y:190, angle:0, tailX:210, tailY:190, skid:true},
+             {type:"pedestrian", label:"مشاة", x:498, y:190, angle:0, tailX:498, tailY:105},
+             {type:"impact", x:485, y:190}
+           ]},
+        { id:"s15", name:"15. اعتراض حيوان سائب / مواشي لحرم الطريق العام", road:"dirt_shoulder",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:440, y:230, angle:0, tailX:195, tailY:230, skid:true},
+             {type:"animal", label:"حيوان", x:508, y:228, angle:0, tailX:515, tailY:95},
+             {type:"impact", x:485, y:230}
+           ]},
+        { id:"s16", name:"16. حادث تصادم متسلسل (3 مركبات في مسار واحد)", road:"divided_4lane",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:310, y:190, angle:0, tailX:140, tailY:190, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:415, y:190, angle:0, tailX:360, tailY:190},
+             {type:"car", label:"3", color:"#10b981", x:520, y:190, angle:0, tailX:475, tailY:190},
+             {type:"impact", x:362, y:190},
+             {type:"impact", x:468, y:190}
+           ]},
+        { id:"s17", name:"17. انحراف وانقلاب مركبة مفردة داخل أو خارج الطريق", road:"highway_6lane",
+           items:[
+             {type:"car", label:"1 (منقلبة)", color:"#ef4444", x:540, y:155, angle:125, tailX:220, tailY:255, skid:true},
+             {type:"impact", x:495, y:180}
+           ]},
+        { id:"s18", name:"18. دخول مفاجئ من طريق خدمة إلى الطريق الرئيسي (مخرج خدمة)", road:"service_exit",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:475, y:265, angle:-30, tailX:270, tailY:370},
+             {type:"car", label:"2", color:"#3b82f6", x:515, y:235, angle:0, tailX:230, tailY:235, skid:true},
+             {type:"impact", x:498, y:248}
+           ]},
+        { id:"s19", name:"19. حادث مركبة مع دراجة نارية / نارية توصيل", road:"cross_4way",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:455, y:275, angle:25, tailX:240, tailY:220},
+             {type:"bike", label:"2", color:"#3b82f6", x:505, y:285, angle:180, tailX:710, tailY:285},
+             {type:"impact", x:485, y:280}
+           ]},
+        { id:"s20", name:"20. حادث شاحنة نقل ثقيل مع مركبة صغيرة (الزاوية العمياء)", road:"highway_6lane",
+           items:[
+             {type:"truck", label:"1", color:"#ef4444", x:445, y:195, angle:14, tailX:195, tailY:175},
+             {type:"car", label:"2", color:"#3b82f6", x:475, y:242, angle:0, tailX:250, tailY:242},
+             {type:"impact", x:468, y:222}
+           ]},
+        { id:"s21", name:"21. اندماج خاطئ في تقاطع فرعي مائل (حرف Y)", road:"y_junction",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:470, y:245, angle:-35, tailX:285, tailY:385},
+             {type:"car", label:"2", color:"#3b82f6", x:515, y:215, angle:0, tailX:230, tailY:215},
+             {type:"impact", x:495, y:228}
+           ]},
+        { id:"s22", name:"22. لوحة أسفلت حرة (ضع وحرّك المركبات حسب رغبتك بالماوس)", road:"cross_4way",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:360, y:280, angle:0, tailX:210, tailY:280},
+             {type:"car", label:"2", color:"#3b82f6", x:600, y:215, angle:180, tailX:760, tailY:215},
+             {type:"impact", x:480, y:250}
+           ]}
+    ];
+    const canvas = document.getElementById("asphaltCanvas");
+    const ctx = canvas.getContext("2d");
+    const scenSel = document.getElementById("scenarioSelect");
+    const roadSel = document.getElementById("roadSelect");
+    const roadNameIn = document.getElementById("roadNameInput");
+    let currentRoad = "cross_4way";
+    let items = [];
+    let selectedIdx = -1;
+    let dragMode = null;
+    let dragOffset = {x:0, y:0};
+    let autoSaveTimer = null;
+    SCENARIOS.forEach((s, idx) => {
+        const opt = document.createElement("option");
+        opt.value = idx; opt.textContent = s.name;
+        scenSel.appendChild(opt);
+    });
+    Object.entries(ROADS).forEach(([k, v]) => {
+        const opt = document.createElement("option");
+        opt.value = k; opt.textContent = v;
+        roadSel.appendChild(opt);
+    });
+    roadNameIn.value = __LOC_JSON__ || "";
+    function persistEditor() {
+        try {
+            window.parent.localStorage.setItem("bayyinah_asphalt_editor", JSON.stringify({
+                scenarioIndex: Number(scenSel.value || 0),
+                road: currentRoad,
+                roadName: roadNameIn.value,
+                items: items
+            }));
+        } catch (err) {}
+    }
+    function loadScenario(idx) {
+        const sc = SCENARIOS[idx] || SCENARIOS[0];
+        currentRoad = sc.road;
+        roadSel.value = currentRoad;
+        items = JSON.parse(JSON.stringify(sc.items));
+        selectedIdx = -1;
+        renderAll(false);
+        scheduleAutoCommit();
+    }
+    scenSel.addEventListener("change", () => loadScenario(Number(scenSel.value)));
+    roadSel.addEventListener("change", () => { currentRoad = roadSel.value; renderAll(false); scheduleAutoCommit(); });
+    roadNameIn.addEventListener("input", () => { renderAll(false); scheduleAutoCommit(); });
+    function drawAsphaltRoad(type) {
+        ctx.fillStyle = (type === "dirt_shoulder" || type.startsWith("mountain")) ? "#d6c7a9" : "#cbd5e1";
+        ctx.fillRect(0, 0, 960, 500);
+        ctx.strokeStyle = "rgba(15,23,42,0.08)";
+        ctx.lineWidth = 1;
+        for (let gx = 0; gx < 960; gx += 30) { ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,500); ctx.stroke(); }
+        for (let gy = 0; gy < 500; gy += 30) { ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(960,gy); ctx.stroke(); }
+        const asphalt = "#334155";
+        const curb = "#94a3b8";
+        const yellow = "#fbbf24";
+        const white = "#f8fafc";
+        ctx.save();
+        if (type === "straight_2lane" || type === "dirt_shoulder") {
+            if (type === "dirt_shoulder") {
+                ctx.fillStyle = "#c2a878"; ctx.fillRect(0, 0, 960, 175);
+            }
+            ctx.fillStyle = curb; ctx.fillRect(0, 168, 960, 164);
+            ctx.fillStyle = asphalt; ctx.fillRect(0, 174, 960, 152);
+            ctx.strokeStyle = white; ctx.lineWidth = 2.5; ctx.setLineDash([]);
+            ctx.strokeRect(-5, 180, 970, 140);
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3; ctx.setLineDash([18, 12]);
+            ctx.beginPath(); ctx.moveTo(0, 250); ctx.lineTo(960, 250); ctx.stroke();
+        }
+        else if (type === "divided_4lane" || type === "uturn_median") {
+            ctx.fillStyle = curb; ctx.fillRect(0, 122, 960, 256);
+            ctx.fillStyle = asphalt; ctx.fillRect(0, 128, 960, 244);
+            ctx.fillStyle = "#cbd5e1";
+            if (type === "uturn_median") {
+                ctx.fillRect(0, 236, 390, 28);
+                ctx.fillRect(555, 236, 405, 28);
+                ctx.strokeStyle = yellow; ctx.lineWidth = 2.5; ctx.setLineDash([]);
+                ctx.strokeRect(0, 236, 390, 28); ctx.strokeRect(555, 236, 405, 28);
+            } else {
+                ctx.fillRect(0, 238, 960, 24);
+                ctx.strokeStyle = yellow; ctx.lineWidth = 2.5; ctx.setLineDash([]);
+                ctx.strokeRect(-5, 238, 970, 24);
+            }
+            ctx.strokeStyle = white; ctx.lineWidth = 2; ctx.setLineDash([16, 12]);
+            ctx.beginPath(); ctx.moveTo(0, 183); ctx.lineTo(960, 183); ctx.moveTo(0, 317); ctx.lineTo(960, 317); ctx.stroke();
+        }
+        else if (type === "highway_6lane") {
+            ctx.fillStyle = curb; ctx.fillRect(0, 96, 960, 308);
+            ctx.fillStyle = asphalt; ctx.fillRect(0, 104, 960, 292);
+            ctx.fillStyle = "#94a3b8"; ctx.fillRect(0, 108, 960, 16);
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3; ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(0, 128); ctx.lineTo(960, 128); ctx.moveTo(0, 388); ctx.lineTo(960, 388); ctx.stroke();
+            ctx.strokeStyle = white; ctx.lineWidth = 2.2; ctx.setLineDash([18, 12]);
+            ctx.beginPath();
+            ctx.moveTo(0, 214); ctx.lineTo(960, 214);
+            ctx.moveTo(0, 300); ctx.lineTo(960, 300);
+            ctx.stroke();
+        }
+        else if (type === "cross_4way") {
+            ctx.fillStyle = curb;
+            ctx.fillRect(0, 152, 960, 196); ctx.fillRect(382, 0, 196, 500);
+            ctx.fillStyle = asphalt;
+            ctx.fillRect(0, 160, 960, 180); ctx.fillRect(390, 0, 180, 500);
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3; ctx.setLineDash([]);
+            ctx.beginPath();
+            ctx.moveTo(0,250); ctx.lineTo(385,250); ctx.moveTo(575,250); ctx.lineTo(960,250);
+            ctx.moveTo(480,0); ctx.lineTo(480,155); ctx.moveTo(480,345); ctx.lineTo(480,500);
+            ctx.stroke();
+            ctx.strokeStyle = white; ctx.lineWidth = 2; ctx.setLineDash([14, 10]);
+            ctx.beginPath();
+            ctx.moveTo(0,205); ctx.lineTo(385,205); ctx.moveTo(0,295); ctx.lineTo(385,295);
+            ctx.moveTo(575,205); ctx.lineTo(960,205); ctx.moveTo(575,295); ctx.lineTo(960,295);
+            ctx.moveTo(435,0); ctx.lineTo(435,155); ctx.moveTo(525,0); ctx.lineTo(525,155);
+            ctx.moveTo(435,345); ctx.lineTo(435,500); ctx.moveTo(525,345); ctx.lineTo(525,500);
+            ctx.stroke();
+        }
+        else if (type === "t_junction") {
+            ctx.fillStyle = curb;
+            ctx.fillRect(0, 132, 960, 166); ctx.fillRect(392, 290, 176, 210);
+            ctx.fillStyle = asphalt;
+            ctx.fillRect(0, 140, 960, 150); ctx.fillRect(400, 285, 160, 215);
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3; ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(0, 215); ctx.lineTo(960, 215); ctx.moveTo(480, 295); ctx.lineTo(480, 500); ctx.stroke();
+            ctx.strokeStyle = white; ctx.lineWidth = 4; ctx.setLineDash([10, 8]);
+            ctx.beginPath(); ctx.moveTo(400, 290); ctx.lineTo(560, 290); ctx.stroke();
+        }
+        else if (type === "y_junction") {
+            ctx.lineCap = "butt";
+            ctx.strokeStyle = curb; ctx.lineWidth = 148;
+            ctx.beginPath(); ctx.moveTo(0, 215); ctx.lineTo(960, 215); ctx.stroke();
+            ctx.lineWidth = 120;
+            ctx.beginPath(); ctx.moveTo(220, 480); ctx.lineTo(520, 215); ctx.stroke();
+            ctx.strokeStyle = asphalt; ctx.lineWidth = 136;
+            ctx.beginPath(); ctx.moveTo(0, 215); ctx.lineTo(960, 215); ctx.stroke();
+            ctx.lineWidth = 108;
+            ctx.beginPath(); ctx.moveTo(220, 480); ctx.lineTo(520, 215); ctx.stroke();
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3; ctx.setLineDash([16, 10]);
+            ctx.beginPath(); ctx.moveTo(0, 215); ctx.lineTo(960, 215); ctx.stroke();
+        }
+        else if (type === "roundabout") {
+            ctx.fillStyle = asphalt;
+            ctx.fillRect(0, 185, 960, 130); ctx.fillRect(415, 0, 130, 500);
+            ctx.beginPath(); ctx.arc(480, 250, 145, 0, Math.PI*2); ctx.fill();
+            ctx.strokeStyle = white; ctx.lineWidth = 2.2; ctx.setLineDash([12, 10]);
+            ctx.beginPath(); ctx.arc(480, 250, 105, 0, Math.PI*2); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.beginPath(); ctx.arc(480, 250, 62, 0, Math.PI*2);
+            ctx.fillStyle = "#15803d"; ctx.fill();
+            ctx.lineWidth = 8; ctx.strokeStyle = "#cbd5e1"; ctx.stroke();
+        }
+        else if (type === "mountain_scurve") {
+            ctx.lineCap = "round";
+            ctx.strokeStyle = "#64748b"; ctx.lineWidth = 156;
+            ctx.beginPath(); ctx.moveTo(60, 410); ctx.bezierCurveTo(340, 390, 540, 95, 900, 110); ctx.stroke();
+            ctx.strokeStyle = asphalt; ctx.lineWidth = 140;
+            ctx.beginPath(); ctx.moveTo(60, 410); ctx.bezierCurveTo(340, 390, 540, 95, 900, 110); ctx.stroke();
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3.5; ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(60, 410); ctx.bezierCurveTo(340, 390, 540, 95, 900, 110); ctx.stroke();
+        }
+        else if (type === "mountain_hairpin") {
+            ctx.lineCap = "round"; ctx.lineJoin = "round";
+            ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 146;
+            ctx.beginPath(); ctx.moveTo(110, 145); ctx.quadraticCurveTo(790, 135, 720, 265); ctx.quadraticCurveTo(660, 385, 130, 375); ctx.stroke();
+            ctx.strokeStyle = asphalt; ctx.lineWidth = 128;
+            ctx.beginPath(); ctx.moveTo(110, 145); ctx.quadraticCurveTo(790, 135, 720, 265); ctx.quadraticCurveTo(660, 385, 130, 375); ctx.stroke();
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(110, 145); ctx.quadraticCurveTo(790, 135, 720, 265); ctx.quadraticCurveTo(660, 385, 130, 375); ctx.stroke();
+        }
+        else if (type === "service_exit") {
+            ctx.fillStyle = asphalt;
+            ctx.fillRect(0, 150, 960, 145);
+            ctx.fillRect(0, 330, 960, 85);
+            ctx.beginPath(); ctx.moveTo(230, 335); ctx.lineTo(430, 285); ctx.lineTo(540, 285); ctx.lineTo(350, 335); ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = white; ctx.lineWidth = 2.2; ctx.setLineDash([15, 10]);
+            ctx.beginPath(); ctx.moveTo(0, 222); ctx.lineTo(960, 222); ctx.stroke();
+        }
+        else if (type === "parking_lot") {
+            ctx.fillStyle = asphalt; ctx.fillRect(0, 95, 960, 265);
+            ctx.strokeStyle = white; ctx.lineWidth = 2.5; ctx.setLineDash([]);
+            for (let px = 120; px <= 840; px += 95) {
+                ctx.beginPath(); ctx.moveTo(px, 95); ctx.lineTo(px, 165); ctx.stroke();
+            }
+            ctx.strokeStyle = yellow; ctx.setLineDash([16, 12]);
+            ctx.beginPath(); ctx.moveTo(0, 255); ctx.lineTo(960, 255); ctx.stroke();
+        }
+        ctx.restore();
+    }
+    function drawArrowLine(x1, y1, x2, y2, color, withSkid) {
+        const dist = Math.hypot(x2 - x1, y2 - y1);
+        if (dist < 18) return;
+        ctx.save();
+        if (withSkid) {
+            const ang = Math.atan2(y2 - y1, x2 - x1);
+            const nx = -Math.sin(ang) * 9, ny = Math.cos(ang) * 9;
+            ctx.strokeStyle = "rgba(15, 23, 42, 0.85)";
+            ctx.lineWidth = 3.2; ctx.setLineDash([6, 4]);
+            ctx.beginPath();
+            ctx.moveTo(x1 + nx, y1 + ny); ctx.lineTo(x2 + nx, y2 + ny);
+            ctx.moveTo(x1 - nx, y1 - ny); ctx.lineTo(x2 - nx, y2 - ny);
+            ctx.stroke();
+        }
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3.2;
+        ctx.setLineDash([10, 6]);
+        ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.fillStyle = "#ffffff"; ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.arc(x1, y1, 6.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.restore();
+    }
+    function drawVehicleShape(it, isSelected, hideHandles) {
+        ctx.save();
+        ctx.translate(it.x, it.y);
+        ctx.rotate((it.angle || 0) * Math.PI / 180);
+        const w = it.type === "truck" ? 104 : (it.type === "bike" ? 44 : 68);
+        const h = it.type === "truck" ? 34 : (it.type === "bike" ? 16 : 31);
+        ctx.fillStyle = "rgba(0,0,0,0.38)";
+        ctx.beginPath(); ctx.roundRect(-w/2 + 3, -h/2 + 4, w, h, 7); ctx.fill();
+        if (it.type === "car" || it.type === "truck") {
+            ctx.fillStyle = "#090d16";
+            ctx.fillRect(-w/2 + 8, -h/2 - 3, 14, 4);
+            ctx.fillRect(w/2 - 22, -h/2 - 3, 14, 4);
+            ctx.fillRect(-w/2 + 8, h/2 - 1, 14, 4);
+            ctx.fillRect(w/2 - 22, h/2 - 1, 14, 4);
+            ctx.fillStyle = it.color || "#ef4444";
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.roundRect(-w/2, -h/2, w, h, 7); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#0f172a";
+            if (it.type === "truck") {
+                ctx.fillStyle = "#e2e8f0";
+                ctx.fillRect(-w/2 + 3, -h/2 + 3, w - 30, h - 6);
+                ctx.fillStyle = "#0f172a";
+                ctx.fillRect(w/2 - 22, -h/2 + 4, 12, h - 8);
+            } else {
+                ctx.beginPath();
+                ctx.moveTo(6, -h/2 + 4); ctx.lineTo(19, -h/2 + 6); ctx.lineTo(19, h/2 - 6); ctx.lineTo(6, h/2 - 4);
+                ctx.closePath(); ctx.fill();
+                ctx.fillRect(-24, -h/2 + 5, 10, h - 10);
+            }
+            ctx.fillStyle = "#fef08a";
+            ctx.fillRect(w/2 - 3, -h/2 + 4, 3, 6);
+            ctx.fillRect(w/2 - 3, h/2 - 10, 3, 6);
+        }
+        else if (it.type === "bike") {
+            ctx.fillStyle = "#0f172a";
+            ctx.fillRect(-22, -3, 12, 6); ctx.fillRect(10, -3, 12, 6);
+            ctx.fillStyle = it.color || "#3b82f6";
+            ctx.beginPath(); ctx.roundRect(-14, -7, 28, 14, 5); ctx.fill();
+            ctx.strokeStyle = "#fff"; ctx.lineWidth = 1.6; ctx.stroke();
+        }
+        ctx.rotate(-(it.angle || 0) * Math.PI / 180);
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, 10.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "900 12px Tahoma, Arial";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(String(it.label || "1").replace(" (منقلبة)",""), 0, 1);
+        if (isSelected && !hideHandles) {
+            ctx.rotate((it.angle || 0) * Math.PI / 180);
+            ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 2; ctx.setLineDash([4,3]);
+            ctx.strokeRect(-w/2 - 6, -h/2 - 6, w + 12, h + 12);
+            ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(w/2 + 6, 0); ctx.lineTo(w/2 + 24, 0); ctx.stroke();
+            ctx.fillStyle = "#38bdf8"; ctx.strokeStyle = "#ffffff";
+            ctx.beginPath(); ctx.arc(w/2 + 26, 0, 7, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+    }
+    function drawSpecialItem(it, isSelected, hideHandles) {
+        ctx.save();
+        ctx.translate(it.x, it.y);
+        if (it.type === "impact") {
+            ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2);
+            ctx.fillStyle = "rgba(250, 204, 21, 0.92)"; ctx.fill();
+            ctx.lineWidth = 3; ctx.strokeStyle = "#dc2626"; ctx.stroke();
+            ctx.strokeStyle = "#991b1b"; ctx.lineWidth = 3.5;
+            ctx.beginPath(); ctx.moveTo(-8,-8); ctx.lineTo(8,8); ctx.moveTo(-8,8); ctx.lineTo(8,-8); ctx.stroke();
+        } else if (it.type === "pedestrian" || it.type === "animal" || it.type === "obstacle") {
+            ctx.fillStyle = it.type === "obstacle" ? "#f97316" : "#ffffff";
+            ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 2.5;
+            ctx.beginPath(); ctx.roundRect(-22, -16, 44, 32, 8); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#0f172a"; ctx.font = "bold 12px Tahoma"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            const txt = it.type === "pedestrian" ? "مشاة" : (it.type === "animal" ? "حيوان" : (it.label || "ثابت"));
+            ctx.fillText(txt, 0, 1);
+        }
+        if (isSelected && !hideHandles) {
+            ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 2; ctx.setLineDash([4,3]);
+            ctx.strokeRect(-26, -22, 52, 44);
+        }
+        ctx.restore();
+    }
+    function drawHudOverlay() {
+        ctx.save();
+        ctx.translate(895, 52);
+        ctx.fillStyle = "rgba(255,255,255,0.95)"; ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(0, 0, 28, 0, Math.PI*2); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = "#dc2626";
+        ctx.beginPath(); ctx.moveTo(0, -20); ctx.lineTo(-7, 5); ctx.lineTo(0, 0); ctx.lineTo(7, 5); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = "#0f172a"; ctx.font = "900 11px Tahoma"; ctx.textAlign = "center";
+        ctx.fillText("شمال N", 0, 18);
+        ctx.restore();
+        ctx.save();
+        ctx.fillStyle = "rgba(255, 255, 255, 0.96)";
+        ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 1.8;
+        ctx.beginPath(); ctx.roundRect(14, 446, 932, 42, 6); ctx.fill(); ctx.stroke();
+        const rName = roadNameIn.value.trim() || ROADS[currentRoad].replace(/^\\d+\\.\\s*/, "");
+        ctx.font = "bold 13.5px Tahoma, Arial";
+        ctx.fillStyle = "#0f172a"; ctx.textAlign = "right";
+        ctx.fillText("الموقع: " + rName, 930, 472);
+        ctx.font = "bold 12.5px Tahoma, Arial";
+        ctx.fillStyle = "#dc2626"; ctx.textAlign = "center";
+        ctx.fillText("🔴 (1) الطرف الأول ومساره", 520, 472);
+        ctx.fillStyle = "#2563eb";
+        ctx.fillText("🔵 (2) الطرف الثاني ومساره", 315, 472);
+        ctx.fillStyle = "#b91c1c";
+        ctx.fillText("✖ نقطة الاصطدام", 120, 472);
+        ctx.restore();
+    }
+    function renderAll(hideSelectionHandles) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        drawAsphaltRoad(currentRoad);
+        items.forEach(it => {
+            if (it.tailX !== undefined && it.tailY !== undefined) {
+                drawArrowLine(it.tailX, it.tailY, it.x, it.y, it.color || "#ef4444", Boolean(it.skid));
+            }
+        });
+        items.forEach((it, idx) => {
+            if (it.type !== "impact") {
+                if (["car","truck","bike"].includes(it.type)) drawVehicleShape(it, idx === selectedIdx, hideSelectionHandles);
+                else drawSpecialItem(it, idx === selectedIdx, hideSelectionHandles);
+            }
+        });
+        items.forEach((it, idx) => {
+            if (it.type === "impact") drawSpecialItem(it, idx === selectedIdx, hideSelectionHandles);
+        });
+        drawHudOverlay();
+    }
+    function getCanvasPos(evt) {
+        const r = canvas.getBoundingClientRect();
+        return {
+            x: (evt.clientX - r.left) * (canvas.width / r.width),
+            y: (evt.clientY - r.top) * (canvas.height / r.height)
+        };
+    }
+    canvas.addEventListener("mousedown", e => {
+        const p = getCanvasPos(e);
+        if (selectedIdx >= 0 && ["car","truck","bike"].includes(items[selectedIdx].type)) {
+            const sel = items[selectedIdx];
+            const w = sel.type === "truck" ? 104 : (sel.type === "bike" ? 44 : 68);
+            const rad = (sel.angle || 0) * Math.PI / 180;
+            const hx = sel.x + Math.cos(rad) * (w/2 + 26);
+            const hy = sel.y + Math.sin(rad) * (w/2 + 26);
+            if (Math.hypot(p.x - hx, p.y - hy) <= 15) {
+                dragMode = "rotate";
+                return;
+            }
+        }
+        for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i];
+            if (it.tailX !== undefined && Math.hypot(p.x - it.tailX, p.y - it.tailY) <= 14) {
+                selectedIdx = i; dragMode = "tail"; renderAll(false); return;
+            }
+        }
+        for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i];
+            const hitR = it.type === "truck" ? 46 : 32;
+            if (Math.hypot(p.x - it.x, p.y - it.y) <= hitR) {
+                selectedIdx = i;
+                dragMode = "body";
+                dragOffset = { x: p.x - it.x, y: p.y - it.y };
+                renderAll(false);
+                return;
+            }
+        }
+        selectedIdx = -1;
+        renderAll(false);
+    });
+    window.addEventListener("mousemove", e => {
+        if (!dragMode || selectedIdx < 0) return;
+        const p = getCanvasPos(e);
+        const it = items[selectedIdx];
+        if (dragMode === "body") {
+            it.x = Math.max(25, Math.min(935, p.x - dragOffset.x));
+            it.y = Math.max(25, Math.min(435, p.y - dragOffset.y));
+        } else if (dragMode === "tail") {
+            it.tailX = Math.max(15, Math.min(945, p.x));
+            it.tailY = Math.max(15, Math.min(440, p.y));
+        } else if (dragMode === "rotate") {
+            it.angle = Math.round(Math.atan2(p.y - it.y, p.x - it.x) * 180 / Math.PI);
+        }
+        renderAll(false);
+    });
+    window.addEventListener("mouseup", () => {
+        if (dragMode) {
+            dragMode = null;
+            scheduleAutoCommit();
+        }
+    });
+    canvas.addEventListener("wheel", e => {
+        const p = getCanvasPos(e);
+        for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i];
+            if (["car","truck","bike"].includes(it.type) && Math.hypot(p.x - it.x, p.y - it.y) <= 42) {
+                e.preventDefault();
+                selectedIdx = i;
+                it.angle = ((it.angle || 0) + (e.deltaY > 0 ? 8 : -8)) % 360;
+                renderAll(false);
+                scheduleAutoCommit();
+                return;
+            }
+        }
+    }, { passive: false });
+    window.rotateSelected = function(delta) {
+        if (selectedIdx >= 0) {
+            items[selectedIdx].angle = ((items[selectedIdx].angle || 0) + delta) % 360;
+            renderAll(false);
+            scheduleAutoCommit();
+        }
+    };
+    window.deleteSelected = function() {
+        if (selectedIdx >= 0) {
+            items.splice(selectedIdx, 1);
+            selectedIdx = -1;
+            renderAll(false);
+            scheduleAutoCommit();
+        }
+    };
+    window.addExtraItem = function(kind) {
+        if (kind === "sedan3") items.push({type:"car", label:"3", color:"#10b981", x:480, y:250, angle:0, tailX:340, tailY:250});
+        else if (kind === "truck") items.push({type:"truck", label:"شاحنة", color:"#f59e0b", x:480, y:250, angle:0, tailX:310, tailY:250});
+        else if (kind === "bike") items.push({type:"bike", label:"دراجة", color:"#06b6d4", x:480, y:250, angle:0, tailX:360, tailY:250});
+        else if (kind === "pedestrian") items.push({type:"pedestrian", x:480, y:220, tailX:480, tailY:130, color:"#eab308"});
+        else if (kind === "animal") items.push({type:"animal", x:500, y:220, tailX:500, tailY:120, color:"#a16207"});
+        else if (kind === "obstacle") items.push({type:"obstacle", label:"عائق", x:520, y:200});
+        else if (kind === "skid" && selectedIdx >= 0) items[selectedIdx].skid = !items[selectedIdx].skid;
+        selectedIdx = items.length - 1;
+        renderAll(false);
+        scheduleAutoCommit();
+    };
+    function scheduleAutoCommit() {
+        persistEditor();
+        document.getElementById("saveStatus").textContent = "⏳ جارٍ تحديث التقرير...";
+        if (autoSaveTimer) clearTimeout(autoSaveTimer);
+        autoSaveTimer = setTimeout(() => commitToStreamlit(false), 650);
+    }
+    window.commitToStreamlit = function(manualClick) {
+        persistEditor();
+        renderAll(true);
+        const pngDataUrl = canvas.toDataURL("image/png", 1.0);
+        renderAll(false);
+        try {
+            const parentDoc = window.parent.document;
+            const parentWin = parentDoc.defaultView || window.parent;
+            const bridge = parentDoc.querySelector('textarea[aria-label="__sketch_bridge_receiver__"]');
+            if (bridge && bridge.value !== pngDataUrl) {
+                const setter = Object.getOwnPropertyDescriptor(parentWin.HTMLTextAreaElement.prototype, "value").set;
+                setter.call(bridge, pngDataUrl);
+                bridge.dispatchEvent(new Event("input", { bubbles: true }));
+                bridge.dispatchEvent(new Event("change", { bubbles: true }));
+                bridge.blur();
+            }
+            document.getElementById("saveStatus").textContent = manualClick
+                ? "✅ تم اعتماد الكروكي الأسفلتي بنجاح في ورقة A4"
+                : "● معتمد تلقائياً في تقرير A4";
+        } catch (err) {
+            console.warn("Sketch bridge sync:", err);
+        }
+    };
+    function bootStudio() {
+        let restored = false;
+        try {
+            if (KEEP_EDITOR) {
+                const raw = window.parent.localStorage.getItem("bayyinah_asphalt_editor");
+                if (raw) {
+                    const saved = JSON.parse(raw);
+                    if (saved && Array.isArray(saved.items) && saved.items.length) {
+                        currentRoad = saved.road || currentRoad;
+                        roadSel.value = currentRoad;
+                        if (saved.scenarioIndex !== undefined && saved.scenarioIndex !== null) {
+                            scenSel.value = String(saved.scenarioIndex);
+                        }
+                        if (typeof saved.roadName === "string") roadNameIn.value = saved.roadName;
+                        items = saved.items;
+                        restored = true;
+                        renderAll(false);
+                    }
+                }
+            } else {
+                window.parent.localStorage.removeItem("bayyinah_asphalt_editor");
+            }
+        } catch (err) {}
+        if (!restored) loadScenario(0);
+    }
+    bootStudio();
+    </script>
+    </body>
+    </html>
+    """
+    studio_html = studio_html.replace("__LOC_JSON__", loc_escaped).replace("__KEEP_EDITOR__", keep_editor)
+    components.html(studio_html, height=665, scrolling=False)
 
 with tab4:
     _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
     _load_remembered_sketch()
-    render_modern_tactical_sketch_studio(
+    render_interactive_asphalt_studio(
         sketch_image_state_key="sketch_data_url",
         location_state_key="p1_acc_location",
     )
     if "sketch_road_name" not in st.session_state:
-        st.session_state["sketch_road_name"] = str(st.session_state.get("_cad_road_title") or "")
+        st.session_state["sketch_road_name"] = str(st.session_state.get("p1_acc_location") or "")
     road_name_sign = st.text_input("اسم الطريق الرئيسي", key="sketch_road_name")
     render_compact_sketch_legends(key_prefix="legend_key_")
     legend_keys = [str(st.session_state.get(f"legend_key_{index}") or "") for index in range(1, 11)]
