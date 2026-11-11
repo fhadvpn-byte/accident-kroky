@@ -9,6 +9,7 @@ import os
 import json
 import re
 import math
+import time
 import tempfile
 from datetime import date, datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
@@ -1339,31 +1340,53 @@ def inject_bayyinah_blue_styles():
     </style>
     """, unsafe_allow_html=True)
 
-def trigger_instant_a4_print(full_report_html: str):
-    """فتح نافذة الطباعة الرسمية لتقرير A4 مباشرة دون مغادرة الصفحة الحالية."""
+def trigger_instant_a4_print(full_report_html: str, nonce: float = 0.0):
+    """طباعة فورية موثوقة على Chrome/Edge من أي تبويب عبر إطار A4 حقيقي خارج الشاشة."""
     escaped_html = json.dumps(full_report_html)
     components.html(
         f"""
         <script>
         (function() {{
-            const htmlContent = {escaped_html};
-            const parentDoc = window.parent && window.parent.document ? window.parent.document : document;
-            const oldFrame = parentDoc.getElementById('bayyinah_instant_print_frame');
+            // print_nonce: {nonce}
+            const rawHtml = {escaped_html};
+            const hostWin = window.parent || window;
+            const hostDoc = hostWin.document;
+            const oldFrame = hostDoc.getElementById("bayyinah_a4_print_frame");
             if (oldFrame) oldFrame.remove();
-            const iframe = parentDoc.createElement('iframe');
-            iframe.id = 'bayyinah_instant_print_frame';
-            iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
-            parentDoc.body.appendChild(iframe);
+            const iframe = hostDoc.createElement("iframe");
+            iframe.id = "bayyinah_a4_print_frame";
+            iframe.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;opacity:0.01;pointer-events:none;z-index:-1;";
+            hostDoc.body.appendChild(iframe);
+            const cleanPrintCss = `<style>
+                @media print {{
+                    button, .no-print, .print-btn, .toolbar {{ display: none !important; }}
+                    @page {{ size: A4 portrait; margin: 0; }}
+                    html, body {{ background: #ffffff !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
+                }}
+            </style>`;
+            const finalHtml = rawHtml.includes("</head>")
+                ? rawHtml.replace("</head>", cleanPrintCss + "</head>")
+                : cleanPrintCss + rawHtml;
             const doc = iframe.contentWindow.document;
             doc.open();
-            doc.write(htmlContent);
+            doc.write(finalHtml);
             doc.close();
-            iframe.onload = function() {{
-                setTimeout(function() {{
-                    iframe.contentWindow.focus();
-                    iframe.contentWindow.print();
-                }}, 350);
-            }};
+            const imgs = Array.from(doc.images || []);
+            const waitImgs = Promise.all(imgs.map(img => {{
+                if (img.complete) return Promise.resolve();
+                return new Promise(res => {{ img.onload = res; img.onerror = res; }});
+            }}));
+            const fallbackTimer = new Promise(res => setTimeout(res, 900));
+            Promise.race([waitImgs, fallbackTimer]).then(() => {{
+                setTimeout(() => {{
+                    try {{
+                        iframe.contentWindow.focus();
+                        iframe.contentWindow.print();
+                    }} catch (e) {{
+                        console.error("Bayyinah A4 print error:", e);
+                    }}
+                }}, 200);
+            }});
         }})();
         </script>
         """,
@@ -1430,13 +1453,12 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
     with col_print:
         if st.button("🖨️ طباعة فورية A4", key="_top_cmd_print", type="primary", use_container_width=True):
             st.session_state["_trigger_instant_print"] = True
+            st.session_state["_print_nonce"] = time.time()
     with col_new:
         if st.button("🆕 حادث جديد", key="_top_cmd_reset", use_container_width=True):
             if callable(on_reset_callback):
                 on_reset_callback()
                 st.rerun()
-    if callable(build_report_html_fn) and st.session_state.pop("_trigger_instant_print", False):
-        trigger_instant_a4_print(build_report_html_fn())
 
 def inject_tab_completion_badges(tab_done_flags: list):
     """إضافة علامة ✓ خضراء للتبويبات المكتملة مع الحفاظ الكامل على استقرار التبويب المفتوح."""
@@ -3083,8 +3105,7 @@ st.markdown("""
     [data-testid="stSelectbox"] .react-aria-ComboBox > div,
     [data-testid="stMultiSelect"] .react-aria-ComboBox > div,
     [data-testid="stSelectboxVirtualDropdown"],
-    [data-testid="stMultiSelectVirtualDropdown"],
-    [data-testid="stFileUploaderDropzone"] {
+    [data-testid="stMultiSelectVirtualDropdown"] {
         background: linear-gradient(180deg, #1b6cb8 0%, #14508f 100%) !important;
         color: #f7fcff !important;
         border: 1px solid #7ad7ff !important;
@@ -3200,16 +3221,22 @@ st.markdown("""
         border-radius: 10px;
         padding: 4px 10px;
     }
-    [data-testid="stFileUploader"] section,
     [data-testid="stFileUploaderDropzone"] {
-        background: linear-gradient(180deg, #1b6cb8 0%, #14508f 100%) !important;
-        border: 1px dashed #7ad7ff !important;
-        color: #f7fcff !important;
+        background: rgba(10, 28, 52, 0.85) !important;
+        border: 1.5px dashed rgba(56, 189, 248, 0.65) !important;
+        border-radius: 12px !important;
+        padding: 14px 18px !important;
     }
-    [data-testid="stFileUploader"] section small,
-    [data-testid="stFileUploader"] span,
-    [data-testid="stFileUploader"] p {
-        color: #e7f6ff !important;
+    [data-testid="stFileUploaderDropzone"] span,
+    [data-testid="stFileUploaderDropzone"] small,
+    [data-testid="stFileUploaderDropzone"] div {
+        color: #e0f2fe !important;
+    }
+    [data-testid="stFileUploaderDropzone"] button {
+        background: linear-gradient(135deg, #0284c7, #38bdf8) !important;
+        color: #031527 !important;
+        font-weight: 800 !important;
+        border: none !important;
     }
     [data-testid="stSlider"] [role="slider"] {
         background: #00f2fe !important;
@@ -4812,199 +4839,354 @@ with tab_print:
         ]
         st.rerun()
     
-    sketch_src = str(st.session_state.get("sketch_data_url") or "").strip()
-    if not sketch_src.startswith("data:image/"):
-        adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
-        if adopted_path.is_file():
-            try:
-                sketch_src = "data:image/png;base64," + base64.b64encode(adopted_path.read_bytes()).decode("ascii")
-            except OSError:
-                sketch_src = ""
-    safe_sketch_src = html.escape(sketch_src, quote=True)
-    aerial_src = str(st.session_state.get("aerial_sketch_data_url") or st.session_state.get("aerial_data_url") or "").strip()
-    safe_aerial_src = html.escape(aerial_src, quote=True) if aerial_src.startswith("data:image/") else ""
+sketch_src = str(st.session_state.get("sketch_data_url") or "").strip()
+if not sketch_src.startswith("data:image/"):
+    adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
+    if adopted_path.is_file():
+        try:
+            sketch_src = "data:image/png;base64," + base64.b64encode(adopted_path.read_bytes()).decode("ascii")
+        except OSError:
+            sketch_src = ""
+safe_sketch_src = html.escape(sketch_src, quote=True)
+aerial_src = str(st.session_state.get("aerial_sketch_data_url") or st.session_state.get("aerial_data_url") or "").strip()
+safe_aerial_src = html.escape(aerial_src, quote=True) if aerial_src.startswith("data:image/") else ""
 
-    def _framed_shot(title, src, alt, max_height):
-        return (
-            '<div style="border:1.4px solid #000; background:#fff; padding:1.6mm; box-sizing:border-box;">'
-            f'<div style="font-weight:800; font-size:12.5px; text-align:center; margin-bottom:1.2mm;">{title}</div>'
-            f'<img src="{src}" alt="{alt}" style="width:100%; max-height:{max_height}; height:auto; object-fit:contain; display:block;">'
-            "</div>"
-        )
+def _framed_shot(title, src, alt, max_height):
+    return (
+        '<div style="border:1.4px solid #000; background:#fff; padding:1.6mm; box-sizing:border-box;">'
+        f'<div style="font-weight:800; font-size:12.5px; text-align:center; margin-bottom:1.2mm;">{title}</div>'
+        f'<img src="{src}" alt="{alt}" style="width:100%; max-height:{max_height}; height:auto; object-fit:contain; display:block;">'
+        "</div>"
+    )
 
-    if safe_sketch_src and safe_aerial_src and st.session_state.get("aerial_place") == "beside":
-        sketch_figure = (
-            '<div style="display:flex; justify-content:space-between; width:100%; align-items:stretch;">'
-            f'<div style="width:49%;">{_framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "82mm")}</div>'
-            f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "82mm")}</div>'
-            "</div>"
-        )
-    elif safe_sketch_src and safe_aerial_src:
-        sketch_figure = (
-            _framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "82mm")
-            + '<div style="height:3mm;"></div>'
-            + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "82mm")
-        )
-    elif safe_aerial_src:
-        sketch_figure = _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "145mm")
-    elif safe_sketch_src:
-        sketch_figure = (
-            f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="width:100%; max-height:145mm; height:auto; object-fit:contain; border:1px solid #ccc;">'
-        )
-    else:
-        sketch_figure = ""
-    logo_src = get_base64_image("traffic_logo.png")
-    sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
-    stored_sig = str(st.session_state.get("sig_base64") or "").strip()
-    if not sig_officer and stored_sig.startswith("data:image/"):
-        sig_officer = stored_sig
-    elif not sig_officer and stored_sig:
-        sig_officer = get_base64_image(stored_sig)
-    sig_supervisor = _signature_data_url(
-        "signature_supervisor.png",
-        "signature_supervisor.jpg",
-        "signature_supervisor.jpeg",
+if safe_sketch_src and safe_aerial_src and st.session_state.get("aerial_place") == "beside":
+    sketch_figure = (
+        '<div style="display:flex; justify-content:space-between; width:100%; align-items:stretch;">'
+        f'<div style="width:49%;">{_framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "82mm")}</div>'
+        f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "82mm")}</div>'
+        "</div>"
     )
-    sig_manager = _signature_data_url(
-        "signature_manager.png",
-        "signature_manager.jpg",
-        "signature_manager.jpeg",
+elif safe_sketch_src and safe_aerial_src:
+    sketch_figure = (
+        _framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "82mm")
+        + '<div style="height:3mm;"></div>'
+        + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "82mm")
     )
-    def build_header():
-        logo_html = f'<img src="{logo_src}" alt="شعار المرور">' if logo_src else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
-        return f"""
-        <div class="header-Title">بسم الله الرحمن الرحيم</div>
-        <div class="header-box">
-            <div class="header-right">
-                المملكة العربية السعودية<br>وزارة الداخلية<br>الأمن العام<br>الإدارة العامة للمرور<br>{dept_region}<br>{dept_branch}
-            </div>
-            <div class="header-logo">{logo_html}</div>
-            <div class="header-center">
-                الرقم: ...........................<br>
-                التاريخ: ..........................<br>
-                المشفوعات: ....................<br>
-                الموضوع: .......................
-            </div>
+elif safe_aerial_src:
+    sketch_figure = _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "145mm")
+elif safe_sketch_src:
+    sketch_figure = (
+        f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="width:100%; max-height:145mm; height:auto; object-fit:contain; border:1px solid #ccc;">'
+    )
+else:
+    sketch_figure = ""
+logo_src = get_base64_image("traffic_logo.png")
+sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
+stored_sig = str(st.session_state.get("sig_base64") or "").strip()
+if not sig_officer and stored_sig.startswith("data:image/"):
+    sig_officer = stored_sig
+elif not sig_officer and stored_sig:
+    sig_officer = get_base64_image(stored_sig)
+sig_supervisor = _signature_data_url(
+    "signature_supervisor.png",
+    "signature_supervisor.jpg",
+    "signature_supervisor.jpeg",
+)
+sig_manager = _signature_data_url(
+    "signature_manager.png",
+    "signature_manager.jpg",
+    "signature_manager.jpeg",
+)
+def build_header():
+    logo_html = f'<img src="{logo_src}" alt="شعار المرور">' if logo_src else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
+    return f"""
+    <div class="header-Title">بسم الله الرحمن الرحيم</div>
+    <div class="header-box">
+        <div class="header-right">
+            المملكة العربية السعودية<br>وزارة الداخلية<br>الأمن العام<br>الإدارة العامة للمرور<br>{dept_region}<br>{dept_branch}
         </div>
-        """
-    parties_head = "".join(f"<th>{label}</th>" for _key, label in _party_columns)
-    vehicles_head = "".join(f"<th>{label}</th>" for _key, label in _vehicle_columns)
-    parties_rows = ""
-    for _, row in parties_df.iterrows():
-        parties_rows += "<tr>" + "".join(f"<td>{_page1_cell(row.get(key, ''))}</td>" for key, _label in _party_columns) + "</tr>"
-    vehicles_rows = ""
-    for _, row in vehicles_df.iterrows():
-        vehicles_rows += "<tr>" + "".join(f"<td>{_page1_cell(row.get(key, ''))}</td>" for key, _label in _vehicle_columns) + "</tr>"
-    results_html = "<br>".join(html.escape(line) for line in acc_results.split("\n") if line.strip())
-    acc_how_html = html.escape(acc_how or "").replace("\n", "<br>")
-    criminal_details_html = ""
-    if "جنائي" in (accident_nature or ""):
-        criminal_details_html = f"""
-            <div class="table-scroll"><table>
-                <tr><th>تفاصيل الشق الجنائي والأمني</th></tr>
-                <tr><td style="text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
-                <tr><td style="text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
-                <tr><td style="text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
-                <tr><td style="text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
-            </table></div>
-        """
-    official_footer_html = build_official_page_footer_html(
-        st.session_state.get("p1_dept_region", dept_region),
-        st.session_state.get("p1_dept_branch", dept_branch),
-    )
-    photos_list = list(st.session_state.gallery_photos or [])
-    include_sketch = st.session_state.get("include_sketch", True) is True
-    photos_pages_html = ""
-    photos_per_page = 6
-    annex_first_page = 5 if include_sketch else 4
-    for page_idx in range(0, len(photos_list), photos_per_page):
-        page_photos = photos_list[page_idx:page_idx + photos_per_page]
-        if not page_photos:
-            continue
-        photo_cards = ""
-        for offset, entry in enumerate(page_photos):
-            number = page_idx + offset + 1
-            safe_caption = html.escape(entry.get("caption") or "")
-            photo_cards += f"""
-        <div class="photo-card">
-            <img src="{entry['b64']}" alt="صورة {number}">
-            <div class="photo-meta">{number}<br>{safe_caption}</div>
+        <div class="header-logo">{logo_html}</div>
+        <div class="header-center">
+            الرقم: ...........................<br>
+            التاريخ: ..........................<br>
+            المشفوعات: ....................<br>
+            الموضوع: .......................
         </div>
-        """
-        page_number = annex_first_page + (page_idx // photos_per_page)
-        photos_pages_html += f"""
-        <div class="page report-page photo-annex">
-            {build_header()}
-            <div class="section-badge">ملحق الصور الفوتوغرافية لموقع الحادث</div>
-            <div class="photo-grid">{photo_cards}</div>
-            {official_footer_html}
+    </div>
+    """
+parties_head = "".join(f"<th>{label}</th>" for _key, label in _party_columns)
+vehicles_head = "".join(f"<th>{label}</th>" for _key, label in _vehicle_columns)
+parties_rows = ""
+for _, row in parties_df.iterrows():
+    parties_rows += "<tr>" + "".join(f"<td>{_page1_cell(row.get(key, ''))}</td>" for key, _label in _party_columns) + "</tr>"
+vehicles_rows = ""
+for _, row in vehicles_df.iterrows():
+    vehicles_rows += "<tr>" + "".join(f"<td>{_page1_cell(row.get(key, ''))}</td>" for key, _label in _vehicle_columns) + "</tr>"
+results_html = "<br>".join(html.escape(line) for line in acc_results.split("\n") if line.strip())
+acc_how_html = html.escape(acc_how or "").replace("\n", "<br>")
+criminal_details_html = ""
+if "جنائي" in (accident_nature or ""):
+    criminal_details_html = f"""
+        <div class="table-scroll"><table>
+            <tr><th>تفاصيل الشق الجنائي والأمني</th></tr>
+            <tr><td style="text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
+            <tr><td style="text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
+            <tr><td style="text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
+            <tr><td style="text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
+        </table></div>
+    """
+official_footer_html = build_official_page_footer_html(
+    st.session_state.get("p1_dept_region", dept_region),
+    st.session_state.get("p1_dept_branch", dept_branch),
+)
+photos_list = list(st.session_state.gallery_photos or [])
+include_sketch = st.session_state.get("include_sketch", True) is True
+photos_pages_html = ""
+photos_per_page = 6
+annex_first_page = 5 if include_sketch else 4
+for page_idx in range(0, len(photos_list), photos_per_page):
+    page_photos = photos_list[page_idx:page_idx + photos_per_page]
+    if not page_photos:
+        continue
+    photo_cards = ""
+    for offset, entry in enumerate(page_photos):
+        number = page_idx + offset + 1
+        safe_caption = html.escape(entry.get("caption") or "")
+        photo_cards += f"""
+    <div class="photo-card">
+        <img src="{entry['b64']}" alt="صورة {number}">
+        <div class="photo-meta">{number}<br>{safe_caption}</div>
+    </div>
+    """
+    page_number = annex_first_page + (page_idx // photos_per_page)
+    photos_pages_html += f"""
+    <div class="page report-page photo-annex">
+        {build_header()}
+        <div class="section-badge">ملحق الصور الفوتوغرافية لموقع الحادث</div>
+        <div class="photo-grid">{photo_cards}</div>
+        {official_footer_html}
+    </div>
+    """
+page_number_css = ""
+body_class = ""
+sketch_page_html = ""
+if include_sketch:
+    sketch_page_html = f"""
+    <div class="page report-page">
+        {build_header()}
+        <div class="section-badge">كروكي الحادث</div>
+        <div style="text-align:center; font-weight:bold; font-size:15px; margin-bottom:8px;">رسم كروكي {html.escape(str(road_name_sign or ""))}</div>
+        <div style="width:100%; text-align:center; margin-top:6px;">
+            {sketch_figure}
         </div>
-        """
-    if not isinstance(st.session_state.get("show_page_numbers"), bool):
-        st.session_state.show_page_numbers = False
-    show_page_numbers = st.checkbox(
-        "ترقيم الصفحات في الهامش السفلي",
-        key="show_page_numbers",
-        on_change=save_current_work,
-    )
-    page_number_css = ""
-    body_class = ""
-    clean_print_html = generate_clean_print_html(
-        html.escape(acc_how or ""),
-        html.escape(acc_results or ""),
-        show_numbers=bool(show_page_numbers),
-    )
-    if show_page_numbers:
-        body_class = "with-page-numbers"
-        page_number_css = """
-        .with-page-numbers .page { padding-bottom: 22mm !important; }
-        .with-page-numbers .page-num {
-            bottom: 5mm; left: 0; right: 0; transform: none; text-align: center;
-            height: 8mm; line-height: 8mm; margin: 0;
-        }
-        @media print {
-            .with-page-numbers .page { padding-bottom: 12mm !important; }
-            .with-page-numbers .page-num { display: none !important; }
-            @page { size: A4; margin: 0 0 14mm 0; }
-            @page { @bottom-center { content: counter(page); font-family: "Tajawal", sans-serif; font-size: 15px; font-weight: 600; } }
-        }
-        """
-    sketch_page_html = ""
-    if include_sketch:
-        sketch_page_html = f"""
-        <div class="page report-page">
-            {build_header()}
-            <div class="section-badge">كروكي الحادث</div>
-            <div style="text-align:center; font-weight:bold; font-size:15px; margin-bottom:8px;">رسم كروكي {html.escape(str(road_name_sign or ""))}</div>
-            <div style="width:100%; text-align:center; margin-top:6px;">
-                {sketch_figure}
-            </div>
-            <div style="margin-top:30px; font-weight:bold; font-size:15px; line-height:2; padding-right:30px;">
-                {"".join(f"<div>{html.escape(str(line or "")).replace("{", "&#123;").replace("}", "&#125;")}</div>" for line in legend_keys)}
-            </div>
-            {official_footer_html}
+        <div style="margin-top:30px; font-weight:bold; font-size:15px; line-height:2; padding-right:30px;">
+            {"".join(f"<div>{html.escape(str(line or "")).replace("{", "&#123;").replace("}", "&#125;")}</div>" for line in legend_keys)}
         </div>
-        """
-    full_report_html = f"""
-    <!DOCTYPE html>
-    <html lang="ar" dir="rtl">
-    <head>
-    <meta charset="UTF-8">
-    <style>
-        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700&display=swap');
-        html, body {{ height: 100%; margin: 0; }}
-        body {{
-            font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0;
-            display: flex; flex-direction: column; overflow: hidden;
+        {official_footer_html}
+    </div>
+    """
+full_report_html = f"""
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<style>
+    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700&display=swap');
+    html, body {{ height: 100%; margin: 0; }}
+    body {{
+        font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0;
+        display: flex; flex-direction: column; overflow: hidden;
+    }}
+    .report-viewport {{
+        flex: 1 1 auto; width: 100%; max-width: none;
+        overflow: auto; -webkit-overflow-scrolling: touch;
+    }}
+    .report-sheet {{
+        width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
+        transform: none;
+    }}
+    .report-sheet .header-Title,
+    .report-sheet .section-badge {{
+        font-size: 15px !important; font-weight: 700;
+    }}
+    .report-sheet .box-content,
+    .report-sheet .header-box,
+    .report-sheet .photo-meta,
+    .report-sheet p,
+    .report-sheet li {{
+        font-size: 15px !important; font-weight: 600;
+    }}
+    .report-sheet th,
+    .report-sheet td {{
+        font-size: 14px !important; font-weight: 600;
+    }}
+    .report-sheet th {{ font-weight: 700; }}
+    .page, .report-page, .a4-page {{
+        background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
+        min-height: 297mm; height: auto; margin: 0 auto 8mm auto;
+        padding: 15mm 18mm; box-sizing: border-box; position: relative;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
+        transform: none;
+    }}
+    .report-sheet table,
+    .report-sheet .table-scroll,
+    .report-sheet .box-content,
+    .report-sheet .header-box,
+    .report-sheet .photo-grid,
+    .report-sheet p,
+    .report-sheet li {{
+        width: 100%; max-width: 100%; box-sizing: border-box;
+    }}
+    .page-flow {{
+        display: flex; flex-direction: column; justify-content: space-between;
+    }}
+    .page-flow > .table-scroll,
+    .page-flow > .box-content {{
+        flex: 1 1 auto;
+    }}
+    .page-flow > .table-scroll > table {{
+        height: 100%;
+    }}
+    .photo-annex {{ page-break-before: always; overflow: visible; }}
+    .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
+    .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
+    .photo-annex .section-badge {{ margin: 4px auto 6px auto; padding: 3px 14px; }}
+    .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; overflow: visible; }}
+    .photo-card {{
+        width: 48%; margin-bottom: 8px; text-align: center; overflow: visible;
+        break-inside: avoid; page-break-inside: avoid;
+    }}
+    .photo-card img {{
+        width: auto; max-width: 100%; max-height: 185px; height: auto; object-fit: contain;
+        display: block; margin: 0 auto;
+        border: 2px solid #1b4332; border-radius: 6px; background: #fff;
+    }}
+    .page-three .sign-table {{ margin-top: 8px; }}
+    .photo-card .photo-meta {{
+        margin-top: 4px; font-weight: 600; font-size: 15px; line-height: 1.35;
+        overflow: visible; white-space: normal;
+    }}
+    .logo-fallback {{
+        border: 2px solid #1b4332; border-radius: 50%; width: 80px; height: 80px;
+        display: flex; align-items: center; justify-content: center; margin: auto;
+        font-weight: bold; color: #1b4332; line-height: 1.25; text-align: center;
+    }}
+    .header-logo img {{
+        height: 110px; width: auto; max-width: 120px; object-fit: contain;
+        display: block; margin: 0 auto;
+    }}
+    .header-Title {{ text-align: center; font-size: 15px; font-weight: 700; margin-bottom: 6px; }}
+    .header-box {{
+        position: relative; display: flex; justify-content: space-between; align-items: center;
+        min-height: 128px; border-bottom: 3px double #1b4332; padding-bottom: 10px;
+        margin-bottom: 18px; font-size: 15px; font-weight: 700; line-height: 1.6;
+    }}
+    .header-right {{ width: 36%; text-align: right; }}
+    .header-center {{ width: 36%; text-align: center; }}
+    .header-logo {{
+        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+        display: flex; justify-content: center; align-items: center; margin: 0;
+    }}
+    .section-badge {{
+        background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
+        padding: 5px 25px; font-weight: 700; font-size: 15px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
+    }}
+    table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 14px; }}
+    th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-size: 14px; font-weight: 600; }}
+    th {{ font-weight: 700; background-color: #d8f3dc; color: #1b4332; }}
+    .box-content {{
+        border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
+        line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
+    }}
+    .page-num {{ display: none !important; }}
+    .official-page-footer {{
+        position: absolute; left: 18mm; right: 18mm; bottom: 3mm; width: auto;
+        margin: 0; padding-top: 6px; box-sizing: border-box; direction: rtl;
+        page-break-inside: avoid; break-inside: avoid; page-break-before: avoid; break-before: avoid;
+        -webkit-print-color-adjust: exact; print-color-adjust: exact;
+    }}
+    .official-footer-line-primary {{
+        width: 100%; height: 0; border-top: 2.2px solid #1b4332 !important; margin: 0;
+    }}
+    .official-footer-line-secondary {{
+        width: 100%; height: 0; border-top: 0.9px solid #1b4332 !important;
+        margin-top: 2.5px; margin-bottom: 5px;
+    }}
+    .official-footer-meta {{
+        display: flex; justify-content: space-between; align-items: center;
+        font-size: 11.5px; font-weight: 700; color: #111827 !important;
+        line-height: 1.3; padding: 0 2px;
+    }}
+    .footer-col-right {{ text-align: right; flex: 1; }}
+    .footer-col-center {{
+        text-align: center; flex: 0 0 auto; font-size: 10.5px; font-weight: 600;
+        color: #1b4332 !important; padding: 0 12px;
+    }}
+    .footer-col-left {{ text-align: left; flex: 1; }}
+    .road-sign {{
+        background: #2d6a4f; color: white; border: 3px solid white; outline: 3px solid #2d6a4f;
+        border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 15px; display: inline-block; margin-bottom: 25px;
+    }}
+    .table-scroll {{ width: 100%; max-width: 100%; }}
+    @media screen {{
+        html, body, .report-viewport {{ overflow: auto; }}
+        .report-sheet, .page, .report-page, .a4-page {{
+            width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
+            min-height: 297mm !important; height: auto !important;
+            transform: none !important;
         }}
-        .report-viewport {{
-            flex: 1 1 auto; width: 100%; max-width: none;
-            overflow: auto; -webkit-overflow-scrolling: touch;
+        .photo-annex, .photo-annex .photo-card, .photo-annex .photo-meta {{
+            overflow: visible; max-height: none;
         }}
-        .report-sheet {{
-            width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
-            transform: none;
+        .table-scroll, table, .table-scroll table, .box-content, .header-box {{
+            width: 100% !important; max-width: 100% !important; box-sizing: border-box;
         }}
+        table, .table-scroll table {{ table-layout: fixed; }}
+        th, td {{
+            white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+        }}
+    }}
+    @media screen and (max-width: 768px) {{
+        .report-viewport {{ overflow: auto; width: 100%; max-width: none; }}
+        .report-sheet, .page, .report-page, .a4-page {{
+            width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
+            min-height: 297mm !important; height: auto !important;
+            transform: none !important;
+        }}
+        .page-flow {{ justify-content: space-between; }}
+        .table-scroll, table, .table-scroll table {{
+            table-layout: fixed; width: 100% !important; max-width: 100% !important;
+        }}
+        th, td {{
+            white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+        }}
+    }}
+    @media print {{
+        @page {{ size: A4; margin: 0; }}
+        html, body {{ height: auto; display: block; overflow: visible; background: white; margin: 0; padding: 0; }}
+        button, .no-print, .stButton, .stDownloadButton,
+        section[data-testid="stSidebar"], [data-testid="stSidebar"],
+        [data-testid="stSidebarContent"], [data-testid="stSidebarHeader"],
+        [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"],
+        [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"] {{
+            display: none !important;
+        }}
+        .report-viewport {{ overflow: visible; height: auto; width: 210mm; max-width: 210mm; }}
+        .report-sheet, .page, .report-page, .a4-page {{
+            box-shadow: none; margin: 0; overflow: visible;
+            width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
+            min-height: 297mm !important; height: auto !important; max-height: none !important;
+            transform: none !important;
+            page-break-after: always;
+        }}
+        .report-sheet > .report-page:last-child {{ page-break-after: auto; break-after: auto; }}
+        .table-scroll {{ overflow: visible; max-width: none; }}
+        table, .table-scroll, .table-scroll table, .box-content, .header-box, .photo-grid {{
+            width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+            box-sizing: border-box; border-collapse: collapse;
+        }}
+        table, .table-scroll table {{ border: 1px solid #000; }}
+        th, td {{ border: 1px solid #000 !important; }}
         .report-sheet .header-Title,
         .report-sheet .section-badge {{
             font-size: 15px !important; font-weight: 700;
@@ -5017,344 +5199,118 @@ with tab_print:
             font-size: 15px !important; font-weight: 600;
         }}
         .report-sheet th,
-        .report-sheet td {{
-            font-size: 14px !important; font-weight: 600;
-        }}
+        .report-sheet td {{ font-size: 14px !important; font-weight: 600; }}
         .report-sheet th {{ font-weight: 700; }}
-        .page, .report-page, .a4-page {{
-            background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
-            min-height: 297mm; height: auto; margin: 0 auto 8mm auto;
-            padding: 15mm 18mm; box-sizing: border-box; position: relative;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
-            transform: none;
+        .sign-table, .sign-table tr, .sign-table td {{
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            page-break-after: avoid !important;
         }}
-        .report-sheet table,
-        .report-sheet .table-scroll,
-        .report-sheet .box-content,
-        .report-sheet .header-box,
-        .report-sheet .photo-grid,
-        .report-sheet p,
-        .report-sheet li {{
-            width: 100%; max-width: 100%; box-sizing: border-box;
-        }}
-        .page-flow {{
-            display: flex; flex-direction: column; justify-content: space-between;
-        }}
-        .page-flow > .table-scroll,
-        .page-flow > .box-content {{
-            flex: 1 1 auto;
-        }}
-        .page-flow > .table-scroll > table {{
-            height: 100%;
-        }}
-        .photo-annex {{ page-break-before: always; overflow: visible; }}
-        .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
-        .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
-        .photo-annex .section-badge {{ margin: 4px auto 6px auto; padding: 3px 14px; }}
-        .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; overflow: visible; }}
-        .photo-card {{
-            width: 48%; margin-bottom: 8px; text-align: center; overflow: visible;
-            break-inside: avoid; page-break-inside: avoid;
-        }}
-        .photo-card img {{
-            width: auto; max-width: 100%; max-height: 185px; height: auto; object-fit: contain;
-            display: block; margin: 0 auto;
-            border: 2px solid #1b4332; border-radius: 6px; background: #fff;
-        }}
-        .page-three .sign-table {{ margin-top: 8px; }}
-        .photo-card .photo-meta {{
-            margin-top: 4px; font-weight: 600; font-size: 15px; line-height: 1.35;
-            overflow: visible; white-space: normal;
-        }}
-        .logo-fallback {{
-            border: 2px solid #1b4332; border-radius: 50%; width: 80px; height: 80px;
-            display: flex; align-items: center; justify-content: center; margin: auto;
-            font-weight: bold; color: #1b4332; line-height: 1.25; text-align: center;
-        }}
-        .header-logo img {{
-            height: 110px; width: auto; max-width: 120px; object-fit: contain;
-            display: block; margin: 0 auto;
-        }}
-        .header-Title {{ text-align: center; font-size: 15px; font-weight: 700; margin-bottom: 6px; }}
-        .header-box {{
-            position: relative; display: flex; justify-content: space-between; align-items: center;
-            min-height: 128px; border-bottom: 3px double #1b4332; padding-bottom: 10px;
-            margin-bottom: 18px; font-size: 15px; font-weight: 700; line-height: 1.6;
-        }}
-        .header-right {{ width: 36%; text-align: right; }}
-        .header-center {{ width: 36%; text-align: center; }}
-        .header-logo {{
-            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-            display: flex; justify-content: center; align-items: center; margin: 0;
-        }}
-        .section-badge {{
-            background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
-            padding: 5px 25px; font-weight: 700; font-size: 15px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
-        }}
-        table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 14px; }}
-        th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-size: 14px; font-weight: 600; }}
-        th {{ font-weight: 700; background-color: #d8f3dc; color: #1b4332; }}
-        .box-content {{
-            border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
-            line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
-        }}
-        .page-num {{ display: none !important; }}
+        .page-flow {{ justify-content: space-between; }}
         .official-page-footer {{
-            position: absolute; left: 18mm; right: 18mm; bottom: 3mm; width: auto;
-            margin: 0; padding-top: 6px; box-sizing: border-box; direction: rtl;
-            page-break-inside: avoid; break-inside: avoid; page-break-before: avoid; break-before: avoid;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            position: absolute !important; bottom: 3mm !important;
+            left: 18mm !important; right: 18mm !important; margin: 0 !important;
+            page-break-before: avoid !important; break-before: avoid !important;
         }}
-        .official-footer-line-primary {{
-            width: 100%; height: 0; border-top: 2.2px solid #1b4332 !important; margin: 0;
+        .photo-annex {{
+            overflow: visible; height: auto; max-height: none; min-height: 297mm;
+            padding: 8mm 10mm 16mm 10mm;
         }}
-        .official-footer-line-secondary {{
-            width: 100%; height: 0; border-top: 0.9px solid #1b4332 !important;
-            margin-top: 2.5px; margin-bottom: 5px;
-        }}
-        .official-footer-meta {{
-            display: flex; justify-content: space-between; align-items: center;
-            font-size: 11.5px; font-weight: 700; color: #111827 !important;
-            line-height: 1.3; padding: 0 2px;
-        }}
-        .footer-col-right {{ text-align: right; flex: 1; }}
-        .footer-col-center {{
-            text-align: center; flex: 0 0 auto; font-size: 10.5px; font-weight: 600;
-            color: #1b4332 !important; padding: 0 12px;
-        }}
-        .footer-col-left {{ text-align: left; flex: 1; }}
-        .road-sign {{
-            background: #2d6a4f; color: white; border: 3px solid white; outline: 3px solid #2d6a4f;
-            border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 15px; display: inline-block; margin-bottom: 25px;
-        }}
-        .table-scroll {{ width: 100%; max-width: 100%; }}
-        @media screen {{
-            html, body, .report-viewport {{ overflow: auto; }}
-            .report-sheet, .page, .report-page, .a4-page {{
-                width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
-                min-height: 297mm !important; height: auto !important;
-                transform: none !important;
-            }}
-            .photo-annex, .photo-annex .photo-card, .photo-annex .photo-meta {{
-                overflow: visible; max-height: none;
-            }}
-            .table-scroll, table, .table-scroll table, .box-content, .header-box {{
-                width: 100% !important; max-width: 100% !important; box-sizing: border-box;
-            }}
-            table, .table-scroll table {{ table-layout: fixed; }}
-            th, td {{
-                white-space: normal; overflow-wrap: anywhere; word-break: break-word;
-            }}
-        }}
-        @media screen and (max-width: 768px) {{
-            .report-viewport {{ overflow: auto; width: 100%; max-width: none; }}
-            .report-sheet, .page, .report-page, .a4-page {{
-                width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
-                min-height: 297mm !important; height: auto !important;
-                transform: none !important;
-            }}
-            .page-flow {{ justify-content: space-between; }}
-            .table-scroll, table, .table-scroll table {{
-                table-layout: fixed; width: 100% !important; max-width: 100% !important;
-            }}
-            th, td {{
-                white-space: normal; overflow-wrap: anywhere; word-break: break-word;
-            }}
-        }}
-        @media print {{
-            @page {{ size: A4; margin: 0; }}
-            html, body {{ height: auto; display: block; overflow: visible; background: white; margin: 0; padding: 0; }}
-            button, .no-print, .stButton, .stDownloadButton,
-            section[data-testid="stSidebar"], [data-testid="stSidebar"],
-            [data-testid="stSidebarContent"], [data-testid="stSidebarHeader"],
-            [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"],
-            [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"] {{
-                display: none !important;
-            }}
-            .report-viewport {{ overflow: visible; height: auto; width: 210mm; max-width: 210mm; }}
-            .report-sheet, .page, .report-page, .a4-page {{
-                box-shadow: none; margin: 0; overflow: visible;
-                width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
-                min-height: 297mm !important; height: auto !important; max-height: none !important;
-                transform: none !important;
-                page-break-after: always;
-            }}
-            .report-sheet > .report-page:last-child {{ page-break-after: auto; break-after: auto; }}
-            .table-scroll {{ overflow: visible; max-width: none; }}
-            table, .table-scroll, .table-scroll table, .box-content, .header-box, .photo-grid {{
-                width: 100% !important; max-width: 100% !important; min-width: 0 !important;
-                box-sizing: border-box; border-collapse: collapse;
-            }}
-            table, .table-scroll table {{ border: 1px solid #000; }}
-            th, td {{ border: 1px solid #000 !important; }}
-            .report-sheet .header-Title,
-            .report-sheet .section-badge {{
-                font-size: 15px !important; font-weight: 700;
-            }}
-            .report-sheet .box-content,
-            .report-sheet .header-box,
-            .report-sheet .photo-meta,
-            .report-sheet p,
-            .report-sheet li {{
-                font-size: 15px !important; font-weight: 600;
-            }}
-            .report-sheet th,
-            .report-sheet td {{ font-size: 14px !important; font-weight: 600; }}
-            .report-sheet th {{ font-weight: 700; }}
-            .sign-table, .sign-table tr, .sign-table td {{
-                page-break-inside: avoid !important;
-                break-inside: avoid !important;
-                page-break-after: avoid !important;
-            }}
-            .page-flow {{ justify-content: space-between; }}
-            .official-page-footer {{
-                position: absolute !important; bottom: 3mm !important;
-                left: 18mm !important; right: 18mm !important; margin: 0 !important;
-                page-break-before: avoid !important; break-before: avoid !important;
-            }}
-            .photo-annex {{
-                overflow: visible; height: auto; max-height: none; min-height: 297mm;
-                padding: 8mm 10mm 16mm 10mm;
-            }}
-            .photo-annex .photo-card, .photo-annex .photo-meta {{ overflow: visible; max-height: none; }}
-            .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
-            .header-logo img {{ height: 110px; max-width: 120px; }}
-        }}
-        {page_number_css}
-        {OFFICIAL_A4_HIGH_CONTRAST_CSS}
-    </style>
-    <script>
-    function fitReportFrame() {{
-      var bar = document.querySelector(".no-print");
-      var sheet = document.querySelector(".report-sheet");
-      var height = 16;
-      if (bar) height += bar.offsetHeight;
-      if (sheet) height += sheet.scrollHeight;
-      else height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-      if (window.frameElement) window.frameElement.style.height = Math.ceil(height) + "px";
+        .photo-annex .photo-card, .photo-annex .photo-meta {{ overflow: visible; max-height: none; }}
+        .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
+        .header-logo img {{ height: 110px; max-width: 120px; }}
     }}
-    window.addEventListener("load", fitReportFrame);
-    window.addEventListener("resize", fitReportFrame);
-    document.addEventListener("load", fitReportFrame, true);
-    setTimeout(fitReportFrame, 60);
-    setTimeout(fitReportFrame, 400);
-    </script>
-    </head>
-    <body class="{body_class}">
-        <div class="no-print" style="text-align:center; margin:0; padding:12px;">
-            <button onclick="window.print()" style="background:linear-gradient(90deg,#0e7490,#2563eb); color:white; font-family:'Tajawal'; font-size:18px; font-weight:bold; padding:12px 35px; border:1px solid #4facfe; border-radius:10px; cursor:pointer; box-shadow:0 0 14px rgba(0,242,254,0.45);">
-                🖨️ طباعة التقرير الرسمي أو حفظه كـ PDF
-            </button>
-        </div>
-        <div class="report-viewport">
-        <div class="report-sheet">
-        <div class="page report-page page-flow">
-            {build_header()}
-            <div class="section-badge">تقرير حادث مروري</div>
-            <div class="section-badge badge-sub">معلومات الحادث</div>
-            <div class="table-scroll"><table>
-                <tr>
-                    <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
-                    <th>نوع الحادث</th><th>عدد الإصابات</th><th>عدد الوفيات</th><th>الطقس</th><th>سبب الحادث</th>
-                </tr>
-                <tr>
-                    <td>{acc_num}</td><td>{acc_date}</td><td>{acc_time}</td><td>{acc_loc}</td>
-                    <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
-                </tr>
-            </table></div>
-            <div class="section-badge badge-sub">معلومات أطراف الحادث</div>
-            <div class="table-scroll"><table>
-                <tr>{parties_head}</tr>
-                {parties_rows}
-            </table></div>
-            <div class="section-badge badge-sub">معلومات المركبات</div>
-            <div class="table-scroll"><table>
-                <tr>{vehicles_head}</tr>
-                {vehicles_rows}
-            </table></div>
-            {official_footer_html}
-        </div>
-        <div class="page report-page page-flow">
-            {build_header()}
-            <div class="section-badge">نتائج الحادث</div>
-            <div class="box-content">نتج عن الحادث :<br>{results_html}</div>
-            <div class="section-badge">كيفية وقوع الحادث</div>
-            <div class="box-content">{acc_how_html}</div>
-            {liability_html}
-            {official_footer_html}
-        </div>
-        <div class="page report-page page-three page-flow">
-            {build_header()}
-            <div class="table-scroll"><table>
-                <tr><th>طبيعة وتصنيف الحادث</th></tr>
-                <tr><td>{html.escape(accident_nature_val or "")}</td></tr>
-            </table></div>
-            <div class="table-scroll"><table>
-                <tr><th>الحقوق الخاصة والعامة</th></tr>
-                <tr><td>{html.escape(rights_status_val or "")}</td></tr>
-            </table></div>
-            <div class="table-scroll"><table>
-                <tr><th>الإجراءات المتخذة</th></tr>
-                <tr><td>{final_actions_html}</td></tr>
-            </table></div>
-            {criminal_details_html}
-            <div class="table-scroll"><table class="sign-table">
-                <tr><th colspan="3">معد التقرير</th></tr>
-                <tr><th>إجراء الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
-                <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
-                <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
-                <tr><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
-            </table></div>
-            {official_footer_html}
-        </div>
-        {sketch_page_html}
-        {photos_pages_html}
-        </div>
-        </div>
-    </body>
-    </html>
-    """
-    if st.session_state.pop("_trigger_instant_print", False):
-        trigger_instant_a4_print(full_report_html)
-    st.divider()
-    col_btn1, col_btn2 = st.columns([1, 2])
-    with col_btn1:
-        st.download_button(
-            label="📥 تحميل التقرير الرسمي الكامل (HTML/PDF)",
-            data=full_report_html.encode("utf-8"),
-            file_name=f"Accident_Report_{acc_num}.html",
-            mime="text/html",
-            use_container_width=True
-        )
-    with col_btn2:
-        st.info("💡 بعد تحميل الملف وفتحه، اضغط على زر (طباعة التقرير الرسمي أو حفظه كـ PDF) في أعلى الصفحة.")
-    st.download_button(
-        label="طباعة نظيفة للكيفية والنتائج",
-        data=clean_print_html.encode("utf-8"),
-        file_name=f"Accident_Clean_Print_{acc_num}.html",
-        mime="text/html",
-        use_container_width=True,
-    )
-    report_fullscreen = st.toggle("🔲 وضع ملء الشاشة (إخفاء القائمة الجانبية)", value=True)
-    if report_fullscreen:
-        st.markdown(
-            """
-            <style>
-            @media screen {
-            section[data-testid="stSidebar"] {
-                display: flex !important;
-            }
-            }
-            .main .block-container {
-                max-width: 100% !important;
-                width: 100% !important;
-                padding: 1rem !important;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True,
-        )
-    st.subheader("معاينة حية للتقرير قبل الطباعة:")
+    {page_number_css}
+    {OFFICIAL_A4_HIGH_CONTRAST_CSS}
+</style>
+<script>
+function fitReportFrame() {{
+  var bar = document.querySelector(".no-print");
+  var sheet = document.querySelector(".report-sheet");
+  var height = 16;
+  if (bar) height += bar.offsetHeight;
+  if (sheet) height += sheet.scrollHeight;
+  else height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+  if (window.frameElement) window.frameElement.style.height = Math.ceil(height) + "px";
+}}
+window.addEventListener("load", fitReportFrame);
+window.addEventListener("resize", fitReportFrame);
+document.addEventListener("load", fitReportFrame, true);
+setTimeout(fitReportFrame, 60);
+setTimeout(fitReportFrame, 400);
+</script>
+</head>
+<body class="{body_class}">
+    <div class="report-viewport">
+    <div class="report-sheet">
+    <div class="page report-page page-flow">
+        {build_header()}
+        <div class="section-badge">تقرير حادث مروري</div>
+        <div class="section-badge badge-sub">معلومات الحادث</div>
+        <div class="table-scroll"><table>
+            <tr>
+                <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
+                <th>نوع الحادث</th><th>عدد الإصابات</th><th>عدد الوفيات</th><th>الطقس</th><th>سبب الحادث</th>
+            </tr>
+            <tr>
+                <td>{acc_num}</td><td>{acc_date}</td><td>{acc_time}</td><td>{acc_loc}</td>
+                <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
+            </tr>
+        </table></div>
+        <div class="section-badge badge-sub">معلومات أطراف الحادث</div>
+        <div class="table-scroll"><table>
+            <tr>{parties_head}</tr>
+            {parties_rows}
+        </table></div>
+        <div class="section-badge badge-sub">معلومات المركبات</div>
+        <div class="table-scroll"><table>
+            <tr>{vehicles_head}</tr>
+            {vehicles_rows}
+        </table></div>
+        {official_footer_html}
+    </div>
+    <div class="page report-page page-flow">
+        {build_header()}
+        <div class="section-badge">نتائج الحادث</div>
+        <div class="box-content">نتج عن الحادث :<br>{results_html}</div>
+        <div class="section-badge">كيفية وقوع الحادث</div>
+        <div class="box-content">{acc_how_html}</div>
+        {liability_html}
+        {official_footer_html}
+    </div>
+    <div class="page report-page page-three page-flow">
+        {build_header()}
+        <div class="table-scroll"><table>
+            <tr><th>طبيعة وتصنيف الحادث</th></tr>
+            <tr><td>{html.escape(accident_nature_val or "")}</td></tr>
+        </table></div>
+        <div class="table-scroll"><table>
+            <tr><th>الحقوق الخاصة والعامة</th></tr>
+            <tr><td>{html.escape(rights_status_val or "")}</td></tr>
+        </table></div>
+        <div class="table-scroll"><table>
+            <tr><th>الإجراءات المتخذة</th></tr>
+            <tr><td>{final_actions_html}</td></tr>
+        </table></div>
+        {criminal_details_html}
+        <div class="table-scroll"><table class="sign-table">
+            <tr><th colspan="3">معد التقرير</th></tr>
+            <tr><th>إجراء الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
+            <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
+            <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
+            <tr><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
+        </table></div>
+        {official_footer_html}
+    </div>
+    {sketch_page_html}
+    {photos_pages_html}
+    </div>
+    </div>
+</body>
+</html>
+"""
+with tab_print:
+    st.subheader("📄 معاينة حية للتقرير قبل الطباعة")
     st.components.v1.html(full_report_html, height=850, scrolling=False)
 inject_tab_completion_badges(_report_tab_done_flags())
 st.markdown("""
@@ -5375,3 +5331,8 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
+if st.session_state.pop("_trigger_instant_print", False):
+    trigger_instant_a4_print(
+        full_report_html,
+        nonce=st.session_state.get("_print_nonce", time.time()),
+    )
