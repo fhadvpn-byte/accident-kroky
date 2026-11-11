@@ -4376,7 +4376,7 @@ def _load_remembered_sketch():
     if stored.startswith("data:image/"):
         st.session_state[SKETCH_DATA_URL_KEY] = stored
 
-def render_satellite_tactical_map(default_lat: float = 17.0369, default_lon: float = 43.0983):
+def render_satellite_tactical_map(default_lat: float = 17.0369, default_lon: float = 43.0983, height: int = 680):
     """خريطة قمر صناعي تكتيكية حية (Esri World Imagery) لرسم مسارات المركبات ونقطة الاصطدام مباشرة فوق الشارع الحقيقي."""
     components.html(
         f"""
@@ -4403,7 +4403,7 @@ def render_satellite_tactical_map(default_lat: float = 17.0369, default_lon: flo
                     background:#061224; color:#fff; border:1px solid rgba(56,189,248,0.4);
                     border-radius:6px; padding:5px 8px; width:185px; font-size:12px; direction:ltr;
                 }}
-                #mapWrap {{ position:relative; width:100%; height:410px; border:1px solid rgba(56,189,248,0.35); border-top:none; }}
+                #mapWrap {{ position:relative; width:100%; height:{max(280, int(height) - 175)}px; border:1px solid rgba(56,189,248,0.35); border-top:none; }}
                 #satMap {{ width:100%; height:100%; }}
                 #drawCanvas {{ position:absolute; top:0; left:0; width:100%; height:100%; z-index:500; pointer-events:none; }}
                 .hint {{ font-size:11.5px; color:#bae6fd; padding:6px 10px; background:#071528; border-radius:0 0 10px 10px; border:1px solid rgba(56,189,248,0.25); border-top:none; }}
@@ -4512,7 +4512,7 @@ def render_satellite_tactical_map(default_lat: float = 17.0369, default_lon: flo
         </body>
         </html>
         """,
-        height=515,
+        height=int(height),
     )
 
 
@@ -4530,34 +4530,11 @@ def _store_committed_sketch(data_uri: str, sketch_image_state_key: str):
     st.session_state[SKETCH_DATA_URL_KEY] = image
     _remember_sketch_data_url(image, SKETCH_DATA_URL_KEY)
 
-def render_interactive_asphalt_studio(
-    sketch_image_state_key: str = "sketch_data_url",
-    location_state_key: str = "p1_acc_location",
-):
-    """استوديو كروكي أسفلتي تفاعلي عبر مكوّن Streamlit ثنائي الاتجاه."""
-    default_loc = str(st.session_state.get(location_state_key, "") or "").strip()
-    mode_sel = st.radio(
-        "اختر نمط تخطيط موقع الحادث:",
-        options=[
-            "🛣️ استوديو الأسفلت التفاعلي الحر بالماوس (سيناريوهات تشمل تقاطع الإشارات)",
-            "🛰️ خريطة القمر الصناعي التكتيكية الحية",
-        ],
-        horizontal=True,
-        key="_studio_top_mode",
-    )
-    if mode_sel.startswith("🛰️"):
-        render_satellite_tactical_map()
-        sat_up = st.file_uploader(
-            "📥 أرفق لقطة الخريطة الفضائية لاعتمادها في ورقة A4:",
-            type=["png", "jpg", "jpeg", "webp"],
-            key="_sat_up_file",
-        )
-        if sat_up is not None:
-            b64 = base64.b64encode(sat_up.getvalue()).decode("ascii")
-            mime = sat_up.type or "image/png"
-            _store_committed_sketch(f"data:{mime};base64,{b64}", sketch_image_state_key)
-            st.success("✅ تم اعتماد الكروكي الفضائي في التقرير.")
-        return
+_LAYOUT_DUAL = "🖥️ عرض مزدوج: الكروكي التفاعلي وبجانبه خريطة التصوير الجوي"
+_LAYOUT_SKETCH = "🛣️ الكروكي التفاعلي بعرض كامل"
+_LAYOUT_SAT = "🛰️ خريطة التصوير الجوي بعرض كامل"
+
+def _accept_asphalt_commit(sketch_image_state_key: str, default_loc: str):
     saved_state = st.session_state.get("_saved_asphalt_state")
     result = _asphalt_studio_component(
         default_loc=default_loc,
@@ -4572,6 +4549,52 @@ def render_interactive_asphalt_studio(
             _store_committed_sketch(result["image"], sketch_image_state_key)
             st.session_state["_saved_asphalt_state"] = result.get("state")
             st.toast("✅ تم اعتماد الكروكي في تقرير A4 بنجاح!")
+
+def _render_aerial_reference():
+    render_satellite_tactical_map(height=680)
+    st.caption("ابحث بالإحداثيات وكبّر التقاطع الحقيقي أثناء رسم الكروكي.")
+    place = st.radio(
+        "موضع لقطة التصوير الجوي داخل ورقة الكروكي عند إرفاقها:",
+        ["أسفل الكروكي", "بجانب الكروكي"],
+        horizontal=True,
+        key="aerial_place_choice",
+    )
+    st.session_state["aerial_place"] = "beside" if str(place).startswith("بجانب") else "below"
+    sat_up = st.file_uploader(
+        "📥 إرفاق لقطة الموقع الجوي اختيارياً في ورقة الكروكي (لا تستبدل رسم الأسفلت):",
+        type=["png", "jpg", "jpeg", "webp"],
+        key="_sat_up_file",
+    )
+    if sat_up is not None:
+        b64 = base64.b64encode(sat_up.getvalue()).decode("ascii")
+        mime = sat_up.type or "image/png"
+        st.session_state["aerial_data_url"] = f"data:{mime};base64,{b64}"
+        st.success("✅ أُرفقت لقطة التصوير الجوي مع الكروكي في التقرير.")
+
+def render_interactive_asphalt_studio(
+    sketch_image_state_key: str = "sketch_data_url",
+    location_state_key: str = "p1_acc_location",
+):
+    """استوديو كروكي أسفلتي مع خريطة التصوير الجوي بجانبه عند الحاجة."""
+    default_loc = str(st.session_state.get(location_state_key, "") or "").strip()
+    mode_sel = st.radio(
+        "اختر نمط عرض التخطيط:",
+        options=[_LAYOUT_DUAL, _LAYOUT_SKETCH, _LAYOUT_SAT],
+        horizontal=True,
+        key="_studio_layout_mode",
+    )
+    show_sketch = mode_sel != _LAYOUT_SAT
+    show_sat = mode_sel != _LAYOUT_SKETCH
+    if show_sketch and show_sat:
+        col_sketch, col_sat = st.columns([1.35, 1], gap="medium")
+        with col_sketch:
+            _accept_asphalt_commit(sketch_image_state_key, default_loc)
+        with col_sat:
+            _render_aerial_reference()
+    elif show_sketch:
+        _accept_asphalt_commit(sketch_image_state_key, default_loc)
+    else:
+        _render_aerial_reference()
     preview = str(st.session_state.get(sketch_image_state_key) or st.session_state.get(SKETCH_DATA_URL_KEY) or "")
     if preview.startswith("data:image/"):
         with st.expander("👁️ معاينة الكروكي المعتمد حالياً في ورقة الطباعة A4", expanded=False):
@@ -4900,10 +4923,31 @@ with tab5:
             except OSError:
                 sketch_src = ""
     safe_sketch_src = html.escape(sketch_src, quote=True)
-    sketch_figure = (
+    sketch_img = (
         f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="width:100%; max-height:118mm; height:auto; object-fit:contain; border:1px solid #ccc;">'
         if safe_sketch_src else ""
     )
+    aerial_src = str(st.session_state.get("aerial_data_url") or "").strip()
+    safe_aerial_src = html.escape(aerial_src, quote=True) if aerial_src.startswith("data:image/") else ""
+    aerial_img = (
+        f'<img src="{safe_aerial_src}" alt="لقطة التصوير الجوي" style="width:100%; max-height:70mm; height:auto; object-fit:contain; border:1px solid #000;">'
+        if safe_aerial_src else ""
+    )
+    if sketch_img and aerial_img and st.session_state.get("aerial_place") == "beside":
+        sketch_figure = (
+            '<div style="display:flex; gap:3mm; align-items:flex-start;">'
+            f'<div style="flex:1.2;">{sketch_img}</div>'
+            f'<div style="flex:0.8;"><div style="font-weight:800; font-size:13px; margin-bottom:2px;">لقطة التصوير الجوي</div>{aerial_img}</div>'
+            "</div>"
+        )
+    elif sketch_img and aerial_img:
+        sketch_figure = (
+            f"{sketch_img}"
+            '<div style="font-weight:800; font-size:13px; margin-top:4mm;">لقطة التصوير الجوي</div>'
+            f"{aerial_img}"
+        )
+    else:
+        sketch_figure = sketch_img
     logo_src = get_base64_image("traffic_logo.png")
     sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
     stored_sig = str(st.session_state.get("sig_base64") or "").strip()

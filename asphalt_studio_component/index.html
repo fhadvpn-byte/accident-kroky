@@ -128,8 +128,10 @@
                 <button class="t-btn" onclick="addExtraItem('truck')">🚛 شاحنة</button>
                 <button class="t-btn" onclick="addExtraItem('bike')">🏍️ دراجة</button>
                 <button class="t-btn" onclick="addExtraItem('pedestrian')">🚶 مشاة</button>
-                <button class="t-btn" onclick="addExtraItem('animal')">🐪 حيوان سائب</button>
-                <button class="t-btn" onclick="addExtraItem('obstacle')">🚧 حاجز / عمود</button>
+                <button class="t-btn" onclick="addExtraItem('animal')">🐪 جمل سائب</button>
+                <button class="t-btn" onclick="addExtraItem('livestock')">🐑 مواشي</button>
+                <button class="t-btn" onclick="addExtraItem('obstacle')">🚧 حاجز خرساني</button>
+                <button class="t-btn" onclick="addExtraItem('pole')">💡 عمود إنارة</button>
                 <button class="t-btn" onclick="addExtraItem('skid')">〰️ أثر فرامل</button>
                 <button class="t-btn" onclick="addExtraItem('signal')">🚦 إشارة ضوئية</button>
                 <button class="t-btn" onclick="cycleSignalColor()">🔴🟢 تبديل لون الإشارة</button>
@@ -661,23 +663,142 @@
     function drawSpecialItem(it, isSelected, hideHandles) {
         ctx.save();
         ctx.translate(it.x, it.y);
+        const rot = ((it.angle || 0) * Math.PI) / 180;
         if (it.type === "impact") {
-            ctx.beginPath(); ctx.arc(0, 0, 18, 0, Math.PI*2);
-            ctx.fillStyle = "rgba(250, 204, 21, 0.92)"; ctx.fill();
-            ctx.lineWidth = 3; ctx.strokeStyle = "#dc2626"; ctx.stroke();
-            ctx.strokeStyle = "#991b1b"; ctx.lineWidth = 3.5;
-            ctx.beginPath(); ctx.moveTo(-8,-8); ctx.lineTo(8,8); ctx.moveTo(-8,8); ctx.lineTo(8,-8); ctx.stroke();
-        } else if (it.type === "pedestrian" || it.type === "animal" || it.type === "obstacle") {
-            ctx.fillStyle = it.type === "obstacle" ? "#f97316" : "#ffffff";
-            ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 2.5;
-            ctx.beginPath(); ctx.roundRect(-22, -16, 44, 32, 8); ctx.fill(); ctx.stroke();
-            ctx.fillStyle = "#0f172a"; ctx.font = "bold 12px Tahoma"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
-            const txt = it.type === "pedestrian" ? "مشاة" : (it.type === "animal" ? "حيوان" : (it.label || "ثابت"));
-            ctx.fillText(txt, 0, 1);
+            ctx.beginPath();
+            const spikes = 10, outerR = 20, innerR = 10;
+            for (let i = 0; i < spikes * 2; i++) {
+                const r = (i % 2 === 0) ? outerR : innerR;
+                const a = (i * Math.PI) / spikes;
+                if (i === 0) ctx.moveTo(Math.cos(a) * r, Math.sin(a) * r);
+                else ctx.lineTo(Math.cos(a) * r, Math.sin(a) * r);
+            }
+            ctx.closePath();
+            ctx.fillStyle = "rgba(250, 204, 21, 0.95)";
+            ctx.fill();
+            ctx.lineWidth = 2.2;
+            ctx.strokeStyle = "#dc2626";
+            ctx.stroke();
+            ctx.strokeStyle = "#991b1b";
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            ctx.moveTo(-6, -6); ctx.lineTo(6, 6);
+            ctx.moveTo(6, -6); ctx.lineTo(-6, 6);
+            ctx.stroke();
+        }
+        else if (it.type === "pedestrian") {
+            ctx.rotate(rot);
+            ctx.fillStyle = "rgba(255, 255, 255, 0.22)";
+            ctx.strokeStyle = "rgba(255, 255, 255, 0.75)";
+            ctx.lineWidth = 1.4;
+            ctx.beginPath(); ctx.arc(0, 0, 17, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#1e293b";
+            ctx.beginPath(); ctx.ellipse(7, -5, 6, 3, 0.2, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(-6, 5, 6, 3, -0.2, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#2563eb";
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 1.8;
+            ctx.beginPath(); ctx.roundRect(-7, -12, 14, 24, 7); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#f1c27d";
+            ctx.strokeStyle = "#0f172a";
+            ctx.lineWidth = 1.8;
+            ctx.beginPath(); ctx.arc(1, 0, 6.2, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        else if (it.type === "animal" || it.type === "camel") {
+            ctx.rotate(rot);
+            ctx.fillStyle = "rgba(0, 0, 0, 0.32)";
+            ctx.beginPath(); ctx.ellipse(2, 12, 22, 7, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = "#d99b52";
+            ctx.strokeStyle = "#451a03";
+            ctx.lineWidth = 1.8;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+            ctx.strokeStyle = "#92400e";
+            ctx.lineWidth = 3.2;
+            ctx.beginPath();
+            ctx.moveTo(-11, 4); ctx.lineTo(-13, 17);
+            ctx.moveTo(-6, 5);  ctx.lineTo(-5, 16);
+            ctx.moveTo(8, 4);   ctx.lineTo(7, 16);
+            ctx.moveTo(12, 3);  ctx.lineTo(15, 17);
+            ctx.stroke();
+            ctx.strokeStyle = "#451a03";
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
+            ctx.moveTo(-16, 1);
+            ctx.quadraticCurveTo(-14, -6, -8, -7);
+            ctx.bezierCurveTo(-5, -19, 5, -19, 8, -7);
+            ctx.quadraticCurveTo(14, -6, 17, -14);
+            ctx.quadraticCurveTo(19, -20, 23, -19);
+            ctx.quadraticCurveTo(28, -18, 27, -14);
+            ctx.quadraticCurveTo(24, -12, 21, -12);
+            ctx.quadraticCurveTo(19, -2, 13, 4);
+            ctx.quadraticCurveTo(0, 7, -13, 4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-16, 0); ctx.lineTo(-20, 7); ctx.stroke();
+            ctx.fillStyle = "#0f172a";
+            ctx.beginPath(); ctx.arc(23.5, -16.5, 1.3, 0, Math.PI * 2); ctx.fill();
+        }
+        else if (it.type === "livestock") {
+            ctx.rotate(rot);
+            ctx.fillStyle = "rgba(0,0,0,0.28)";
+            ctx.beginPath(); ctx.ellipse(1, 9, 16, 5, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = "#1e293b"; ctx.lineWidth = 2.6;
+            ctx.beginPath();
+            ctx.moveTo(-8, 3); ctx.lineTo(-9, 12);
+            ctx.moveTo(-4, 3); ctx.lineTo(-4, 12);
+            ctx.moveTo(5, 3);  ctx.lineTo(5, 12);
+            ctx.moveTo(9, 3);  ctx.lineTo(10, 12);
+            ctx.stroke();
+            ctx.fillStyle = "#f8fafc";
+            ctx.strokeStyle = "#334155";
+            ctx.lineWidth = 1.8;
+            ctx.beginPath(); ctx.ellipse(0, -1, 14, 9, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#1e293b";
+            ctx.beginPath(); ctx.ellipse(14, -4, 6, 4.5, 0.2, 0, Math.PI * 2); ctx.fill();
+        }
+        else if (it.type === "obstacle" || it.type === "barrier") {
+            ctx.rotate(rot);
+            ctx.fillStyle = "rgba(0,0,0,0.35)";
+            ctx.fillRect(-26, -7, 56, 18);
+            ctx.save();
+            ctx.beginPath(); ctx.roundRect(-28, -9, 56, 18, 4); ctx.clip();
+            ctx.fillStyle = "#facc15";
+            ctx.fillRect(-28, -9, 56, 18);
+            ctx.fillStyle = "#0f172a";
+            for (let sx = -36; sx < 36; sx += 14) {
+                ctx.beginPath();
+                ctx.moveTo(sx, -9); ctx.lineTo(sx + 7, -9);
+                ctx.lineTo(sx + 1, 9); ctx.lineTo(sx - 6, 9);
+                ctx.closePath(); ctx.fill();
+            }
+            ctx.restore();
+            ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 1.8;
+            ctx.beginPath(); ctx.roundRect(-28, -9, 56, 18, 4); ctx.stroke();
+        }
+        else if (it.type === "pole") {
+            ctx.rotate(rot);
+            ctx.fillStyle = "#94a3b8"; ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 1.8;
+            ctx.fillRect(-9, -9, 18, 18); ctx.strokeRect(-9, -9, 18, 18);
+            ctx.fillStyle = "#475569";
+            ctx.beginPath(); ctx.arc(0, 0, 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.strokeStyle = "#e2e8f0"; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(18, 0); ctx.stroke();
+            ctx.fillStyle = "#fef08a"; ctx.strokeStyle = "#ca8a04"; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.ellipse(20, 0, 5, 3.5, 0, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         }
         if (isSelected && !hideHandles) {
-            ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 2; ctx.setLineDash([4,3]);
-            ctx.strokeRect(-26, -22, 52, 44);
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 3]);
+            ctx.strokeRect(-28, -24, 56, 48);
+            if (it.type !== "impact") {
+                ctx.setLineDash([]);
+                ctx.beginPath(); ctx.moveTo(28, 0); ctx.lineTo(42, 0); ctx.stroke();
+                ctx.fillStyle = "#38bdf8"; ctx.strokeStyle = "#ffffff";
+                ctx.beginPath(); ctx.arc(44, 0, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            }
         }
         ctx.restore();
     }
@@ -838,9 +959,15 @@
             y: (evt.clientY - r.top) * (canvas.height / r.height)
         };
     }
+    function isVectorShape(type) {
+        return ["pedestrian","animal","camel","livestock","obstacle","barrier","pole"].includes(type);
+    }
+    function canRotateItem(type) {
+        return ["car","truck","bike","compass","traffic_light"].includes(type) || isVectorShape(type);
+    }
     canvas.addEventListener("mousedown", e => {
         const p = getCanvasPos(e);
-        if (selectedIdx >= 0 && ["car","truck","bike","compass","traffic_light"].includes(items[selectedIdx].type)) {
+        if (selectedIdx >= 0 && canRotateItem(items[selectedIdx].type)) {
             const sel = items[selectedIdx];
             const rad = (sel.angle || 0) * Math.PI / 180;
             let hx;
@@ -849,6 +976,9 @@
                 const handleReach = sel.type === "compass" ? 46 : 44;
                 hx = sel.x + Math.sin(rad) * handleReach;
                 hy = sel.y - Math.cos(rad) * handleReach;
+            } else if (isVectorShape(sel.type)) {
+                hx = sel.x + Math.cos(rad) * 44;
+                hy = sel.y + Math.sin(rad) * 44;
             } else {
                 const w = sel.type === "truck" ? 104 : (sel.type === "bike" ? 44 : 68);
                 hx = sel.x + Math.cos(rad) * (w/2 + 26);
@@ -867,7 +997,7 @@
         }
         for (let i = items.length - 1; i >= 0; i--) {
             const it = items[i];
-            const hitR = it.type === "truck" ? 46 : (it.type === "compass" ? 34 : (it.type === "traffic_light" ? 42 : 32));
+            const hitR = it.type === "truck" ? 46 : (it.type === "compass" ? 34 : (it.type === "traffic_light" ? 42 : (isVectorShape(it.type) ? 36 : 32)));
             if (Math.hypot(p.x - it.x, p.y - it.y) <= hitR) {
                 selectedIdx = i;
                 dragMode = "body";
@@ -907,7 +1037,7 @@
         for (let i = items.length - 1; i >= 0; i--) {
             const it = items[i];
             const reach = it.type === "compass" ? 52 : (it.type === "traffic_light" ? 48 : 42);
-            if (["car","truck","bike","compass","traffic_light"].includes(it.type) && Math.hypot(p.x - it.x, p.y - it.y) <= reach) {
+            if (canRotateItem(it.type) && Math.hypot(p.x - it.x, p.y - it.y) <= reach) {
                 e.preventDefault();
                 selectedIdx = i;
                 it.angle = ((it.angle || 0) + (e.deltaY > 0 ? 8 : -8)) % 360;
@@ -918,7 +1048,7 @@
         }
     }, { passive: false });
     window.rotateSelected = function(delta) {
-        if (selectedIdx >= 0 && ["car","truck","bike","compass","traffic_light"].includes(items[selectedIdx].type)) {
+        if (selectedIdx >= 0 && canRotateItem(items[selectedIdx].type)) {
             items[selectedIdx].angle = ((items[selectedIdx].angle || 0) + delta) % 360;
             renderAll(false);
             scheduleAutoCommit();
@@ -954,9 +1084,11 @@
         if (kind === "sedan3") items.push({type:"car", label:"3", color:"#10b981", x:480, y:250, angle:0, tailX:340, tailY:250});
         else if (kind === "truck") items.push({type:"truck", label:"شاحنة", color:"#f59e0b", x:480, y:250, angle:0, tailX:310, tailY:250});
         else if (kind === "bike") items.push({type:"bike", label:"دراجة", color:"#06b6d4", x:480, y:250, angle:0, tailX:360, tailY:250});
-        else if (kind === "pedestrian") items.push({type:"pedestrian", x:480, y:220, tailX:480, tailY:130, color:"#eab308"});
-        else if (kind === "animal") items.push({type:"animal", x:500, y:220, tailX:500, tailY:120, color:"#a16207"});
-        else if (kind === "obstacle") items.push({type:"obstacle", label:"عائق", x:520, y:200});
+        else if (kind === "pedestrian") items.push({type:"pedestrian", x:480, y:220, angle:0, tailX:480, tailY:130});
+        else if (kind === "animal") items.push({type:"animal", x:500, y:220, angle:0, tailX:500, tailY:120});
+        else if (kind === "livestock") items.push({type:"livestock", x:540, y:250, angle:0});
+        else if (kind === "obstacle") items.push({type:"obstacle", x:520, y:200, angle:0});
+        else if (kind === "pole") items.push({type:"pole", x:600, y:160, angle:0});
         else if (kind === "signal") items.push({type:"traffic_light", x:480, y:150, angle:0, state:"red"});
         else if (kind === "skid" && selectedIdx >= 0) items[selectedIdx].skid = !items[selectedIdx].skid;
         selectedIdx = items.length - 1;
