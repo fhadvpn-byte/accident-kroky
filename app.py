@@ -7,6 +7,7 @@ import io
 import base64
 import os
 import json
+import re
 import hashlib
 import math
 import tempfile
@@ -64,6 +65,290 @@ def gregorian_to_hijri_str(gregorian_date):
 
 def get_today_hijri():
     return gregorian_to_hijri_str(date.today())
+
+HIJRI_MONTHS = {
+    1: "محرم",
+    2: "صفر",
+    3: "ربيع الأول",
+    4: "ربيع الآخر",
+    5: "جمادى الأولى",
+    6: "جمادى الآخرة",
+    7: "رجب",
+    8: "شعبان",
+    9: "رمضان",
+    10: "شوال",
+    11: "ذو القعدة",
+    12: "ذو الحجة",
+}
+HIJRI_YEAR_MIN = 1430
+HIJRI_YEAR_MAX = 1455
+
+def get_today_hijri_parts() -> tuple[int, int, int]:
+    try:
+        from hijridate import Gregorian
+        today_hijri = Gregorian.today().to_hijri()
+        return int(today_hijri.year), int(today_hijri.month), int(today_hijri.day)
+    except Exception:
+        year, month, day = get_today_hijri().split("/")
+        return int(year), int(month), int(day)
+
+def parse_hijri_string(raw: str) -> tuple[int, int, int] | None:
+    if not raw:
+        return None
+    digits_trans = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+    cleaned = raw.strip().translate(digits_trans)
+    if re.fullmatch(r"\d{8}", cleaned):
+        year, month, day = int(cleaned[:4]), int(cleaned[4:6]), int(cleaned[6:8])
+        if HIJRI_YEAR_MIN <= year <= HIJRI_YEAR_MAX and 1 <= month <= 12 and 1 <= day <= 30:
+            return year, month, day
+    parts = [part for part in re.split(r"[/\-\.\s]+", cleaned) if part.isdigit()]
+    if len(parts) == 3:
+        first, second, third = int(parts[0]), int(parts[1]), int(parts[2])
+        if first >= 1400:
+            year, month, day = first, second, third
+        elif third >= 1400:
+            day, month, year = first, second, third
+        else:
+            return None
+        if HIJRI_YEAR_MIN <= year <= HIJRI_YEAR_MAX and 1 <= month <= 12 and 1 <= day <= 30:
+            return year, month, day
+    return None
+
+def inject_luxury_hijri_css():
+    st.markdown(
+        """
+        <style>
+        /* تصميم الزر الرئيسي لمنتقي التاريخ الهجري فقط */
+        div:has(> [data-testid="stElementContainer"] #hijri-lux-trigger) [data-testid="stPopover"] > button {
+            background: linear-gradient(135deg, rgba(10, 25, 47, 0.92), rgba(15, 38, 68, 0.92)) !important;
+            border: 1px solid rgba(56, 189, 248, 0.45) !important;
+            border-radius: 10px !important;
+            color: #f8fafc !important;
+            font-weight: 600 !important;
+            font-size: 14.5px !important;
+            padding: 8px 14px !important;
+            box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+            transition: all 0.2s ease !important;
+        }
+        div:has(> [data-testid="stElementContainer"] #hijri-lux-trigger) [data-testid="stPopover"] > button:hover {
+            border-color: #38bdf8 !important;
+            box-shadow: 0 0 16px rgba(56, 189, 248, 0.35) !important;
+        }
+        /* تصميم النافذة المنبثقة الزجاجية الفاخرة (Dark Glass HUD) */
+        [data-testid="stPopoverBody"]:has(#hijri-lux-scope),
+        [data-baseweb="popover"]:has(#hijri-lux-scope) > div {
+            background: linear-gradient(160deg, #071324 0%, #0c1f38 100%) !important;
+            border: 1px solid rgba(56, 189, 248, 0.35) !important;
+            border-radius: 16px !important;
+            box-shadow: 0 20px 45px rgba(0, 0, 0, 0.65), 0 0 25px rgba(14, 165, 233, 0.15) !important;
+            padding: 12px 14px !important;
+            width: 375px !important;
+            max-width: 94vw !important;
+            direction: rtl !important;
+        }
+        /* تقليص المسافات العمودية داخل النافذة المنبثقة لمنع التمدد المزعج */
+        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) [data-testid="stVerticalBlock"] {
+            gap: 0.4rem !important;
+        }
+        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) [data-testid="stHorizontalBlock"] {
+            gap: 0.35rem !important;
+        }
+        /* أزرار الأيام العادية (زجاجي داكن هادئ بدلاً من السماوي الفاقع) */
+        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) button[kind="secondary"] {
+            background: rgba(255, 255, 255, 0.04) !important;
+            color: #e2e8f0 !important;
+            border: 1px solid rgba(148, 163, 184, 0.18) !important;
+            border-radius: 9px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            padding: 0 !important;
+            font-size: 13.5px !important;
+            font-weight: 600 !important;
+            box-shadow: none !important;
+            transition: all 0.15s ease !important;
+        }
+        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) button[kind="secondary"]:hover {
+            background: rgba(56, 189, 248, 0.16) !important;
+            border-color: rgba(56, 189, 248, 0.65) !important;
+            color: #ffffff !important;
+            transform: translateY(-1px) !important;
+        }
+        /* زر اليوم المختار فقط (متدرج سماوي ملكي راقٍ) */
+        [data-testid="stPopoverBody"]:has(#hijri-lux-scope) button[kind="primary"] {
+            background: linear-gradient(135deg, #0284c7 0%, #00e5ff 100%) !important;
+            color: #041322 !important;
+            border: 1px solid #7dd3fc !important;
+            border-radius: 9px !important;
+            height: 36px !important;
+            min-height: 36px !important;
+            padding: 0 !important;
+            font-size: 14px !important;
+            font-weight: 800 !important;
+            box-shadow: 0 0 14px rgba(0, 229, 255, 0.45) !important;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+
+def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تاريخ الحادث (هجري)") -> str:
+    inject_luxury_hijri_css()
+    today_y, today_m, today_d = get_today_hijri_parts()
+    if not HIJRI_YEAR_MIN <= today_y <= HIJRI_YEAR_MAX:
+        today_y = 1448
+    current_val = str(st.session_state.get(state_key, "") or "").strip()
+    parsed = parse_hijri_string(current_val)
+    sel_y_key = f"{state_key}_lux_y"
+    sel_m_key = f"{state_key}_lux_m"
+    sel_d_key = f"{state_key}_lux_d"
+    manual_key = f"{state_key}_manual_in"
+    if parsed:
+        st.session_state[sel_y_key], st.session_state[sel_m_key], st.session_state[sel_d_key] = parsed
+    else:
+        st.session_state.setdefault(sel_y_key, today_y)
+        st.session_state.setdefault(sel_m_key, today_m)
+        st.session_state.setdefault(sel_d_key, None)
+    if manual_key not in st.session_state:
+        st.session_state[manual_key] = current_val
+
+    def commit_date(year: int, month: int, day: int):
+        formatted = f"{int(year):04d}/{int(month):02d}/{int(day):02d}"
+        st.session_state[sel_y_key] = int(year)
+        st.session_state[sel_m_key] = int(month)
+        st.session_state[sel_d_key] = int(day)
+        st.session_state[state_key] = formatted
+        st.session_state[manual_key] = formatted
+        st.session_state[f"{state_key}_sync_parts"] = True
+        st.session_state.hijri_date = formatted
+        st.session_state.hijri_manual_date = formatted
+        st.session_state.p1_acc_date = formatted
+        st.session_state.p1_acc_year = f"{int(year):04d}"
+        st.session_state.p1_acc_month = f"{int(month):02d}"
+        st.session_state.p1_acc_day = f"{int(day):02d}"
+
+    if parsed:
+        picked_year, picked_month, picked_day = parsed
+        btn_label = f"📅  {picked_year:04d}/{picked_month:02d}/{picked_day:02d} هـ   •   {picked_day} {HIJRI_MONTHS.get(picked_month, '')}"
+    else:
+        btn_label = "📅  اختر التاريخ الهجري..."
+    st.markdown("<div id='hijri-lux-trigger'></div>", unsafe_allow_html=True)
+    if label:
+        st.markdown(
+            f"<div style='font-size:13.5px; font-weight:600; color:#bae6fd; margin-bottom:4px; text-align:right;'>{label}</div>",
+            unsafe_allow_html=True,
+        )
+    with st.popover(btn_label, use_container_width=True):
+        st.markdown("<div id='hijri-lux-scope'></div>", unsafe_allow_html=True)
+        active_d = st.session_state.get(sel_d_key)
+        try:
+            active_m = int(st.session_state.get(sel_m_key, today_m))
+            active_y = int(st.session_state.get(sel_y_key, today_y))
+        except (TypeError, ValueError):
+            active_m, active_y = today_m, today_y
+        if active_m not in HIJRI_MONTHS:
+            active_m = today_m
+        preview_txt = (
+            f"{active_y:04d}/{active_m:02d}/{int(active_d):02d} هـ"
+            if active_d
+            else "لم يُحدد اليوم بعد"
+        )
+        sub_txt = (
+            f"{int(active_d)} {HIJRI_MONTHS.get(active_m, '')} {active_y} هـ"
+            if active_d
+            else f"{HIJRI_MONTHS.get(active_m, '')} {active_y} هـ"
+        )
+        st.markdown(
+            f"""
+            <div style="background:rgba(2,132,199,0.12); border:1px solid rgba(56,189,248,0.28);
+                        border-radius:11px; padding:8px 12px; margin-bottom:4px;
+                        display:flex; justify-content:space-between; align-items:center;">
+                <div>
+                    <div style="font-size:11px; color:#7dd3fc;">التاريخ الهجري المعتمد</div>
+                    <div style="font-size:16px; font-weight:800; color:#f8fafc; letter-spacing:0.6px;">{preview_txt}</div>
+                </div>
+                <div style="font-size:12px; font-weight:600; color:#38bdf8; background:rgba(56,189,248,0.12);
+                            padding:4px 9px; border-radius:7px;">
+                    {sub_txt}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        quick_col, clear_col = st.columns([2, 1])
+        with quick_col:
+            if st.button("⚡ اليوم", key=f"{state_key}_btn_today", use_container_width=True):
+                commit_date(today_y, today_m, today_d)
+                st.rerun()
+        with clear_col:
+            if st.button("✖ مسح", key=f"{state_key}_btn_clear", use_container_width=True):
+                st.session_state[sel_d_key] = None
+                st.session_state[state_key] = ""
+                st.session_state[manual_key] = ""
+                st.session_state.hijri_date = ""
+                st.session_state.hijri_manual_date = ""
+                st.session_state.p1_acc_date = ""
+                st.session_state.p1_acc_day = ""
+                st.rerun()
+        years_list = list(range(HIJRI_YEAR_MIN, HIJRI_YEAR_MAX + 1))
+        if active_y not in years_list:
+            active_y = today_y if today_y in years_list else 1448
+        month_ui_key = f"{state_key}_sel_month_ui"
+        year_ui_key = f"{state_key}_sel_year_ui"
+        sync_parts = st.session_state.pop(f"{state_key}_sync_parts", False)
+        if sync_parts or st.session_state.get(month_ui_key) not in HIJRI_MONTHS:
+            st.session_state[month_ui_key] = active_m
+        if sync_parts or st.session_state.get(year_ui_key) not in years_list:
+            st.session_state[year_ui_key] = active_y
+        month_col, year_col = st.columns([1.25, 1])
+        with month_col:
+            chosen_m = st.selectbox(
+                "الشهر",
+                options=list(HIJRI_MONTHS.keys()),
+                format_func=lambda month: f"{month:02d} — {HIJRI_MONTHS[month]}",
+                key=month_ui_key,
+                label_visibility="collapsed",
+            )
+        with year_col:
+            chosen_y = st.selectbox(
+                "السنة",
+                options=years_list,
+                format_func=lambda year: f"{year} هـ",
+                key=year_ui_key,
+                label_visibility="collapsed",
+            )
+        if chosen_m != active_m or chosen_y != active_y:
+            st.session_state[sel_m_key] = chosen_m
+            st.session_state[sel_y_key] = chosen_y
+            if st.session_state.get(sel_d_key):
+                commit_date(chosen_y, chosen_m, int(st.session_state[sel_d_key]))
+                st.rerun()
+        for row_start in range(1, 31, 6):
+            day_cols = st.columns(6)
+            for idx, day_num in enumerate(range(row_start, row_start + 6)):
+                is_selected = st.session_state.get(sel_d_key) == day_num
+                with day_cols[idx]:
+                    if st.button(
+                        f"{day_num:02d}",
+                        key=f"{state_key}_d_{day_num}",
+                        type="primary" if is_selected else "secondary",
+                        use_container_width=True,
+                    ):
+                        commit_date(chosen_y, chosen_m, day_num)
+                        st.rerun()
+
+        def _on_manual_change():
+            parsed_manual = parse_hijri_string(st.session_state.get(manual_key, ""))
+            if parsed_manual:
+                commit_date(*parsed_manual)
+
+        st.text_input(
+            "إدخال رقمي سريع",
+            placeholder="كتابة سريعة: 1448/06/01 أو 14480601 ثم Enter",
+            key=manual_key,
+            on_change=_on_manual_change,
+            label_visibility="collapsed",
+        )
+    return str(st.session_state.get(state_key, ""))
 
 def _blank_parties():
     return [
@@ -471,8 +756,16 @@ def reset_page1_payload():
         "p1_acc_weather_choice",
         "hijri_month_label",
         "hijri_year_label",
+        "hijri_date_manual_in",
+        "hijri_date_lux_y",
+        "hijri_date_lux_m",
+        "hijri_date_lux_d",
+        "hijri_date_sel_month_ui",
+        "hijri_date_sel_year_ui",
     ):
         st.session_state.pop(key, None)
+    for day_num in range(1, 31):
+        st.session_state.pop(f"hijri_date_d_{day_num}", None)
     if P1_AUTOSAVE_PATH.exists():
         try:
             P1_AUTOSAVE_PATH.unlink()
@@ -1371,7 +1664,7 @@ _HIJRI_MONTH_LABELS = (
     "11 - ذو القعدة",
     "12 - ذو الحجة",
 )
-_HIJRI_YEAR_LABELS = tuple(str(year) for year in range(1430, 1451))
+_HIJRI_YEAR_LABELS = tuple(str(year) for year in range(HIJRI_YEAR_MIN, HIJRI_YEAR_MAX + 1))
 
 def _hijri_picker_state(value):
     parts = str(value).split("/")
@@ -2676,68 +2969,15 @@ with tab1:
     with col1:
         acc_num = st.text_input("رقم الحادث", key="p1_acc_number")
         if "hijri_date" not in st.session_state:
-            st.session_state.hijri_date = ""
-        if st.session_state.get("hijri_month_label") not in _HIJRI_MONTH_LABELS:
-            st.session_state.pop("hijri_month_label", None)
-        if st.session_state.get("hijri_year_label") not in _HIJRI_YEAR_LABELS:
-            st.session_state.pop("hijri_year_label", None)
+            st.session_state.hijri_date = str(st.session_state.get("p1_acc_date") or "")
         if st.session_state.get("acc_date_override"):
             st.session_state.hijri_date = st.session_state.pop("acc_date_override")
-            st.session_state.hijri_parts_sync = True
-        if st.session_state.hijri_date and (
-            st.session_state.pop("hijri_parts_sync", False) or "hijri_month_label" not in st.session_state
-        ):
-            _picked_year, _picked_month, _ = _hijri_picker_state(st.session_state.hijri_date)
-            st.session_state.hijri_year_label = _picked_year
-            st.session_state.hijri_month_label = _picked_month
-        st.markdown("تاريخ الحادث (هجري)")
-        _hijri_label = st.session_state.hijri_date or "—"
-        with st.popover(
-            f"📅 {_hijri_label} (اضغط لاختيار التاريخ)",
-            use_container_width=True,
-        ):
-            if st.button("🔄 ضبط على تاريخ اليوم الهجري تلقائياً", key="hijri_today_btn", use_container_width=True):
-                st.session_state.hijri_date = get_today_hijri()
-                st.session_state.hijri_parts_sync = True
-                st.rerun()
-            if "hijri_manual_date" not in st.session_state or (
-                not st.session_state.get("hijri_manual_date") and st.session_state.get("hijri_date")
-            ):
-                st.session_state.hijri_manual_date = st.session_state.hijri_date or ""
-            st.text_input(
-                "كتابة التاريخ يدوياً",
-                key="hijri_manual_date",
-                placeholder="YYYY/MM/DD",
-                on_change=_apply_manual_hijri_date,
-            )
-            if st.session_state.get("hijri_manual_error"):
-                st.error(st.session_state.hijri_manual_error)
-            st.divider()
-            sel_month_label = st.selectbox("الشهر", _HIJRI_MONTH_LABELS, key="hijri_month_label", index=None, placeholder="اختر الشهر")
-            sel_y = st.selectbox("السنة", _HIJRI_YEAR_LABELS, key="hijri_year_label", index=None, placeholder="اختر السنة")
-            sel_m = (sel_month_label or "")[:2]
-            st.markdown("اضغط على رقم اليوم لاعتماده فوراً")
-            _stored = str(st.session_state.hijri_date).split("/")
-            _stored_y = _stored[0] if len(_stored) == 3 else ""
-            _stored_m = _stored[1] if len(_stored) == 3 else ""
-            _stored_d = _stored[2] if len(_stored) == 3 else ""
-            for _row in range(5):
-                _day_cols = st.columns(6)
-                for _col_index, _day_col in enumerate(_day_cols):
-                    _day = f"{_row * 6 + _col_index + 1:02d}"
-                    _chosen = bool(sel_y) and bool(sel_m) and _stored_y == sel_y and _stored_m == sel_m and _stored_d == _day
-                    with _day_col:
-                        if st.button(
-                            _day,
-                            key=f"hijri_day_btn_{_day}",
-                            type="primary" if _chosen else "secondary",
-                            use_container_width=True,
-                        ):
-                            if sel_y and sel_m:
-                                st.session_state.hijri_date = f"{sel_y}/{sel_m}/{_day}"
-                                st.rerun()
-        accident_date = st.session_state.hijri_date
+            st.session_state.pop("hijri_date_manual_in", None)
+            st.session_state.p1_acc_date = st.session_state.hijri_date
+        accident_date = render_luxury_hijri_picker(state_key="hijri_date", label="تاريخ الحادث (هجري)")
         acc_date = accident_date
+        st.session_state.p1_acc_date = accident_date
+        st.session_state.hijri_manual_date = accident_date
     with col2:
         accident_time = st.text_input("الوقت", key="p1_acc_time")
         acc_time = accident_time
