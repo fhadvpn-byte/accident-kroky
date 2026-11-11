@@ -4561,7 +4561,7 @@ def build_autocad_blueprint_svg(
     if show_skid and sc.get("skid"):
         skid_svg = f'<path d="{sc["skid"]}" fill="none" stroke="#334155" stroke-width="2" stroke-dasharray="4,3"/>'
     imp = sc["impact"]
-    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 420" width="100%" height="100%" style="background:#f8fafc; border:1.8px solid #0f172a; border-radius:6px;">
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="800" height="420" viewBox="0 0 800 420" style="background:#f8fafc; border:1.8px solid #0f172a; border-radius:6px;">
         <defs>
             <pattern id="cadGrid" width="25" height="25" patternUnits="userSpaceOnUse">
                 <path d="M 25 0 L 0 0 0 25" fill="none" stroke="#cbd5e1" stroke-width="0.65"/>
@@ -4599,10 +4599,22 @@ def build_autocad_blueprint_svg(
             <text x="65" y="25" text-anchor="middle" font-family="Tahoma, Arial, sans-serif" font-size="12" font-weight="700" fill="#b91c1c">(X) نقطة الاصطدام</text>
         </g>
     </svg>"""
-    return svg
+    compact_lines = [line.strip() for line in svg.splitlines() if line.strip()]
+    return " ".join(compact_lines)
 
 def svg_to_data_uri(svg_markup: str) -> str:
-    b64 = base64.b64encode(svg_markup.encode("utf-8")).decode("ascii")
+    """تنظيف كود الـ SVG من المسافات المكسورة وتحويله إلى رابط صورة متجهة عالية الدقة."""
+    compact_lines = [line.strip() for line in svg_markup.splitlines() if line.strip()]
+    clean_svg = " ".join(compact_lines)
+    clean_svg = clean_svg.replace(
+        'viewBox="0 0 800 420" width="100%" height="100%"',
+        'viewBox="0 0 800 420" width="800" height="420"',
+    )
+    clean_svg = clean_svg.replace(
+        'width="100%" height="100%" viewBox="0 0 800 420"',
+        'width="800" height="420" viewBox="0 0 800 420"',
+    )
+    b64 = base64.b64encode(clean_svg.encode("utf-8")).decode("ascii")
     return f"data:image/svg+xml;base64,{b64}"
 
 def render_satellite_tactical_map(default_lat: float = 17.0369, default_lon: float = 43.0983):
@@ -4815,9 +4827,14 @@ def render_modern_tactical_sketch_studio(sketch_image_state_key: str = "sketch_d
             v2_angle_delta=int(st.session_state.get("_cad_v2_da", 0) or 0),
             show_skid=bool(st.session_state.get("_cad_skid", True)),
         )
-        st.markdown(svg_code, unsafe_allow_html=True)
-        _remember_sketch_data_url(svg_to_data_uri(svg_code), sketch_image_state_key)
-        st.caption("✅ هذا المخطط الهندسي معتمد تلقائياً بدقة متجهة (Vector HD) في صفحة الكروكي داخل تقرير A4.")
+        data_uri = svg_to_data_uri(svg_code)
+        st.session_state[sketch_image_state_key] = data_uri
+        _remember_sketch_data_url(data_uri, sketch_image_state_key)
+        st.markdown(
+            f'<div style="background:#f8fafc;padding:6px;border-radius:10px;border:1.5px solid #38bdf8;box-shadow:0 6px 20px rgba(0,0,0,0.35);"><img src="{data_uri}" alt="المخطط الهندسي للحادث" style="width:100%;height:auto;display:block;border-radius:6px;"/></div>',
+            unsafe_allow_html=True,
+        )
+        st.caption("✅ المخطط الهندسي معتمد تلقائياً بدقة متجهة (Vector HD) في صفحة الكروكي داخل تقرير A4.")
     else:
         render_satellite_tactical_map()
         sat_upload = st.file_uploader(
