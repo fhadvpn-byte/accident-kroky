@@ -937,7 +937,7 @@ _HIJRI_MONTH_LABELS = (
     "11 - ذو القعدة",
     "12 - ذو الحجة",
 )
-_HIJRI_YEAR_LABELS = ("1446", "1447", "1448", "1449", "1450")
+_HIJRI_YEAR_LABELS = tuple(str(year) for year in range(1430, 1451))
 
 def _hijri_picker_state(value):
     parts = str(value).split("/")
@@ -951,6 +951,29 @@ def _hijri_picker_state(value):
     if not day.isdigit() or not 1 <= int(day) <= 30:
         day = "01"
     return year, _HIJRI_MONTH_LABELS[int(month) - 1], f"{int(day):02d}"
+
+def _apply_manual_hijri_date():
+    raw = str(st.session_state.get("hijri_manual_date") or "").strip()
+    if not raw:
+        st.session_state.hijri_manual_error = ""
+        return
+    parts = raw.split("/")
+    valid = (
+        len(parts) == 3
+        and all(part.isdigit() for part in parts)
+        and len(parts[0]) == 4
+        and parts[0] in _HIJRI_YEAR_LABELS
+        and 1 <= int(parts[1]) <= 12
+        and 1 <= int(parts[2]) <= 30
+    )
+    if not valid:
+        st.session_state.hijri_manual_error = "الصيغة غير صحيحة. اكتب التاريخ هكذا: YYYY/MM/DD"
+        return
+    year, month, day = parts
+    st.session_state.hijri_date = f"{year}/{int(month):02d}/{int(day):02d}"
+    st.session_state.hijri_manual_date = st.session_state.hijri_date
+    st.session_state.hijri_parts_sync = True
+    st.session_state.hijri_manual_error = ""
 
 def _absorb_groq_env():
     if os.getenv("GROQ_API_KEY"):
@@ -2163,6 +2186,16 @@ with tab1:
                 st.session_state.hijri_date = get_today_hijri()
                 st.session_state.hijri_parts_sync = True
                 st.rerun()
+            if "hijri_manual_date" not in st.session_state:
+                st.session_state.hijri_manual_date = st.session_state.hijri_date or ""
+            st.text_input(
+                "كتابة التاريخ يدوياً",
+                key="hijri_manual_date",
+                placeholder="YYYY/MM/DD",
+                on_change=_apply_manual_hijri_date,
+            )
+            if st.session_state.get("hijri_manual_error"):
+                st.error(st.session_state.hijri_manual_error)
             st.divider()
             sel_month_label = st.selectbox("الشهر", _HIJRI_MONTH_LABELS, key="hijri_month_label", index=None, placeholder="اختر الشهر")
             sel_y = st.selectbox("السنة", _HIJRI_YEAR_LABELS, key="hijri_year_label", index=None, placeholder="اختر السنة")
