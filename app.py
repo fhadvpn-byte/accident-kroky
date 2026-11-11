@@ -10,7 +10,7 @@ import json
 import re
 import math
 import tempfile
-from datetime import date, datetime
+from datetime import date, datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
@@ -370,6 +370,347 @@ def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تا
         )
     return str(st.session_state.get(state_key, ""))
 
+KSA_TZ = timezone(timedelta(hours=3))
+DEPT_STAFF_PATH = Path(".bayyinah_dept_staff.json")
+DEPT_STAFF_STORAGE_KEY = "bayyinah_dept_staff"
+MILITARY_RANKS = [
+    "", "جندي", "جندي أول", "عريف", "وكيل رقيب", "رقيب", "رقيب أول", "رئيس رقباء",
+    "ملازم", "ملازم أول", "نقيب", "رائد", "مقدم", "عقيد", "عميد", "لواء",
+]
+DEFAULT_DEPT_STAFF = {
+    "dept_region": "إدارة مرور منطقة جازان",
+    "dept_section": "قسم مرور محافظة العارضة",
+    "officer_name": "",
+    "officer_rank": "",
+    "supervisor_name": "",
+    "supervisor_rank": "",
+    "director_name": "",
+    "director_rank": "",
+    "saved_officers": [],
+}
+SIDEBAR_FIELD_MAP = (
+    ("dept_region", "p1_dept_region"),
+    ("dept_section", "p1_dept_branch"),
+    ("officer_name", "officer_1_name"),
+    ("officer_rank", "officer_1_rank"),
+    ("supervisor_name", "officer_2_name"),
+    ("supervisor_rank", "officer_2_rank"),
+    ("director_name", "manager_name"),
+    ("director_rank", "manager_rank"),
+)
+SIDEBAR_SESSION_KEYS = {widget_key for _storage_key, widget_key in SIDEBAR_FIELD_MAP}
+PARTY_SMART_DEFAULTS = {
+    "المشاركة": "سائق",
+    "الحالة": "سليم",
+    "التأهيل": "مؤهل للقيادة",
+}
+VEHICLE_SMART_DEFAULTS = {
+    "نوع الترخيص": "خصوصي",
+    "التأمين": "ساري",
+}
+
+def load_permanent_dept_staff() -> dict:
+    if "_perm_dept_staff" not in st.session_state:
+        disk_data = {}
+        if DEPT_STAFF_PATH.exists():
+            try:
+                disk_data = json.loads(DEPT_STAFF_PATH.read_text(encoding="utf-8"))
+            except Exception:
+                disk_data = {}
+        if not isinstance(disk_data, dict):
+            disk_data = {}
+        st.session_state["_perm_dept_staff"] = {**DEFAULT_DEPT_STAFF, **disk_data}
+    return st.session_state["_perm_dept_staff"]
+
+def save_permanent_dept_staff(data: dict):
+    st.session_state["_perm_dept_staff"] = dict(data)
+    try:
+        DEPT_STAFF_PATH.write_text(
+            json.dumps(data, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+def capture_sidebar_before_reset():
+    """يحفظ آخر قيم القائمة قبل مسح الجلسة حتى لا تضيع مع حادث جديد أو مسح الحقول."""
+    if not any(widget_key in st.session_state for _storage_key, widget_key in SIDEBAR_FIELD_MAP):
+        return
+    data = load_permanent_dept_staff()
+    for storage_key, widget_key in SIDEBAR_FIELD_MAP:
+        if widget_key in st.session_state:
+            data[storage_key] = str(st.session_state.get(widget_key) or "")
+    save_permanent_dept_staff(data)
+
+def _mirror_dept_staff_local_storage(data: dict):
+    payload = json.dumps(data, ensure_ascii=False)
+    components.html(
+        "<script>(function(){try{var w=window.parent;if(w&&w.localStorage){w.localStorage.setItem(%s,%s);}}catch(e){}})();</script>"
+        % (json.dumps(DEPT_STAFF_STORAGE_KEY), json.dumps(payload)),
+        height=0,
+        width=0,
+    )
+
+def render_officer_quick_picker(presets: list, name_key: str, rank_key: str, role_label: str):
+    """قائمة سريعة لاختيار المنسوب المحفوظ وإنزال اسمه ورتبته بضغطة واحدة."""
+    clean_presets = [item for item in presets if isinstance(item, dict) and str(item.get("name") or "").strip()]
+    if not clean_presets:
+        return
+    options = ["-- اختيار سريع من المحفوظين --"] + [
+        f"{item.get('rank', '')} / {item.get('name', '')}".strip(" /") for item in clean_presets
+    ]
+    picked = st.selectbox(
+        f"اختيار سريع ({role_label})",
+        options=options,
+        key=f"_quick_pick_{name_key}",
+        label_visibility="collapsed",
+    )
+    applied_key = f"_quick_applied_{name_key}"
+    if picked != "-- اختيار سريع من المحفوظين --" and st.session_state.get(applied_key) != picked:
+        chosen = clean_presets[options.index(picked) - 1]
+        st.session_state[applied_key] = picked
+        st.session_state[name_key] = str(chosen.get("name") or "")
+        st.session_state[rank_key] = str(chosen.get("rank") or "")
+
+def _rank_select(label: str, key: str, on_change):
+    current = str(st.session_state.get(key, "") or "")
+    options = list(MILITARY_RANKS)
+    if current not in options:
+        options = [current] + options
+    return st.selectbox(label, options=options, key=key, on_change=on_change)
+
+def render_persistent_sidebar_settings():
+    """إعدادات القسم والمنسوبين: ملف محلي + localStorage، ولا يمسحها حادث جديد."""
+    data = load_permanent_dept_staff()
+    force = bool(st.session_state.pop("_restore_perm_sidebar", False))
+    file_exists = DEPT_STAFF_PATH.exists()
+    if force and file_exists:
+        for storage_key, widget_key in SIDEBAR_FIELD_MAP:
+            st.session_state[widget_key] = str(data.get(storage_key, "") or "")
+        st.session_state["_perm_sidebar_seeded"] = True
+    elif not st.session_state.get("_perm_sidebar_seeded"):
+        for storage_key, widget_key in SIDEBAR_FIELD_MAP:
+            stored = str(data.get(storage_key, "") or "")
+            current = str(st.session_state.get(widget_key) or "").strip()
+            if file_exists or not current:
+                st.session_state[widget_key] = stored
+        st.session_state["_perm_sidebar_seeded"] = True
+    _mirror_dept_staff_local_storage(data)
+
+    def _commit():
+        current = load_permanent_dept_staff()
+        for storage_key, widget_key in SIDEBAR_FIELD_MAP:
+            current[storage_key] = str(st.session_state.get(widget_key, "") or "")
+        presets = [item for item in list(current.get("saved_officers") or []) if isinstance(item, dict)]
+        for name_field, rank_field in (
+            ("officer_name", "officer_rank"),
+            ("supervisor_name", "supervisor_rank"),
+            ("director_name", "director_rank"),
+        ):
+            name = str(current.get(name_field) or "").strip()
+            rank = str(current.get(rank_field) or "").strip()
+            if name and not any(item.get("name") == name and item.get("rank") == rank for item in presets):
+                presets.append({"name": name, "rank": rank})
+        current["saved_officers"] = presets
+        save_permanent_dept_staff(current)
+        _mirror_dept_staff_local_storage(current)
+
+    with st.container(key="glow-dept"):
+        st.header("⚙️ الإعدادات الثابتة للقسم")
+        dept_region = st.text_input("إدارة مرور منطقة", key="p1_dept_region", on_change=_commit)
+        dept_branch = st.text_input("القسم / الشعبة", key="p1_dept_branch", on_change=_commit)
+    with st.container(key="glow-officers"):
+        st.subheader("👮‍♂️ بيانات معدي التقرير (الصفحة 3)")
+        presets = data.get("saved_officers") or []
+        render_officer_quick_picker(presets, "officer_1_name", "officer_1_rank", "مباشر الحوادث")
+        officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", key="officer_1_name", on_change=_commit)
+        officer_1_rank = _rank_select("رتبة مباشر الحوادث", "officer_1_rank", _commit)
+        render_officer_quick_picker(presets, "officer_2_name", "officer_2_rank", "مشرف الحوادث")
+        officer_2_name = st.text_input("اسم مشرف الحوادث", key="officer_2_name", on_change=_commit)
+        officer_2_rank = _rank_select("رتبة مشرف الحوادث", "officer_2_rank", _commit)
+        render_officer_quick_picker(presets, "manager_name", "manager_rank", "مدير القسم")
+        manager_name = st.text_input("اسم مدير القسم / الشعبة", key="manager_name", on_change=_commit)
+        manager_rank = _rank_select("رتبة المدير", "manager_rank", _commit)
+    _commit()
+    return (
+        dept_region,
+        dept_branch,
+        officer_1_name,
+        officer_1_rank,
+        officer_2_name,
+        officer_2_rank,
+        manager_name,
+        manager_rank,
+    )
+
+def render_smart_time_picker(state_key: str = "p1_acc_time", label: str = "الوقت") -> str:
+    current_val = str(st.session_state.get(state_key, "") or "").strip()
+
+    def set_ksa_now():
+        now_ksa = datetime.now(KSA_TZ)
+        hr_24 = now_ksa.hour
+        period = "م" if hr_24 >= 12 else "ص"
+        hr_12 = hr_24 % 12 or 12
+        formatted = f"{hr_12:02d}:{now_ksa.minute:02d} {period}"
+        st.session_state[state_key] = formatted
+        st.session_state[f"{state_key}_manual"] = formatted
+
+    btn_text = f"🕒  {current_val}" if current_val else "🕒  حدد وقت الحادث..."
+    st.markdown("<div id='hijri-lux-trigger'></div>", unsafe_allow_html=True)
+    if label:
+        st.markdown(
+            f"<div style='font-size:13.5px; font-weight:600; color:#bae6fd; margin-bottom:4px; text-align:right;'>{label}</div>",
+            unsafe_allow_html=True,
+        )
+    with st.popover(btn_text, use_container_width=True):
+        st.markdown("<div id='hijri-lux-scope'></div>", unsafe_allow_html=True)
+        t_c1, t_c2 = st.columns([2.2, 1])
+        with t_c1:
+            if st.button("⚡ وقت الآن (توقيت المملكة)", key=f"{state_key}_now_btn", use_container_width=True):
+                set_ksa_now()
+                st.rerun()
+        with t_c2:
+            if st.button("✖ مسح", key=f"{state_key}_clr_btn", use_container_width=True):
+                st.session_state[state_key] = ""
+                st.session_state[f"{state_key}_manual"] = ""
+                st.rerun()
+        hc1, hc2, hc3 = st.columns([1, 1, 1])
+        with hc1:
+            sel_h = st.selectbox("الساعة", [f"{h:02d}" for h in range(1, 13)], key=f"{state_key}_h", label_visibility="collapsed")
+        with hc2:
+            sel_m = st.selectbox("الدقيقة", [f"{m:02d}" for m in range(0, 60, 5)], key=f"{state_key}_m", label_visibility="collapsed")
+        with hc3:
+            sel_p = st.selectbox("الفترة", ["ص", "م"], key=f"{state_key}_p", label_visibility="collapsed")
+        if st.button("✓ اعتماد الوقت المحدد", key=f"{state_key}_apply_btn", type="primary", use_container_width=True):
+            chosen_time = f"{sel_h}:{sel_m} {sel_p}"
+            st.session_state[state_key] = chosen_time
+            st.session_state[f"{state_key}_manual"] = chosen_time
+            st.rerun()
+
+        def _on_manual_time():
+            raw = str(st.session_state.get(f"{state_key}_manual", "")).strip()
+            digits = str.maketrans("٠١٢٣٤٥٦٧٨٩", "0123456789")
+            raw_clean = raw.translate(digits)
+            if re.fullmatch(r"\d{3,4}", raw_clean):
+                raw_clean = raw_clean.zfill(4)
+                hh, mm = int(raw_clean[:2]), int(raw_clean[2:])
+                if 0 <= hh <= 23 and 0 <= mm <= 59:
+                    per = "م" if hh >= 12 else "ص"
+                    h12 = hh % 12 or 12
+                    raw_clean = f"{h12:02d}:{mm:02d} {per}"
+            st.session_state[state_key] = raw_clean
+
+        manual_key = f"{state_key}_manual"
+        if manual_key not in st.session_state:
+            st.session_state[manual_key] = current_val
+        st.text_input(
+            "كتابة سريعة للوقت",
+            placeholder="كتابة سريعة مثل: 04:30 م أو 1630 ثم Enter",
+            key=manual_key,
+            on_change=_on_manual_time,
+            label_visibility="collapsed",
+        )
+    return str(st.session_state.get(state_key, ""))
+
+def fill_smart_table_defaults(df, defaults_map: dict):
+    """استبدال القيم الفارغة أو None بالخيار الافتراضي القياسي لكل عمود."""
+    if df is None or df.empty:
+        return df
+    df_clean = df.copy()
+    for col_name, default_val in defaults_map.items():
+        if col_name in df_clean.columns:
+            df_clean[col_name] = df_clean[col_name].apply(
+                lambda v: default_val if (v is None or str(v).strip() == "" or str(v).strip().lower() in ("none", "nan")) else v
+            )
+    return df_clean
+
+def render_legal_articles_inserter(selected_articles: list, p1_reasons_key: str = "p1_reasons_area", p2_reasons_key: str = "p2_reasons_area"):
+    if not selected_articles:
+        return
+
+    def _append_articles(target_key: str):
+        existing = str(st.session_state.get(target_key, "") or "").strip()
+        existing_lines = [ln.strip() for ln in existing.splitlines() if ln.strip()]
+        for art in selected_articles:
+            formatted_art = f"استناداً إلى {art} من نظام المرور ولائحته التنفيذية." if "المادة" in str(art) and "نظام المرور" not in str(art) else str(art)
+            if formatted_art not in existing_lines:
+                existing_lines.append(formatted_art)
+        st.session_state[target_key] = "\n".join(existing_lines)
+
+    ins_c1, ins_c2 = st.columns(2)
+    with ins_c1:
+        if st.button("➕ إدراج المواد المختارة في أسباب إدانة الطرف الأول", key="btn_ins_art_p1", use_container_width=True):
+            _append_articles(p1_reasons_key)
+            st.rerun()
+    with ins_c2:
+        if st.button("➕ إدراج المواد المختارة في أسباب إدانة الطرف الثاني", key="btn_ins_art_p2", use_container_width=True):
+            _append_articles(p2_reasons_key)
+            st.rerun()
+
+def _write_actions_editor(cur_acts):
+    if "ACTIONS_SCENARIOS" not in globals():
+        st.session_state["_pending_actions_text"] = True
+        return
+    st.session_state["actions_taken_editor"] = "\n".join(
+        f"{i}- {ACTIONS_SCENARIOS[k]}" for i, k in enumerate(cur_acts, 1) if k in ACTIONS_SCENARIOS
+    )
+
+def sync_cross_page_smart_links(
+    injuries_count: int,
+    deaths_count: int,
+    veh1_type: str = "",
+    veh2_type: str = "",
+    p1_title_key: str = "p1_title_input",
+    sketch_leg1_key: str = None,
+    sketch_leg2_key: str = None,
+):
+    v1 = str(veh1_type or "").strip()
+    v2 = str(veh2_type or "").strip()
+    if v1 and v1.lower() != "none":
+        cur_p1 = str(st.session_state.get(p1_title_key, ""))
+        if cur_p1 in ("", "قائد المركبة الأولى (الطرف الأول)") or cur_p1.startswith("قائد المركبة الأولى ("):
+            st.session_state[p1_title_key] = f"قائد المركبة الأولى ({v1})"
+        if sketch_leg1_key and st.session_state.get(sketch_leg1_key, "") in ("", "المركبة الأولى"):
+            st.session_state[sketch_leg1_key] = f"المركبة الأولى ({v1})"
+    if v2 and v2.lower() != "none":
+        if sketch_leg2_key and st.session_state.get(sketch_leg2_key, "") in ("", "المركبة الثانية"):
+            st.session_state[sketch_leg2_key] = f"المركبة الثانية ({v2})"
+    prev_sig = st.session_state.get("_last_casualty_sig", (0, 0))
+    curr_sig = (int(injuries_count or 0), int(deaths_count or 0))
+    if curr_sig != prev_sig:
+        st.session_state["_last_casualty_sig"] = curr_sig
+        deaths_n = curr_sig[1]
+        injuries_n = curr_sig[0]
+        if deaths_n > 0:
+            st.session_state["acc_nature_sel"] = "حادث مروري جسيم (وفاة)"
+            st.session_state["rights_sel"] = "قيام الحقين العام والخاص معاً (إصابات / وفاة / مخالفة جسيمة)"
+            death_key = "5. حادث وفاة (إيداع الجثمان وتوقيف وإحالة للنيابة العامة)"
+            cur_acts = list(st.session_state.get("selected_actions_multi", []))
+            if death_key not in cur_acts:
+                cur_acts = [a for a in cur_acts if not str(a).startswith("1. صلح")] + [death_key]
+                st.session_state["selected_actions_multi"] = cur_acts
+            _write_actions_editor(cur_acts)
+        elif injuries_n > 0:
+            st.session_state["acc_nature_sel"] = "حادث مروري جسيم (إصابات)"
+            st.session_state["rights_sel"] = "قيام الحقين العام والخاص معاً (إصابات / وفاة / مخالفة جسيمة)"
+            inj_key = "4. حادث إصابات (إسعاف وطلب تقارير طبية)"
+            cur_acts = list(st.session_state.get("selected_actions_multi", []))
+            if inj_key not in cur_acts:
+                cur_acts = [a for a in cur_acts if not str(a).startswith("1. صلح")] + [inj_key]
+                st.session_state["selected_actions_multi"] = cur_acts
+            _write_actions_editor(cur_acts)
+
+def flush_pending_casualty_actions():
+    if not st.session_state.pop("_pending_actions_text", False):
+        return
+    if "ACTIONS_SCENARIOS" not in globals():
+        st.session_state["_pending_actions_text"] = True
+        return
+    cur_acts = list(st.session_state.get("selected_actions_multi") or [])
+    st.session_state["actions_taken_editor"] = "\n".join(
+        f"{i}- {ACTIONS_SCENARIOS[k]}" for i, k in enumerate(cur_acts, 1) if k in ACTIONS_SCENARIOS
+    )
+
 def _blank_parties():
     return [
         {"الطرف": "الطرف الأول", "الاسم": "", "الهوية": "", "المشاركة": "", "الحالة": "", "التأهيل": ""},
@@ -639,10 +980,14 @@ def init_and_restore_page1_state():
         if isinstance(pending, dict):
             st.session_state["_p1_loaded_keys"] = set(pending)
             for key, value in pending.items():
+                if key in SIDEBAR_SESSION_KEYS:
+                    continue
                 cloned = _clone_page1_value(value)
                 st.session_state["_p1_vault"][key] = cloned
                 st.session_state[key] = _clone_page1_value(cloned)
     for key, default_val in ALL_PAGE1_DEFAULTS.items():
+        if key in SIDEBAR_SESSION_KEYS and key in st.session_state:
+            continue
         if key not in st.session_state:
             st.session_state[key] = _clone_page1_value(st.session_state["_p1_vault"].get(key, default_val))
     vault = st.session_state["_p1_vault"]
@@ -896,6 +1241,7 @@ def save_current_work():
         return False
 
 def clear_all_work():
+    capture_sidebar_before_reset()
     if os.path.exists(DRAFT_FILE_PATH):
         try:
             os.remove(DRAFT_FILE_PATH)
@@ -906,6 +1252,7 @@ def clear_all_work():
     st.session_state.law_selection_sig = ()
     st.session_state["confirm_clear"] = False
     reset_page1_payload()
+    st.session_state["_restore_perm_sidebar"] = True
 
 def inject_bayyinah_blue_styles():
     st.markdown("""
@@ -1639,6 +1986,7 @@ def render_video_evidence_engine():
                 st.toast("تمت إزالة فقرات القرائن المرئية من الحقول الثلاثة", icon="ℹ️")
 
 def _reset_new_accident():
+    capture_sidebar_before_reset()
     if os.path.exists(DRAFT_FILE_PATH):
         try:
             os.remove(DRAFT_FILE_PATH)
@@ -1647,6 +1995,7 @@ def _reset_new_accident():
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     reset_page1_payload()
+    st.session_state["_restore_perm_sidebar"] = True
     try:
         adopted = SAVED_IMAGES_DIR / "adopted_sketch.png"
         if adopted.is_file():
@@ -2835,18 +3184,16 @@ with st.sidebar:
         except OSError:
             pass
     st.markdown("### بَيِّنَةُ الذكي للحوادث")
-    with st.container(key="glow-dept"):
-        st.header("⚙️ الإعدادات الثابتة للقسم")
-        dept_region = st.text_input("إدارة مرور منطقة", key="p1_dept_region")
-        dept_branch = st.text_input("القسم / الشعبة", key="p1_dept_branch")
-    with st.container(key="glow-officers"):
-        st.subheader("👮‍♂️ بيانات معدي التقرير (الصفحة 3)")
-        officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", value="")
-        officer_1_rank = st.text_input("رتبة مباشر الحوادث", value="")
-        officer_2_name = st.text_input("اسم مشرف الحوادث", value="")
-        officer_2_rank = st.text_input("رتبة مشرف الحوادث", value="")
-        manager_name = st.text_input("اسم مدير القسم / الشعبة", value="")
-        manager_rank = st.text_input("رتبة المدير", value="")
+    (
+        dept_region,
+        dept_branch,
+        officer_1_name,
+        officer_1_rank,
+        officer_2_name,
+        officer_2_rank,
+        manager_name,
+        manager_rank,
+    ) = render_persistent_sidebar_settings()
 app_logo_src = get_base64_image("bayyinah_logo.jpg")
 if app_logo_src:
     _hero_ring = f'<div class="bayyinah-logo-ring"><img src="{app_logo_src}" alt="بَيِّنَة"/></div>'
@@ -2888,7 +3235,7 @@ with tab1:
         st.session_state.p1_acc_date = accident_date
         st.session_state.hijri_manual_date = accident_date
     with col2:
-        accident_time = st.text_input("الوقت", key="p1_acc_time")
+        accident_time = render_smart_time_picker(state_key="p1_acc_time", label="الوقت")
         acc_time = accident_time
         if st.session_state.get("acc_loc_override"):
             st.session_state.p1_acc_location = st.session_state.pop("acc_loc_override")
@@ -2959,9 +3306,11 @@ with tab1:
         st.session_state.p1_parties_editor["التأهيل"] = st.session_state.p1_parties_editor["التأهيل"].apply(normalize_driving_qualification)
     elif _qual_changed or _saved_qual_changed:
         st.session_state.pop("p1_parties_editor", None)
-    parties_df = pd.DataFrame(st.session_state.parties)
+    parties_df = fill_smart_table_defaults(pd.DataFrame(st.session_state.parties), PARTY_SMART_DEFAULTS)
     if "التأهيل" in parties_df.columns:
         parties_df["التأهيل"] = parties_df["التأهيل"].apply(normalize_driving_qualification)
+    if isinstance(st.session_state.get("p1_parties_editor"), pd.DataFrame):
+        st.session_state.p1_parties_editor = fill_smart_table_defaults(st.session_state.p1_parties_editor, PARTY_SMART_DEFAULTS)
     parties_df = st.data_editor(
         parties_df,
         key="p1_parties_editor",
@@ -2984,8 +3333,11 @@ with tab1:
     )
     st.divider()
     st.subheader("جدول معلومات المركبات")
+    vehicles_source = fill_smart_table_defaults(pd.DataFrame(st.session_state.vehicles), VEHICLE_SMART_DEFAULTS)
+    if isinstance(st.session_state.get("p1_vehicles_editor"), pd.DataFrame):
+        st.session_state.p1_vehicles_editor = fill_smart_table_defaults(st.session_state.p1_vehicles_editor, VEHICLE_SMART_DEFAULTS)
     vehicles_df = st.data_editor(
-        pd.DataFrame(st.session_state.vehicles),
+        vehicles_source,
         key="p1_vehicles_editor",
         num_rows="dynamic",
         use_container_width=True,
@@ -2996,7 +3348,7 @@ with tab1:
             "رقم اللوحة": st.column_config.TextColumn("رقم اللوحة"),
             "الرقم التسلسلي": st.column_config.TextColumn("الرقم التسلسلي"),
             "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=["", "خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
-            "التأمين": st.column_config.SelectboxColumn("التأمين", options=["", "مؤمنة", "غير مؤمنة"]),
+            "التأمين": st.column_config.SelectboxColumn("التأمين", options=["", "ساري", "مؤمنة", "غير مؤمنة"]),
         }
     )
     inject_rtl_tab_for_data_editors()
@@ -3009,6 +3361,22 @@ with tab1:
     if st.session_state.pop("_p1_save_requested", False):
         if save_current_work():
             st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
+    _vehicle_rows = list(st.session_state.get("vehicles") or [])
+
+    def _vehicle_type_at(index):
+        if index < len(_vehicle_rows) and isinstance(_vehicle_rows[index], dict):
+            return str(_vehicle_rows[index].get("نوع المركبة") or "")
+        return ""
+
+    sync_cross_page_smart_links(
+        injuries_count=int(acc_injuries or 0),
+        deaths_count=int(acc_deaths or 0),
+        veh1_type=_vehicle_type_at(0),
+        veh2_type=_vehicle_type_at(1),
+        p1_title_key="p1_title_input",
+        sketch_leg1_key="legend_key_1",
+        sketch_leg2_key="legend_key_2",
+    )
 TRAFFIC_LAW_ARTICLES = [
     {
         "id": "art_8_c",
@@ -3435,6 +3803,11 @@ with tab2:
         key="selected_articles",
         on_change=save_current_work,
     )
+    render_legal_articles_inserter(
+        [TRAFFIC_LAW_BY_ID[article_id]["code"] for article_id in selected_law_ids if article_id in TRAFFIC_LAW_BY_ID],
+        p1_reasons_key="p1_reasons",
+        p2_reasons_key="p2_reasons",
+    )
     generated_fields = generate_accident_report_fields(selected_law_ids)
     selection_signature = tuple(selected_law_ids)
     previous_signature = st.session_state.get("law_selection_sig")
@@ -3642,6 +4015,7 @@ def sync_selected_actions():
     st.session_state["actions_taken_editor"] = "\n".join(lines)
     save_current_work()
 
+flush_pending_casualty_actions()
 with tab3:
     st.markdown("### 📋 التصنيف والحقوق والإجراءات المتخذة (الصفحة 3)")
     accident_nature_options = [
@@ -4513,7 +4887,7 @@ else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabri
         _store_adopted_sketch(adopted_payload)
     road_name_sign = st.text_input("اسم الطريق الرئيسي", value="")
     legend_keys = [
-        st.text_input(f"مدلول رقم ({number})", value="", key=f"legend_key_{number}")
+        st.text_input(f"مدلول رقم ({number})", key=f"legend_key_{number}")
         for number in range(1, 11)
     ]
     adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
