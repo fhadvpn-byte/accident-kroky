@@ -670,10 +670,10 @@ def sync_cross_page_smart_links(
         cur_p1 = str(st.session_state.get(p1_title_key, ""))
         if cur_p1 in ("", "قائد المركبة الأولى (الطرف الأول)") or cur_p1.startswith("قائد المركبة الأولى ("):
             st.session_state[p1_title_key] = f"قائد المركبة الأولى ({v1})"
-        if sketch_leg1_key and st.session_state.get(sketch_leg1_key, "") in ("", "المركبة الأولى"):
+        if sketch_leg1_key and st.session_state.get(sketch_leg1_key, "") in ("", "المركبة الأولى", "المركبة الأولى (الطرف الأول)"):
             st.session_state[sketch_leg1_key] = f"المركبة الأولى ({v1})"
     if v2 and v2.lower() != "none":
-        if sketch_leg2_key and st.session_state.get(sketch_leg2_key, "") in ("", "المركبة الثانية"):
+        if sketch_leg2_key and st.session_state.get(sketch_leg2_key, "") in ("", "المركبة الثانية", "المركبة الثانية (الطرف الثاني)"):
             st.session_state[sketch_leg2_key] = f"المركبة الثانية ({v2})"
     prev_sig = st.session_state.get("_last_casualty_sig", (0, 0))
     curr_sig = (int(injuries_count or 0), int(deaths_count or 0))
@@ -1292,6 +1292,234 @@ def inject_bayyinah_blue_styles():
     }
     </style>
     """, unsafe_allow_html=True)
+
+def trigger_instant_a4_print(full_report_html: str):
+    """فتح نافذة الطباعة الرسمية لتقرير A4 مباشرة دون مغادرة الصفحة الحالية."""
+    escaped_html = json.dumps(full_report_html)
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            const htmlContent = {escaped_html};
+            const parentDoc = window.parent && window.parent.document ? window.parent.document : document;
+            const oldFrame = parentDoc.getElementById('bayyinah_instant_print_frame');
+            if (oldFrame) oldFrame.remove();
+            const iframe = parentDoc.createElement('iframe');
+            iframe.id = 'bayyinah_instant_print_frame';
+            iframe.style.cssText = 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden;';
+            parentDoc.body.appendChild(iframe);
+            const doc = iframe.contentWindow.document;
+            doc.open();
+            doc.write(htmlContent);
+            doc.close();
+            iframe.onload = function() {{
+                setTimeout(function() {{
+                    iframe.contentWindow.focus();
+                    iframe.contentWindow.print();
+                }}, 350);
+            }};
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+def render_compact_command_header(on_save_callback=None, on_reset_callback=None, build_report_html_fn=None):
+    """شريط علوي زجاجي رفيع يوفر ثلث مساحة الشاشة ويضع الحفظ والطباعة الفورية أمام العين."""
+    st.markdown(
+        """
+        <style>
+        .bayyinah-cmd-bar {
+            background: linear-gradient(135deg, rgba(6, 18, 36, 0.96) 0%, rgba(12, 34, 62, 0.96) 100%);
+            border: 1px solid rgba(56, 189, 248, 0.4);
+            border-radius: 13px;
+            padding: 8px 16px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            direction: rtl;
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.35);
+        }
+        .bayyinah-cmd-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .bayyinah-status-pill {
+            font-size: 11.5px;
+            font-weight: 700;
+            color: #34d399;
+            background: rgba(16, 185, 129, 0.14);
+            border: 1px solid rgba(52, 211, 153, 0.35);
+            padding: 2px 9px;
+            border-radius: 999px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    col_brand, col_save, col_print, col_new = st.columns([3.4, 1, 1.15, 1])
+    with col_brand:
+        acc_no = str(st.session_state.get("p1_acc_number", "") or "").strip()
+        acc_badge = f"رقم الحادث: {acc_no}" if acc_no else "معاملة قيد الإعداد"
+        st.markdown(
+            f"""
+            <div class="bayyinah-cmd-bar">
+                <div class="bayyinah-cmd-title">
+                    <span style="font-size:20px; font-weight:900; color:#f8fafc; letter-spacing:0.4px;">🛡️ منظومة بَيِّنَة</span>
+                    <span style="font-size:12.5px; color:#7dd3fc; font-weight:600;">المنصة الذكية لتقارير الحوادث المرورية</span>
+                </div>
+                <span class="bayyinah-status-pill">● {acc_badge}</span>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+    with col_save:
+        if st.button("💾 حفظ سريع", key="_top_cmd_save", use_container_width=True):
+            if callable(on_save_callback):
+                on_save_callback()
+            st.toast("✅ تم حفظ بيانات المعاملة بنجاح")
+    with col_print:
+        if st.button("🖨️ طباعة فورية A4", key="_top_cmd_print", type="primary", use_container_width=True):
+            st.session_state["_trigger_instant_print"] = True
+    with col_new:
+        if st.button("🆕 حادث جديد", key="_top_cmd_reset", use_container_width=True):
+            if callable(on_reset_callback):
+                on_reset_callback()
+                st.rerun()
+    if callable(build_report_html_fn) and st.session_state.pop("_trigger_instant_print", False):
+        trigger_instant_a4_print(build_report_html_fn())
+
+def inject_tab_completion_badges(tab_done_flags: list):
+    """إضافة علامة ✓ خضراء للتبويبات المكتملة مع الحفاظ الكامل على استقرار التبويب المفتوح."""
+    flags_json = json.dumps([bool(item) for item in tab_done_flags])
+    components.html(
+        f"""
+        <script>
+        (function() {{
+            const flags = {flags_json};
+            const parentDoc = window.parent && window.parent.document;
+            if (!parentDoc) return;
+            if (window.frameElement) {{
+                const wrap = window.frameElement.closest('[data-testid="stElementContainer"], .element-container');
+                if (wrap) wrap.style.cssText = "height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;";
+            }}
+            const tabs = parentDoc.querySelectorAll('[data-baseweb="tab"]');
+            tabs.forEach((tabEl, idx) => {{
+                const oldBadge = tabEl.querySelector('.bayyinah-tab-check');
+                if (oldBadge) oldBadge.remove();
+                if (flags[idx]) {{
+                    const badge = parentDoc.createElement('span');
+                    badge.className = 'bayyinah-tab-check';
+                    badge.textContent = ' ✓';
+                    badge.style.cssText = 'color:#34d399;font-weight:900;margin-right:5px;font-size:14px;';
+                    tabEl.appendChild(badge);
+                }}
+            }});
+        }})();
+        </script>
+        """,
+        height=0,
+        width=0,
+    )
+
+def _report_tab_done_flags():
+    def _filled(key):
+        return bool(str(st.session_state.get(key) or "").strip())
+    party_rows = st.session_state.get("parties") or []
+    has_party_name = any(
+        isinstance(row, dict) and str(row.get("الاسم") or "").strip()
+        for row in party_rows
+    )
+    page1_done = _filled("p1_acc_number") or _filled("hijri_date") or _filled("p1_acc_location") or has_party_name
+    page2_done = _filled("accident_results") or _filled("technical_description") or bool(st.session_state.get("selected_articles"))
+    page3_done = _filled("actions_taken_editor")
+    page4_done = str(st.session_state.get("sketch_data_url") or "").startswith("data:image/")
+    page5_done = bool(st.session_state.get("gallery_photos"))
+    return [page1_done, page2_done, page3_done, page4_done, page5_done]
+
+def render_compact_sketch_legends(key_prefix: str = "sketch_legend_"):
+    """عرض أول 4 مدلولات في عمودين متجاورين وطي المدلولات 5-10 لترتيب صفحة التخطيط."""
+    st.markdown(
+        "<div style='font-size:14.5px; font-weight:800; color:#e0f2fe; margin:8px 0 6px 0; text-align:right;'>📌 مدلولات ومفاتيح الرسم الكروكي</div>",
+        unsafe_allow_html=True,
+    )
+    defaults = {
+        1: "المركبة الأولى (الطرف الأول)",
+        2: "المركبة الثانية (الطرف الثاني)",
+        3: "نقطة الاصطدام والالتقاء (X)",
+        4: "اتجاه سير المركبات قبل الحادث",
+    }
+    r1_c1, r1_c2 = st.columns(2)
+    for idx, col in [(1, r1_c1), (2, r1_c2)]:
+        key_name = f"{key_prefix}{idx}"
+        st.session_state.setdefault(key_name, defaults.get(idx, ""))
+        with col:
+            st.text_input(f"مدلول رقم ({idx})", key=key_name)
+    r2_c1, r2_c2 = st.columns(2)
+    for idx, col in [(3, r2_c1), (4, r2_c2)]:
+        key_name = f"{key_prefix}{idx}"
+        st.session_state.setdefault(key_name, defaults.get(idx, ""))
+        with col:
+            st.text_input(f"مدلول رقم ({idx})", key=key_name)
+    has_extra = any(str(st.session_state.get(f"{key_prefix}{i}", "")).strip() for i in range(5, 11))
+    with st.expander("➕ إضافة مدلولات تفصيلية إضافية (من 5 إلى 10)", expanded=has_extra):
+        for start_i in range(5, 11, 2):
+            ec1, ec2 = st.columns(2)
+            with ec1:
+                st.text_input(f"مدلول رقم ({start_i})", key=f"{key_prefix}{start_i}")
+            with ec2:
+                st.text_input(f"مدلول رقم ({start_i + 1})", key=f"{key_prefix}{start_i + 1}")
+
+OFFICIAL_A4_HIGH_CONTRAST_CSS = """
+/* OFFICIAL_A4_HIGH_CONTRAST_CSS: سواد رسمي صريح وحدود حادة للمعاينة والطباعة */
+.page, .report-page {
+    color: #000000 !important;
+    background: #ffffff !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+}
+.page table, .report-page table {
+    border-collapse: collapse !important;
+    border: 1.5px solid #000000 !important;
+    width: 100% !important;
+}
+.page th, .report-page th {
+    background-color: #dcefe4 !important;
+    color: #000000 !important;
+    font-weight: 800 !important;
+    border: 1.1px solid #000000 !important;
+    padding: 5px 8px !important;
+}
+.page td, .report-page td {
+    color: #000000 !important;
+    font-weight: 600 !important;
+    border: 1px solid #000000 !important;
+    padding: 5px 8px !important;
+}
+.page .section-title, .report-page .section-title, .page .box-header {
+    background-color: #dcefe4 !important;
+    color: #000000 !important;
+    font-weight: 800 !important;
+    border: 1.3px solid #000000 !important;
+}
+.page p, .page span, .page div:not(.official-footer-col-center) {
+    color: #000000;
+}
+.official-footer-line-primary,
+.official-footer-line-secondary {
+    border-top-color: #1b4332 !important;
+}
+.footer-col-center {
+    color: #1b4332 !important;
+}
+"""
+
+def _quick_save_from_header():
+    sync_page1_to_vault()
+    st.session_state["_p1_save_requested"] = True
 
 def render_save_and_clear_toolbar():
     with st.container(key="save-bar"):
@@ -3180,23 +3408,10 @@ with st.sidebar:
         manager_name,
         manager_rank,
     ) = render_persistent_sidebar_settings()
-app_logo_src = get_base64_image("bayyinah_logo.jpg")
-if app_logo_src:
-    _hero_ring = f'<div class="bayyinah-logo-ring"><img src="{app_logo_src}" alt="بَيِّنَة"/></div>'
-else:
-    _hero_ring = '<div class="bayyinah-logo-ring"></div>'
-st.html(f"""
-<div class="glow-container bayyinah-hero">
-  {_hero_ring}
-  <div>
-    <div class="bh-word">بَيِّنَة</div>
-    <div class="bh-1">منظومة الذكاء الاصطناعي السيادي</div>
-    <div class="bh-2">VISION 2030</div>
-    <div class="bh-3">بَيِّنَة الذكي للحوادث المرورية</div>
-    <div class="bh-4">منصة التحليل</div>
-  </div>
-</div>
-""", unsafe_allow_javascript=False)
+render_compact_command_header(
+    on_save_callback=_quick_save_from_header,
+    on_reset_callback=_reset_new_accident,
+)
 render_save_and_clear_toolbar()
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "1️⃣ الصفحة (1): البيانات والأطراف",
@@ -4627,14 +4842,8 @@ with tab4:
     if "sketch_road_name" not in st.session_state:
         st.session_state["sketch_road_name"] = str(st.session_state.get("_cad_road_title") or "")
     road_name_sign = st.text_input("اسم الطريق الرئيسي", key="sketch_road_name")
-    st.markdown("**مدلولات الكروكي**")
-    legend_keys = []
-    for row_start in (1, 3, 5, 7, 9):
-        legend_left, legend_right = st.columns(2)
-        with legend_left:
-            legend_keys.append(st.text_input(f"مدلول رقم ({row_start})", key=f"legend_key_{row_start}"))
-        with legend_right:
-            legend_keys.append(st.text_input(f"مدلول رقم ({row_start + 1})", key=f"legend_key_{row_start + 1}"))
+    render_compact_sketch_legends(key_prefix="legend_key_")
+    legend_keys = [str(st.session_state.get(f"legend_key_{index}") or "") for index in range(1, 11)]
 
 def convert_gallery_image(uploaded_file):
     try:
@@ -5317,6 +5526,7 @@ with tab5:
             .header-logo img {{ height: 110px; max-width: 120px; }}
         }}
         {page_number_css}
+        {OFFICIAL_A4_HIGH_CONTRAST_CSS}
     </style>
     <script>
     function fitReportFrame() {{
@@ -5409,6 +5619,8 @@ with tab5:
     </body>
     </html>
     """
+    if st.session_state.pop("_trigger_instant_print", False):
+        trigger_instant_a4_print(full_report_html)
     st.divider()
     col_btn1, col_btn2 = st.columns([1, 2])
     with col_btn1:
@@ -5447,9 +5659,9 @@ with tab5:
             """,
             unsafe_allow_html=True,
         )
-    _sketch_availability_control("include_sketch_choice_tab5", _on_sketch_choice_tab5)
     st.subheader("معاينة حية للتقرير قبل الطباعة:")
     st.components.v1.html(full_report_html, height=850, scrolling=False)
+inject_tab_completion_badges(_report_tab_done_flags())
 st.markdown("""
 <style>
 @media screen and (max-width: 768px) {
