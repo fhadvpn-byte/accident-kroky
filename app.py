@@ -4553,7 +4553,7 @@ def render_interactive_asphalt_studio(
     mode_sel = st.radio(
         "اختر نمط تخطيط موقع الحادث:",
         options=[
-            "🛣️ استوديو الأسفلت التفاعلي الحر بالماوس (22 سيناريو + 12 طريقاً)",
+            "🛣️ استوديو الأسفلت التفاعلي الحر بالماوس (سيناريوهات تشمل تقاطع الإشارات)",
             "🛰️ خريطة القمر الصناعي التكتيكية الحية",
         ],
         horizontal=True,
@@ -4686,7 +4686,7 @@ def render_interactive_asphalt_studio(
     <div class="studio-shell">
         <div class="controls-grid">
             <div class="ctrl-group">
-                <label>⚡ اختر سيناريو الحادث الشامل (22 سيناريو جاهز وقابل للتحريك بالماوس):</label>
+                <label>⚡ اختر سيناريو الحادث الشامل (يشمل قطع الإشارة والتصادم عند خط الوقوف):</label>
                 <select id="scenarioSelect"></select>
             </div>
             <div class="ctrl-group">
@@ -4708,6 +4708,8 @@ def render_interactive_asphalt_studio(
                 <button class="t-btn" onclick="addExtraItem('animal')">🐪 حيوان سائب</button>
                 <button class="t-btn" onclick="addExtraItem('obstacle')">🚧 حاجز / عمود</button>
                 <button class="t-btn" onclick="addExtraItem('skid')">〰️ أثر فرامل</button>
+                <button class="t-btn" onclick="addExtraItem('signal')">🚦 إشارة ضوئية</button>
+                <button class="t-btn" onclick="cycleSignalColor()">🔴🟢 تبديل لون الإشارة</button>
                 <button class="t-btn danger" onclick="deleteSelected()">🗑️ حذف المحدد</button>
                 <button class="t-btn" onclick="resetCompass()">🧭 إعادة ضبط الشمال</button>
             </div>
@@ -4752,9 +4754,26 @@ def render_interactive_asphalt_studio(
         mountain_hairpin: "10. عقبة / منحدر جبلي حاد بحواجز حماية",
         service_exit: "11. طريق رئيسي مع مخرج / مدخل طريق خدمة",
         parking_lot: "12. مواقف مركبات جانبية / ساحة وقوف",
-        dirt_shoulder: "13. طريق أسفلتي مع منطقة ترابية / صحراوية جانبية"
+        dirt_shoulder: "13. طريق أسفلتي مع منطقة ترابية / صحراوية جانبية",
+        signalized_cross: "14. تقاطع رباعي منظم بإشارات ضوئية ومعابر مشاة"
     };
     const SCENARIOS = [
+        { id:"s_redlight", name:"قطع الإشارة الضوئية الحمراء داخل تقاطع منظم (تصادم متعامد)", road:"signalized_cross",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:435, y:282, angle:0, tailX:185, tailY:282, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:510, y:225, angle:-90, tailX:510, tailY:455},
+             {type:"traffic_light", x:332, y:368, angle:0, state:"red"},
+             {type:"traffic_light", x:598, y:382, angle:0, state:"green"},
+             {type:"impact", x:492, y:276}
+           ]},
+        { id:"s_signal_rear", name:"الوقوف المفاجئ عند الإشارة الضوئية (تصادم خلفي قبل خط الوقوف)", road:"signalized_cross",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:195, y:300, angle:0, tailX:55, tailY:300, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:305, y:300, angle:0, tailX:230, tailY:300},
+             {type:"traffic_light", x:332, y:368, angle:0, state:"yellow"},
+             {type:"traffic_light", x:360, y:128, angle:180, state:"red"},
+             {type:"impact", x:255, y:300}
+           ]},
         { id:"s1", name:"1. تصادم خلفي في مسار مستقيم (عدم ترك مسافة آمنة)", road:"divided_4lane",
            items:[
              {type:"car", label:"1", color:"#ef4444", x:360, y:190, angle:0, tailX:170, tailY:190, skid:true},
@@ -5085,6 +5104,53 @@ def render_interactive_asphalt_studio(
             ctx.strokeStyle = yellow; ctx.setLineDash([16, 12]);
             ctx.beginPath(); ctx.moveTo(0, 255); ctx.lineTo(960, 255); ctx.stroke();
         }
+        else if (type === "signalized_cross") {
+            ctx.fillStyle = curb;
+            ctx.fillRect(0, 144, 960, 212);
+            ctx.fillRect(374, 0, 212, 500);
+            ctx.fillStyle = asphalt;
+            ctx.fillRect(0, 152, 960, 196);
+            ctx.fillRect(382, 0, 196, 500);
+            ctx.fillStyle = "#cbd5e1";
+            ctx.strokeStyle = yellow;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([]);
+            ctx.fillRect(0, 242, 338, 16); ctx.strokeRect(0, 242, 338, 16);
+            ctx.fillRect(622, 242, 338, 16); ctx.strokeRect(622, 242, 338, 16);
+            ctx.fillRect(472, 0, 16, 108); ctx.strokeRect(472, 0, 16, 108);
+            ctx.fillRect(472, 392, 16, 108); ctx.strokeRect(472, 392, 16, 108);
+            ctx.strokeStyle = white;
+            ctx.lineWidth = 2;
+            ctx.setLineDash([14, 10]);
+            ctx.beginPath();
+            ctx.moveTo(0, 197); ctx.lineTo(338, 197);
+            ctx.moveTo(0, 303); ctx.lineTo(338, 303);
+            ctx.moveTo(622, 197); ctx.lineTo(960, 197);
+            ctx.moveTo(622, 303); ctx.lineTo(960, 303);
+            ctx.moveTo(427, 0); ctx.lineTo(427, 108);
+            ctx.moveTo(533, 0); ctx.lineTo(533, 108);
+            ctx.moveTo(427, 392); ctx.lineTo(427, 500);
+            ctx.moveTo(533, 392); ctx.lineTo(533, 500);
+            ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.strokeStyle = "#ffffff";
+            ctx.lineWidth = 5;
+            ctx.beginPath();
+            ctx.moveTo(342, 258); ctx.lineTo(342, 346);
+            ctx.moveTo(618, 154); ctx.lineTo(618, 242);
+            ctx.moveTo(384, 112); ctx.lineTo(472, 112);
+            ctx.moveTo(488, 388); ctx.lineTo(576, 388);
+            ctx.stroke();
+            ctx.fillStyle = "rgba(255, 255, 255, 0.82)";
+            for (let y = 160; y <= 334; y += 18) {
+                ctx.fillRect(352, y, 22, 9);
+                ctx.fillRect(586, y, 22, 9);
+            }
+            for (let x = 390; x <= 564; x += 18) {
+                ctx.fillRect(x, 120, 9, 22);
+                ctx.fillRect(x, 358, 9, 22);
+            }
+        }
         ctx.restore();
     }
     function drawArrowLine(x1, y1, x2, y2, color, withSkid) {
@@ -5194,6 +5260,69 @@ def render_interactive_asphalt_studio(
         }
         ctx.restore();
     }
+    function nextSignalState(state) {
+        if (state === "red") return "green";
+        if (state === "green") return "yellow";
+        return "red";
+    }
+    function drawTrafficLightItem(it, isSelected, hideHandles) {
+        ctx.save();
+        ctx.translate(it.x, it.y);
+        ctx.rotate(((it.angle || 0) * Math.PI) / 180);
+        const state = it.state || "red";
+        ctx.fillStyle = "#475569";
+        ctx.fillRect(-3, 22, 6, 12);
+        ctx.beginPath(); ctx.arc(0, 34, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#0f172a";
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.roundRect(-12, -24, 24, 48, 7); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, -13, 6, 0, Math.PI * 2);
+        ctx.fillStyle = state === "red" ? "#ff1e1e" : "#451a1a";
+        ctx.fill();
+        if (state === "red") {
+            ctx.strokeStyle = "#fecaca"; ctx.lineWidth = 2; ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(0, 0, 6, 0, Math.PI * 2);
+        ctx.fillStyle = state === "yellow" ? "#facc15" : "#423613";
+        ctx.fill();
+        if (state === "yellow") {
+            ctx.strokeStyle = "#fef08a"; ctx.lineWidth = 2; ctx.stroke();
+        }
+        ctx.beginPath(); ctx.arc(0, 13, 6, 0, Math.PI * 2);
+        ctx.fillStyle = state === "green" ? "#22c55e" : "#123824";
+        ctx.fill();
+        if (state === "green") {
+            ctx.strokeStyle = "#bbf7d0"; ctx.lineWidth = 2; ctx.stroke();
+        }
+        if (isSelected && !hideHandles) {
+            ctx.setLineDash([]);
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.moveTo(0, -24); ctx.lineTo(0, -40); ctx.stroke();
+            ctx.fillStyle = "#38bdf8";
+            ctx.strokeStyle = "#ffffff";
+            ctx.beginPath(); ctx.arc(0, -44, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        ctx.rotate(-((it.angle || 0) * Math.PI) / 180);
+        const labelMap = { red: "إشارة حمراء", green: "إشارة خضراء", yellow: "إشارة صفراء" };
+        const badgeCol = state === "red" ? "#dc2626" : (state === "green" ? "#16a34a" : "#ca8a04");
+        ctx.fillStyle = "#ffffff";
+        ctx.strokeStyle = badgeCol;
+        ctx.lineWidth = 1.6;
+        ctx.beginPath(); ctx.roundRect(-28, 36, 56, 16, 4); ctx.fill(); ctx.stroke();
+        ctx.fillStyle = badgeCol;
+        ctx.font = "bold 9.5px Tahoma, Arial";
+        ctx.textAlign = "center"; ctx.textBaseline = "middle";
+        ctx.fillText(labelMap[state] || "إشارة", 0, 44);
+        if (isSelected && !hideHandles) {
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 3]);
+            ctx.strokeRect(-18, -30, 36, 62);
+        }
+        ctx.restore();
+    }
     function drawCompassItem(it, isSelected, hideHandles) {
         ctx.save();
         ctx.translate(it.x, it.y);
@@ -5266,12 +5395,15 @@ def render_interactive_asphalt_studio(
             }
         });
         items.forEach((it, idx) => {
-            if (it.type === "impact" || it.type === "compass") return;
+            if (it.type === "impact" || it.type === "compass" || it.type === "traffic_light") return;
             if (["car","truck","bike"].includes(it.type)) drawVehicleShape(it, idx === selectedIdx, hideSelectionHandles);
             else drawSpecialItem(it, idx === selectedIdx, hideSelectionHandles);
         });
         items.forEach((it, idx) => {
             if (it.type === "impact") drawSpecialItem(it, idx === selectedIdx, hideSelectionHandles);
+        });
+        items.forEach((it, idx) => {
+            if (it.type === "traffic_light") drawTrafficLightItem(it, idx === selectedIdx, hideSelectionHandles);
         });
         items.forEach((it, idx) => {
             if (it.type === "compass") drawCompassItem(it, idx === selectedIdx, hideSelectionHandles);
@@ -5287,14 +5419,15 @@ def render_interactive_asphalt_studio(
     }
     canvas.addEventListener("mousedown", e => {
         const p = getCanvasPos(e);
-        if (selectedIdx >= 0 && ["car","truck","bike","compass"].includes(items[selectedIdx].type)) {
+        if (selectedIdx >= 0 && ["car","truck","bike","compass","traffic_light"].includes(items[selectedIdx].type)) {
             const sel = items[selectedIdx];
             const rad = (sel.angle || 0) * Math.PI / 180;
             let hx;
             let hy;
-            if (sel.type === "compass") {
-                hx = sel.x + Math.sin(rad) * 46;
-                hy = sel.y - Math.cos(rad) * 46;
+            if (sel.type === "compass" || sel.type === "traffic_light") {
+                const handleReach = sel.type === "compass" ? 46 : 44;
+                hx = sel.x + Math.sin(rad) * handleReach;
+                hy = sel.y - Math.cos(rad) * handleReach;
             } else {
                 const w = sel.type === "truck" ? 104 : (sel.type === "bike" ? 44 : 68);
                 hx = sel.x + Math.cos(rad) * (w/2 + 26);
@@ -5313,7 +5446,7 @@ def render_interactive_asphalt_studio(
         }
         for (let i = items.length - 1; i >= 0; i--) {
             const it = items[i];
-            const hitR = it.type === "truck" ? 46 : (it.type === "compass" ? 34 : 32);
+            const hitR = it.type === "truck" ? 46 : (it.type === "compass" ? 34 : (it.type === "traffic_light" ? 42 : 32));
             if (Math.hypot(p.x - it.x, p.y - it.y) <= hitR) {
                 selectedIdx = i;
                 dragMode = "body";
@@ -5337,7 +5470,8 @@ def render_interactive_asphalt_studio(
             it.tailY = Math.max(15, Math.min(440, p.y));
         } else if (dragMode === "rotate") {
             const pointer = Math.atan2(p.y - it.y, p.x - it.x) * 180 / Math.PI;
-            it.angle = Math.round(it.type === "compass" ? pointer + 90 : pointer);
+            const upright = it.type === "compass" || it.type === "traffic_light";
+            it.angle = Math.round(upright ? pointer + 90 : pointer);
         }
         renderAll(false);
     });
@@ -5351,8 +5485,8 @@ def render_interactive_asphalt_studio(
         const p = getCanvasPos(e);
         for (let i = items.length - 1; i >= 0; i--) {
             const it = items[i];
-            const reach = it.type === "compass" ? 52 : 42;
-            if (["car","truck","bike","compass"].includes(it.type) && Math.hypot(p.x - it.x, p.y - it.y) <= reach) {
+            const reach = it.type === "compass" ? 52 : (it.type === "traffic_light" ? 48 : 42);
+            if (["car","truck","bike","compass","traffic_light"].includes(it.type) && Math.hypot(p.x - it.x, p.y - it.y) <= reach) {
                 e.preventDefault();
                 selectedIdx = i;
                 it.angle = ((it.angle || 0) + (e.deltaY > 0 ? 8 : -8)) % 360;
@@ -5363,7 +5497,7 @@ def render_interactive_asphalt_studio(
         }
     }, { passive: false });
     window.rotateSelected = function(delta) {
-        if (selectedIdx >= 0 && ["car","truck","bike","compass"].includes(items[selectedIdx].type)) {
+        if (selectedIdx >= 0 && ["car","truck","bike","compass","traffic_light"].includes(items[selectedIdx].type)) {
             items[selectedIdx].angle = ((items[selectedIdx].angle || 0) + delta) % 360;
             renderAll(false);
             scheduleAutoCommit();
@@ -5402,11 +5536,38 @@ def render_interactive_asphalt_studio(
         else if (kind === "pedestrian") items.push({type:"pedestrian", x:480, y:220, tailX:480, tailY:130, color:"#eab308"});
         else if (kind === "animal") items.push({type:"animal", x:500, y:220, tailX:500, tailY:120, color:"#a16207"});
         else if (kind === "obstacle") items.push({type:"obstacle", label:"عائق", x:520, y:200});
+        else if (kind === "signal") items.push({type:"traffic_light", x:480, y:150, angle:0, state:"red"});
         else if (kind === "skid" && selectedIdx >= 0) items[selectedIdx].skid = !items[selectedIdx].skid;
         selectedIdx = items.length - 1;
         renderAll(false);
         scheduleAutoCommit();
     };
+    window.cycleSignalColor = function() {
+        let idx = (selectedIdx >= 0 && items[selectedIdx].type === "traffic_light")
+            ? selectedIdx
+            : items.findIndex(it => it.type === "traffic_light");
+        if (idx < 0) {
+            addExtraItem("signal");
+            return;
+        }
+        items[idx].state = nextSignalState(items[idx].state);
+        selectedIdx = idx;
+        renderAll(false);
+        scheduleAutoCommit();
+    };
+    canvas.addEventListener("dblclick", e => {
+        const p = getCanvasPos(e);
+        for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i];
+            if (it.type === "traffic_light" && Math.hypot(p.x - it.x, p.y - it.y) <= 42) {
+                it.state = nextSignalState(it.state);
+                selectedIdx = i;
+                renderAll(false);
+                scheduleAutoCommit();
+                return;
+            }
+        }
+    });
     function scheduleAutoCommit() {
         persistEditor();
         document.getElementById("saveStatus").textContent = "⏳ جارٍ تحديث التقرير...";
