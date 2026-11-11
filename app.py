@@ -4906,6 +4906,34 @@ def convert_gallery_image(uploaded_file):
     except Exception:
         return None
 
+def build_official_page_footer_html(dept_region: str, dept_section: str) -> str:
+    """توليد تذييل رسمي بخطين متوازيين في أسفل كل صفحة A4 مرتبط بإعدادات الإدارة والقسم."""
+    region_clean = html.escape(str(dept_region or "").strip())
+    section_clean = html.escape(str(dept_section or "").strip())
+    if region_clean and section_clean:
+        right_txt = region_clean
+        center_txt = "الإدارة العامة للمرور"
+        left_txt = section_clean
+    elif region_clean or section_clean:
+        right_txt = "الإدارة العامة للمرور"
+        center_txt = "تقرير حادث مروري رسمي"
+        left_txt = region_clean or section_clean
+    else:
+        right_txt = "الإدارة العامة للمرور"
+        center_txt = "تقرير حادث مروري رسمي"
+        left_txt = "شعبة الحوادث المرورية"
+    return f"""
+    <div class="official-page-footer" dir="rtl">
+        <div class="official-footer-line-primary"></div>
+        <div class="official-footer-line-secondary"></div>
+        <div class="official-footer-meta">
+            <span class="footer-col-right">{right_txt}</span>
+            <span class="footer-col-center">❖ {center_txt} ❖</span>
+            <span class="footer-col-left">{left_txt}</span>
+        </div>
+    </div>
+    """
+
 def generate_clean_print_html(how_text, results_text, show_numbers=False):
     page_counter_css = """
         @bottom-center {
@@ -5228,6 +5256,10 @@ with tab5:
                 <tr><td style="text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
             </table></div>
         """
+    official_footer_html = build_official_page_footer_html(
+        st.session_state.get("p1_dept_region", dept_region),
+        st.session_state.get("p1_dept_branch", dept_branch),
+    )
     photos_list = list(st.session_state.gallery_photos or [])
     include_sketch = st.session_state.get("include_sketch", True) is True
     photos_pages_html = ""
@@ -5253,7 +5285,7 @@ with tab5:
             {build_header()}
             <div class="section-badge">ملحق الصور الفوتوغرافية لموقع الحادث</div>
             <div class="photo-grid">{photo_cards}</div>
-            <div class="page-num">{page_number}</div>
+            {official_footer_html}
         </div>
         """
     if not isinstance(st.session_state.get("show_page_numbers"), bool):
@@ -5305,7 +5337,7 @@ with tab5:
             <div style="margin-top:30px; font-weight:bold; font-size:15px; line-height:2; padding-right:30px;">
                 {"".join(f"<div>{line}</div>" for line in legend_keys)}
             </div>
-            <div class="page-num">4</div>
+            {official_footer_html}
         </div>
         """
     full_report_html = f"""
@@ -5421,7 +5453,31 @@ with tab5:
             border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
             line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
         }}
-        .page-num {{ position: absolute; bottom: 12mm; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: 15px; }}
+        .page-num {{ display: none !important; }}
+        .official-page-footer {{
+            position: absolute; left: 18mm; right: 18mm; bottom: 3mm; width: auto;
+            margin: 0; padding-top: 6px; box-sizing: border-box; direction: rtl;
+            page-break-inside: avoid; break-inside: avoid; page-break-before: avoid; break-before: avoid;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }}
+        .official-footer-line-primary {{
+            width: 100%; height: 0; border-top: 2.2px solid #1b4332 !important; margin: 0;
+        }}
+        .official-footer-line-secondary {{
+            width: 100%; height: 0; border-top: 0.9px solid #1b4332 !important;
+            margin-top: 2.5px; margin-bottom: 5px;
+        }}
+        .official-footer-meta {{
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 11.5px; font-weight: 700; color: #111827 !important;
+            line-height: 1.3; padding: 0 2px;
+        }}
+        .footer-col-right {{ text-align: right; flex: 1; }}
+        .footer-col-center {{
+            text-align: center; flex: 0 0 auto; font-size: 10.5px; font-weight: 600;
+            color: #1b4332 !important; padding: 0 12px;
+        }}
+        .footer-col-left {{ text-align: left; flex: 1; }}
         .road-sign {{
             background: #2d6a4f; color: white; border: 3px solid white; outline: 3px solid #2d6a4f;
             border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 15px; display: inline-block; margin-bottom: 25px;
@@ -5506,9 +5562,14 @@ with tab5:
                 page-break-after: avoid !important;
             }}
             .page-flow {{ justify-content: space-between; }}
+            .official-page-footer {{
+                position: absolute !important; bottom: 3mm !important;
+                left: 18mm !important; right: 18mm !important; margin: 0 !important;
+                page-break-before: avoid !important; break-before: avoid !important;
+            }}
             .photo-annex {{
                 overflow: visible; height: auto; max-height: none; min-height: 297mm;
-                padding: 8mm 10mm 12mm 10mm;
+                padding: 8mm 10mm 16mm 10mm;
             }}
             .photo-annex .photo-card, .photo-annex .photo-meta {{ overflow: visible; max-height: none; }}
             .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
@@ -5565,7 +5626,7 @@ with tab5:
                 <tr>{vehicles_head}</tr>
                 {vehicles_rows}
             </table></div>
-            <div class="page-num">1</div>
+            {official_footer_html}
         </div>
         <div class="page report-page page-flow">
             {build_header()}
@@ -5574,7 +5635,7 @@ with tab5:
             <div class="section-badge">كيفية وقوع الحادث</div>
             <div class="box-content">{acc_how_html}</div>
             {liability_html}
-            <div class="page-num">2</div>
+            {official_footer_html}
         </div>
         <div class="page report-page page-three page-flow">
             {build_header()}
@@ -5598,7 +5659,7 @@ with tab5:
                 <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
                 <tr><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
             </table></div>
-            <div class="page-num">3</div>
+            {official_footer_html}
         </div>
         {sketch_page_html}
         {photos_pages_html}
