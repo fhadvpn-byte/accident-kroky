@@ -73,17 +73,19 @@
             box-shadow: 0 0 14px rgba(16, 185, 129, 0.45);
         }
         .canvas-wrap {
-            position: relative;
             width: 100%;
+            max-width: 1080px;
+            margin: 0 auto;
+            aspect-ratio: 960 / 500;
             border-radius: 10px;
-            overflow: hidden;
             border: 2px solid #38bdf8;
             background: #1e293b;
+            overflow: visible;
         }
         canvas {
             display: block;
-            width: 100%;
-            height: auto;
+            width: 100% !important;
+            height: 100% !important;
             cursor: grab;
         }
         canvas:active { cursor: grabbing; }
@@ -916,16 +918,46 @@
         ctx.strokeStyle = "#0f172a"; ctx.lineWidth = 1.8;
         ctx.beginPath(); ctx.roundRect(14, 446, 932, 42, 6); ctx.fill(); ctx.stroke();
         const rName = roadNameIn.value.trim() || ROADS[currentRoad].replace(/^\d+\.\s*/, "");
-        ctx.font = "bold 13.5px Tahoma, Arial";
-        ctx.fillStyle = "#0f172a"; ctx.textAlign = "right";
-        ctx.fillText("الموقع: " + rName, 930, 472);
+        const locationText = "الموقع: " + rName;
         ctx.font = "bold 12.5px Tahoma, Arial";
-        ctx.fillStyle = "#dc2626"; ctx.textAlign = "center";
-        ctx.fillText("🔴 (1) الطرف الأول ومساره", 520, 472);
+        ctx.fillStyle = "#0f172a";
+        ctx.textAlign = "right";
+        ctx.textBaseline = "middle";
+        const locationMax = 340;
+        const locationLines = [];
+        let locationRest = locationText;
+        while (locationRest && locationLines.length < 2) {
+            if (ctx.measureText(locationRest).width <= locationMax) {
+                locationLines.push(locationRest);
+                locationRest = "";
+                break;
+            }
+            let cut = locationRest.length;
+            while (cut > 1 && ctx.measureText(locationRest.slice(0, cut)).width > locationMax) cut -= 1;
+            let splitAt = locationRest.lastIndexOf(" ", cut);
+            if (splitAt < 6) splitAt = cut;
+            locationLines.push(locationRest.slice(0, splitAt).trim());
+            locationRest = locationRest.slice(splitAt).trim();
+        }
+        if (locationRest && locationLines.length) {
+            let last = locationLines[locationLines.length - 1];
+            while (last.length > 1 && ctx.measureText(last + "…").width > locationMax) last = last.slice(0, -1);
+            locationLines[locationLines.length - 1] = last + "…";
+        }
+        if (locationLines.length > 1) {
+            ctx.fillText(locationLines[0], 932, 459);
+            ctx.fillText(locationLines[1], 932, 476);
+        } else {
+            ctx.fillText(locationLines[0] || locationText, 932, 467);
+        }
+        ctx.font = "bold 12px Tahoma, Arial";
+        ctx.textAlign = "center";
+        ctx.fillStyle = "#dc2626";
+        ctx.fillText("🔴 (1) الطرف الأول ومساره", 470, 467);
         ctx.fillStyle = "#2563eb";
-        ctx.fillText("🔵 (2) الطرف الثاني ومساره", 315, 472);
+        ctx.fillText("🔵 (2) الطرف الثاني ومساره", 285, 467);
         ctx.fillStyle = "#b91c1c";
-        ctx.fillText("✖ نقطة الاصطدام", 120, 472);
+        ctx.fillText("✖ نقطة الاصطدام", 115, 467);
         ctx.restore();
     }
     function renderAll(hideSelectionHandles) {
@@ -1150,7 +1182,7 @@
                 }
                 loadScenario(0, true);
             }
-            sendToStreamlit("streamlit:setFrameHeight", { height: 680 });
+            syncFrameHeight();
         }
     });
     function markDirty() {
@@ -1181,8 +1213,21 @@
             }
         });
     };
+    function syncFrameHeight() {
+        const shell = document.querySelector(".studio-shell");
+        if (!shell) return;
+        const fullHeight = Math.ceil(shell.getBoundingClientRect().height) + 24;
+        sendToStreamlit("streamlit:setFrameHeight", { height: fullHeight });
+    }
+    if (typeof ResizeObserver !== "undefined") {
+        const ro = new ResizeObserver(() => syncFrameHeight());
+        ro.observe(document.body);
+    }
+    window.addEventListener("load", () => setTimeout(syncFrameHeight, 80));
+    window.addEventListener("resize", syncFrameHeight);
+    setTimeout(syncFrameHeight, 250);
     sendToStreamlit("streamlit:componentReady", { apiVersion: 1 });
-    sendToStreamlit("streamlit:setFrameHeight", { height: 680 });
+    syncFrameHeight();
     </script>
     </body>
     </html>

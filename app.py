@@ -4924,7 +4924,7 @@ with tab5:
                 sketch_src = ""
     safe_sketch_src = html.escape(sketch_src, quote=True)
     sketch_img = (
-        f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="width:100%; max-height:118mm; height:auto; object-fit:contain; border:1px solid #ccc;">'
+        f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="width:100%; max-height:145mm; height:auto; object-fit:contain; border:1px solid #ccc;">'
         if safe_sketch_src else ""
     )
     aerial_src = str(st.session_state.get("aerial_data_url") or "").strip()
