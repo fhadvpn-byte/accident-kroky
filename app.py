@@ -9,7 +9,6 @@ import os
 import json
 import re
 import math
-import time
 import tempfile
 from datetime import date, datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
@@ -828,8 +827,11 @@ def _page1_cell(value):
             return ""
     except (TypeError, ValueError):
         pass
-    text = str(value)
-    if text.strip().lower() in ("none", "nan"):
+    if isinstance(value, str):
+        text = value.strip()
+    else:
+        text = str(value).strip()
+    if text.lower() in ("none", "nan", "<na>"):
         return ""
     return text
 
@@ -1340,61 +1342,116 @@ def inject_bayyinah_blue_styles():
     </style>
     """, unsafe_allow_html=True)
 
-def trigger_instant_a4_print(full_report_html: str, nonce: float = 0.0):
-    """طباعة فورية موثوقة على Chrome/Edge من أي تبويب عبر إطار A4 حقيقي خارج الشاشة."""
-    escaped_html = json.dumps(full_report_html)
+def render_direct_print_button(full_report_html: str, label: str = "🖨️ طباعة فورية A4", btn_id: str = "top"):
+    """زر طباعة فوري يعمل بنقرة الماوس داخل المتصفح حتى لو كان التقرير فارغاً."""
+    safe_html_json = json.dumps(full_report_html or "")
+    safe_label = html.escape(label)
+    safe_id = re.sub(r"[^A-Za-z0-9_-]", "", str(btn_id or "top")) or "top"
     components.html(
         f"""
-        <script>
-        (function() {{
-            // print_nonce: {nonce}
-            const rawHtml = {escaped_html};
-            const hostWin = window.parent || window;
-            const hostDoc = hostWin.document;
-            const oldFrame = hostDoc.getElementById("bayyinah_a4_print_frame");
-            if (oldFrame) oldFrame.remove();
-            const iframe = hostDoc.createElement("iframe");
-            iframe.id = "bayyinah_a4_print_frame";
-            iframe.style.cssText = "position:fixed;left:-10000px;top:0;width:210mm;height:297mm;border:0;opacity:0.01;pointer-events:none;z-index:-1;";
-            hostDoc.body.appendChild(iframe);
-            const cleanPrintCss = `<style>
-                @media print {{
-                    button, .no-print, .print-btn, .toolbar {{ display: none !important; }}
-                    @page {{ size: A4 portrait; margin: 0; }}
-                    html, body {{ background: #ffffff !important; margin: 0 !important; padding: 0 !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }}
-                }}
-            </style>`;
-            const finalHtml = rawHtml.includes("</head>")
-                ? rawHtml.replace("</head>", cleanPrintCss + "</head>")
-                : cleanPrintCss + rawHtml;
-            const doc = iframe.contentWindow.document;
-            doc.open();
-            doc.write(finalHtml);
-            doc.close();
-            const imgs = Array.from(doc.images || []);
-            const waitImgs = Promise.all(imgs.map(img => {{
-                if (img.complete) return Promise.resolve();
-                return new Promise(res => {{ img.onload = res; img.onerror = res; }});
-            }}));
-            const fallbackTimer = new Promise(res => setTimeout(res, 900));
-            Promise.race([waitImgs, fallbackTimer]).then(() => {{
-                setTimeout(() => {{
-                    try {{
-                        iframe.contentWindow.focus();
-                        iframe.contentWindow.print();
-                    }} catch (e) {{
-                        console.error("Bayyinah A4 print error:", e);
+        <!DOCTYPE html>
+        <html dir="rtl" lang="ar">
+        <head>
+        <meta charset="utf-8"/>
+        <style>
+            * {{ box-sizing: border-box; margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, sans-serif; }}
+            body {{ background: transparent; overflow: hidden; display: flex; align-items: center; height: 44px; }}
+            .instant-print-btn {{
+                width: 100%;
+                height: 42px;
+                background: linear-gradient(135deg, #38bdf8 0%, #00e5ff 100%);
+                color: #031527;
+                border: 1.5px solid #bae6fd;
+                border-radius: 10px;
+                font-size: 14px;
+                font-weight: 900;
+                cursor: pointer;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                gap: 6px;
+                box-shadow: 0 4px 14px rgba(0, 229, 255, 0.3);
+                transition: 0.15s ease;
+            }}
+            .instant-print-btn:hover {{
+                filter: brightness(1.08);
+                transform: translateY(-1px);
+            }}
+            .instant-print-btn:active {{
+                transform: translateY(0px);
+            }}
+        </style>
+        </head>
+        <body>
+            <button class="instant-print-btn" id="pBtn_{safe_id}" onclick="printReportNow()">
+                {safe_label}
+            </button>
+            <script>
+            const REPORT_HTML = {safe_html_json};
+            function injectCleanPrintRules(raw) {{
+                const rules = `<style>
+                    @media print {{
+                        button, .no-print, .print-btn, .toolbar {{ display: none !important; }}
+                        @page {{ size: A4 portrait; margin: 0; }}
+                        html, body {{
+                            background: #ffffff !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                            -webkit-print-color-adjust: exact !important;
+                            print-color-adjust: exact !important;
+                        }}
                     }}
-                }}, 200);
-            }});
-        }})();
-        </script>
+                </style>`;
+                return raw.includes("</head>") ? raw.replace("</head>", rules + "</head>") : (rules + raw);
+            }}
+            function printReportNow() {{
+                const finalHtml = injectCleanPrintRules(REPORT_HTML);
+                const printWin = window.open("", "_blank", "width=950,height=850");
+                if (printWin && printWin.document) {{
+                    printWin.document.open();
+                    printWin.document.write(finalHtml);
+                    printWin.document.close();
+                    const validImgs = Array.from(printWin.document.images || []).filter(
+                        img => img.getAttribute("src") && img.getAttribute("src").trim() !== ""
+                    );
+                    const waitImgs = Promise.all(validImgs.map(img => {{
+                        if (img.complete) return Promise.resolve();
+                        return new Promise(res => {{ img.onload = res; img.onerror = res; }});
+                    }}));
+                    Promise.race([waitImgs, new Promise(r => setTimeout(r, 600))]).then(() => {{
+                        setTimeout(() => {{
+                            printWin.focus();
+                            printWin.print();
+                        }}, 150);
+                    }});
+                    printWin.onafterprint = function() {{
+                        try {{ printWin.close(); }} catch (e) {{}}
+                    }};
+                    return;
+                }}
+                let localFrame = document.getElementById("local_a4_frame");
+                if (localFrame) localFrame.remove();
+                localFrame = document.createElement("iframe");
+                localFrame.id = "local_a4_frame";
+                localFrame.style.cssText = "position:fixed;width:1px;height:1px;left:-999px;top:0;border:0;";
+                document.body.appendChild(localFrame);
+                const fDoc = localFrame.contentWindow.document;
+                fDoc.open();
+                fDoc.write(finalHtml);
+                fDoc.close();
+                setTimeout(() => {{
+                    localFrame.contentWindow.focus();
+                    localFrame.contentWindow.print();
+                }}, 300);
+            }}
+            </script>
+        </body>
+        </html>
         """,
-        height=0,
-        width=0,
+        height=46,
     )
 
-def render_compact_command_header(on_save_callback=None, on_reset_callback=None, build_report_html_fn=None):
+def render_compact_command_header(on_save_callback=None, on_reset_callback=None, report_html: str = ""):
     """شريط علوي زجاجي رفيع يوفر ثلث مساحة الشاشة ويضع الحفظ والطباعة الفورية أمام العين."""
     st.markdown(
         """
@@ -1451,9 +1508,7 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
             if callable(on_save_callback):
                 on_save_callback()
     with col_print:
-        if st.button("🖨️ طباعة فورية A4", key="_top_cmd_print", type="primary", use_container_width=True):
-            st.session_state["_trigger_instant_print"] = True
-            st.session_state["_print_nonce"] = time.time()
+        render_direct_print_button(report_html or "", label="🖨️ طباعة فورية A4", btn_id="top")
     with col_new:
         if st.button("🆕 حادث جديد", key="_top_cmd_reset", use_container_width=True):
             if callable(on_reset_callback):
@@ -1588,7 +1643,8 @@ OFFICIAL_A4_HIGH_CONTRAST_CSS = """
 
 def _quick_save_from_header():
     sync_page1_to_vault()
-    st.session_state["_p1_save_requested"] = True
+    if save_current_work():
+        st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
 
 VIDEO_MARKER_START = "[بداية القرائن المرئية]"
 VIDEO_MARKER_END = "[نهاية القرائن المرئية]"
@@ -3451,10 +3507,7 @@ with st.sidebar:
         manager_name,
         manager_rank,
     ) = render_persistent_sidebar_settings()
-render_compact_command_header(
-    on_save_callback=_quick_save_from_header,
-    on_reset_callback=_reset_new_accident,
-)
+header_slot = st.container()
 tab_data, tab_sketch, tab_analysis, tab_print = st.tabs([
     "1️⃣ البيانات والأطراف",
     "2️⃣ الموقع واستوديو الكروكي",
@@ -4872,14 +4925,25 @@ elif safe_sketch_src and safe_aerial_src:
         + '<div style="height:3mm;"></div>'
         + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "82mm")
     )
+elif safe_aerial_src and st.session_state.get("aerial_place") == "beside":
+    sketch_figure = (
+        '<div style="display:flex; justify-content:space-between; width:100%; align-items:stretch;">'
+        '<div style="width:49%;"><div style="width:100%;height:135mm;border:1.5px solid #000;border-radius:4px;background:#fff;"></div></div>'
+        f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "82mm")}</div>'
+        "</div>"
+    )
 elif safe_aerial_src:
-    sketch_figure = _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "145mm")
+    sketch_figure = (
+        '<div style="width:100%;height:135mm;border:1.5px solid #000;border-radius:4px;background:#fff;"></div>'
+        '<div style="height:3mm;"></div>'
+        + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "82mm")
+    )
 elif safe_sketch_src:
     sketch_figure = (
         f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="width:100%; max-height:145mm; height:auto; object-fit:contain; border:1px solid #ccc;">'
     )
 else:
-    sketch_figure = ""
+    sketch_figure = '<div style="width:100%;height:135mm;border:1.5px solid #000;border-radius:4px;background:#fff;"></div>'
 logo_src = get_base64_image("traffic_logo.png")
 sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
 stored_sig = str(st.session_state.get("sig_base64") or "").strip()
@@ -4916,14 +4980,48 @@ def build_header():
     """
 parties_head = "".join(f"<th>{label}</th>" for _key, label in _party_columns)
 vehicles_head = "".join(f"<th>{label}</th>" for _key, label in _vehicle_columns)
+if not isinstance(parties_df, pd.DataFrame):
+    parties_df = pd.DataFrame(st.session_state.get("parties") or [])
+if not isinstance(vehicles_df, pd.DataFrame):
+    vehicles_df = pd.DataFrame(st.session_state.get("vehicles") or [])
 parties_rows = ""
 for _, row in parties_df.iterrows():
-    parties_rows += "<tr>" + "".join(f"<td>{_page1_cell(row.get(key, ''))}</td>" for key, _label in _party_columns) + "</tr>"
+    parties_rows += "<tr>" + "".join(
+        f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>" for key, _label in _party_columns
+    ) + "</tr>"
 vehicles_rows = ""
 for _, row in vehicles_df.iterrows():
-    vehicles_rows += "<tr>" + "".join(f"<td>{_page1_cell(row.get(key, ''))}</td>" for key, _label in _vehicle_columns) + "</tr>"
+    vehicles_rows += "<tr>" + "".join(
+        f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>" for key, _label in _vehicle_columns
+    ) + "</tr>"
+acc_num = _page1_cell(acc_num)
+acc_date = _page1_cell(acc_date)
+acc_time = _page1_cell(acc_time)
+acc_loc = _page1_cell(acc_loc)
+acc_type = _page1_cell(acc_type)
+acc_injuries = _page1_cell(acc_injuries)
+acc_deaths = _page1_cell(acc_deaths)
+acc_weather = _page1_cell(acc_weather)
+acc_cause = _page1_cell(acc_cause)
+acc_results = _page1_cell(acc_results)
+acc_how = _page1_cell(acc_how)
+dept_region = _page1_cell(dept_region)
+dept_branch = _page1_cell(dept_branch)
+officer_1_name = _page1_cell(officer_1_name)
+officer_1_rank = _page1_cell(officer_1_rank)
+officer_2_name = _page1_cell(officer_2_name)
+officer_2_rank = _page1_cell(officer_2_rank)
+manager_name = _page1_cell(manager_name)
+manager_rank = _page1_cell(manager_rank)
+accident_nature_val = _page1_cell(accident_nature_val)
+rights_status_val = _page1_cell(rights_status_val)
+participating_agency = _page1_cell(participating_agency)
+escaped_vehicles = _page1_cell(escaped_vehicles)
+shots_fired = _page1_cell(shots_fired)
+contraband_found = _page1_cell(contraband_found)
+road_name_sign = _page1_cell(road_name_sign)
 results_html = "<br>".join(html.escape(line) for line in acc_results.split("\n") if line.strip())
-acc_how_html = html.escape(acc_how or "").replace("\n", "<br>")
+acc_how_html = html.escape(acc_how).replace("\n", "<br>")
 criminal_details_html = ""
 if "جنائي" in (accident_nature or ""):
     criminal_details_html = f"""
@@ -5310,6 +5408,11 @@ setTimeout(fitReportFrame, 400);
 </html>
 """
 with tab_print:
+    render_direct_print_button(
+        full_report_html,
+        label="🖨️ طباعة التقرير بصيغة A4 / حفظ كـ PDF",
+        btn_id="tab4",
+    )
     st.subheader("📄 معاينة حية للتقرير قبل الطباعة")
     st.components.v1.html(full_report_html, height=850, scrolling=False)
 inject_tab_completion_badges(_report_tab_done_flags())
@@ -5331,8 +5434,9 @@ st.markdown("""
 }
 </style>
 """, unsafe_allow_html=True)
-if st.session_state.pop("_trigger_instant_print", False):
-    trigger_instant_a4_print(
-        full_report_html,
-        nonce=st.session_state.get("_print_nonce", time.time()),
+with header_slot:
+    render_compact_command_header(
+        on_save_callback=_quick_save_from_header,
+        on_reset_callback=_reset_new_accident,
+        report_html=full_report_html,
     )
