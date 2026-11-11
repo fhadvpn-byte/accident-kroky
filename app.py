@@ -1,19 +1,17 @@
-import base64
-from datetime import date, datetime
-import hashlib
 import html
-import io
-import json
-import math
-import os
-from pathlib import Path
-import tempfile
-from zoneinfo import ZoneInfo
-
+import streamlit as st
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageOps
-import streamlit as st
-
+import io
+import base64
+import os
+import json
+import hashlib
+import math
+import tempfile
+from datetime import date, datetime
+from zoneinfo import ZoneInfo
+from pathlib import Path
 
 def _select_images_dir():
     candidates = (
@@ -31,7 +29,6 @@ def _select_images_dir():
             continue
     return candidates[-1]
 
-
 SAVED_IMAGES_DIR = _select_images_dir()
 ARABIC_FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Bold.ttf",
@@ -44,7 +41,6 @@ GROQ_VISION_MODELS = (
     "llama-3.2-11b-vision-preview",
 )
 
-
 def gregorian_to_hijri_str(gregorian_date):
     year = int(gregorian_date.year)
     month = int(gregorian_date.month)
@@ -54,76 +50,31 @@ def gregorian_to_hijri_str(gregorian_date):
         month += 12
     century = math.floor(year / 100)
     gregorian_shift = 2 - century + math.floor(century / 4)
-    julian_day = (
-        math.floor(365.25 * (year + 4716))
-        + math.floor(30.6001 * (month + 1))
-        + day
-        + gregorian_shift
-        - 1524
-    )
+    julian_day = math.floor(365.25 * (year + 4716)) + math.floor(30.6001 * (month + 1)) + day + gregorian_shift - 1524
     lunar = julian_day - 1948440 + 10632
     cycles = math.floor((lunar - 1) / 10631)
     lunar = lunar - 10631 * cycles + 354
-    jump = (
-        math.floor((10985 - lunar) / 5316) * math.floor((50 * lunar) / 17719)
-    ) + (math.floor(lunar / 5670) * math.floor((43 * lunar) / 15238))
-    lunar = (
-        lunar
-        - (math.floor((30 - jump) / 15) * math.floor((17719 * jump) / 50))
-        - (math.floor(jump / 16) * math.floor((15238 * jump) / 43))
-        + 29
-    )
+    jump = (math.floor((10985 - lunar) / 5316) * math.floor((50 * lunar) / 17719)) + (math.floor(lunar / 5670) * math.floor((43 * lunar) / 15238))
+    lunar = lunar - (math.floor((30 - jump) / 15) * math.floor((17719 * jump) / 50)) - (math.floor(jump / 16) * math.floor((15238 * jump) / 43)) + 29
     hijri_month = math.floor((24 * lunar) / 709)
     hijri_day = lunar - math.floor((709 * hijri_month) / 24)
     hijri_year = 30 * cycles + jump - 30
     return f"{int(hijri_year):04d}/{int(hijri_month):02d}/{int(hijri_day):02d}"
 
-
 def get_today_hijri():
     return gregorian_to_hijri_str(date.today())
 
-
 def _blank_parties():
     return [
-        {
-            "الطرف": "الطرف الأول",
-            "الاسم": "",
-            "الهوية": "",
-            "المشاركة": "",
-            "الحالة": "",
-            "التأهيل": "",
-        },
-        {
-            "الطرف": "الطرف الثاني",
-            "الاسم": "",
-            "الهوية": "",
-            "المشاركة": "",
-            "الحالة": "",
-            "التأهيل": "",
-        },
+        {"الطرف": "الطرف الأول", "الاسم": "", "الهوية": "", "المشاركة": "", "الحالة": "", "التأهيل": ""},
+        {"الطرف": "الطرف الثاني", "الاسم": "", "الهوية": "", "المشاركة": "", "الحالة": "", "التأهيل": ""},
     ]
-
 
 def _blank_vehicles():
     return [
-        {
-            "الطرف": "الطرف الأول",
-            "نوع المركبة": "",
-            "رقم اللوحة": "",
-            "الرقم التسلسلي": "",
-            "نوع الترخيص": "",
-            "التأمين": "",
-        },
-        {
-            "الطرف": "الطرف الثاني",
-            "نوع المركبة": "",
-            "رقم اللوحة": "",
-            "الرقم التسلسلي": "",
-            "نوع الترخيص": "",
-            "التأمين": "",
-        },
+        {"الطرف": "الطرف الأول", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "", "التأمين": ""},
+        {"الطرف": "الطرف الثاني", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "", "التأمين": ""},
     ]
-
 
 DRAFT_FILE_PATH = "bayyinah_autosave_draft.json"
 DEFAULT_REPORT_STATE = {
@@ -145,9 +96,145 @@ DEFAULT_REPORT_STATE = {
     "video_injected_text": "",
     "auto_analyze_video": False,
     "show_page_numbers": False,
+    "include_sketch": True,
     "confirm_clear": False,
     "last_saved_time": "لم يتم الحفظ بعد",
 }
+
+def init_and_load_state():
+    if "state_initialized" in st.session_state:
+        return
+    if os.path.exists(DRAFT_FILE_PATH):
+        try:
+            with open(DRAFT_FILE_PATH, "r", encoding="utf-8") as draft_file:
+                saved_data = json.load(draft_file)
+            for key, default_val in DEFAULT_REPORT_STATE.items():
+                st.session_state[key] = saved_data.get(key, default_val)
+        except (OSError, json.JSONDecodeError, TypeError):
+            for key, default_val in DEFAULT_REPORT_STATE.items():
+                st.session_state.setdefault(key, default_val)
+    else:
+        for key, default_val in DEFAULT_REPORT_STATE.items():
+            st.session_state.setdefault(key, default_val)
+    if not isinstance(st.session_state.get("selected_articles"), list):
+        st.session_state.selected_articles = []
+    if not isinstance(st.session_state.get("video_findings"), list):
+        st.session_state.video_findings = []
+    for text_key in ("accident_results", "technical_description", "legal_opinion", "extra_procedure", "video_timestamp", "video_custom_notes"):
+        if not isinstance(st.session_state.get(text_key), str):
+            st.session_state[text_key] = ""
+    if not isinstance(st.session_state.get("show_page_numbers"), bool):
+        st.session_state.show_page_numbers = False
+    if not isinstance(st.session_state.get("auto_analyze_video"), bool):
+        st.session_state.auto_analyze_video = False
+    if not isinstance(st.session_state.get("include_sketch"), bool):
+        st.session_state.include_sketch = True
+    _normalize_loaded_video_state()
+    st.session_state.law_selection_sig = tuple(st.session_state.get("selected_articles") or [])
+    st.session_state["state_initialized"] = True
+
+def save_current_work():
+    data_to_save = {}
+    for key in DEFAULT_REPORT_STATE:
+        if key in st.session_state and key != "confirm_clear":
+            data_to_save[key] = st.session_state[key]
+    for secret_key_name in (
+        "api_key_persist",
+        "api_key_persistent",
+        "widget_api_key_input",
+        "api_key_input",
+        "api_key_widget",
+        "analysis_api_key",
+    ):
+        data_to_save.pop(secret_key_name, None)
+    now_str = datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d | %I:%M:%S %p")
+    data_to_save["last_saved_time"] = now_str
+    st.session_state["last_saved_time"] = now_str
+    try:
+        with open(DRAFT_FILE_PATH, "w", encoding="utf-8") as draft_file:
+            json.dump(data_to_save, draft_file, ensure_ascii=False, indent=2)
+        return True
+    except OSError as error:
+        st.error(f"حدث خطأ أثناء حفظ المسودة: {error}")
+        return False
+
+def clear_all_work():
+    if os.path.exists(DRAFT_FILE_PATH):
+        try:
+            os.remove(DRAFT_FILE_PATH)
+        except OSError:
+            pass
+    for key, default_val in DEFAULT_REPORT_STATE.items():
+        st.session_state[key] = default_val
+    st.session_state.law_selection_sig = ()
+    st.session_state["confirm_clear"] = False
+
+def inject_bayyinah_blue_styles():
+    st.markdown("""
+    <style>
+    div[data-baseweb="select"] > div,
+    div[data-baseweb="input"] > div,
+    div[data-baseweb="textarea"] > div,
+    .stTextInput input,
+    .stTextArea textarea,
+    .stSelectbox div[role="button"],
+    .stMultiSelect div[role="button"] {
+        background: linear-gradient(135deg, rgba(8, 56, 114, 0.88), rgba(4, 38, 84, 0.92)) !important;
+        color: #ffffff !important;
+        border: 1.5px solid #00d2ff !important;
+        border-radius: 10px !important;
+        box-shadow: 0 0 10px rgba(0, 210, 255, 0.2) !important;
+    }
+    .save-bar-container,
+    [class*="st-key-save-bar"] {
+        background: linear-gradient(90deg, rgba(5, 45, 95, 0.95), rgba(10, 75, 145, 0.95));
+        border: 1px solid #00e1ff;
+        border-radius: 12px;
+        padding: 12px 18px;
+        margin-bottom: 18px;
+        box-shadow: 0 4px 15px rgba(0, 225, 255, 0.25);
+        direction: rtl;
+    }
+    .video-evidence-box,
+    [class*="st-key-video-evidence"] {
+        background: linear-gradient(135deg, rgba(6, 52, 108, 0.9), rgba(3, 33, 74, 0.95));
+        border: 1.5px solid #00d4ff;
+        border-radius: 14px;
+        padding: 16px;
+        margin: 15px 0;
+        box-shadow: 0 0 18px rgba(0, 212, 255, 0.22);
+        direction: rtl;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+def render_save_and_clear_toolbar():
+    with st.container(key="save-bar"):
+        col_status, col_save, col_clear = st.columns([3, 1.5, 1.5])
+        with col_status:
+            st.markdown(
+                f"**🛡️ نظام حماية البيانات النشط:** آخر حفظ للعمل: `{st.session_state.get('last_saved_time', 'لم يتم الحفظ بعد')}`"
+            )
+        with col_save:
+            if st.button("💾 حفظ العمل الحالي", width="stretch", type="primary"):
+                if save_current_work():
+                    st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
+        with col_clear:
+            if not st.session_state.get("confirm_clear", False):
+                if st.button("🗑️ مسح جميع الحقول", width="stretch"):
+                    st.session_state["confirm_clear"] = True
+                    st.rerun()
+            else:
+                sub_c1, sub_c2 = st.columns(2)
+                with sub_c1:
+                    if st.button("⚠️ تأكيد المسح", width="stretch"):
+                        clear_all_work()
+                        st.toast("تم مسح البيانات وبدء تقرير جديد", icon="🔄")
+                        st.rerun()
+                with sub_c2:
+                    if st.button("إلغاء", width="stretch"):
+                        st.session_state["confirm_clear"] = False
+                        st.rerun()
 
 VIDEO_MARKER_START = "[بداية القرائن المرئية]"
 VIDEO_MARKER_END = "[نهاية القرائن المرئية]"
@@ -196,7 +283,6 @@ TEXT_MODEL_NAMES = (
 HOW_SECTION = "===كيفية وقوع الحادث==="
 RESULTS_SECTION = "===نتائج الحادث==="
 
-
 def _blank_video_clip():
     return {
         "source": VIDEO_SOURCE_OPTIONS[0],
@@ -205,7 +291,6 @@ def _blank_video_clip():
         "findings": [],
         "notes": "",
     }
-
 
 def _normalize_video_clip(raw):
     clip = _blank_video_clip()
@@ -220,14 +305,12 @@ def _normalize_video_clip(raw):
         clip["notes"] = str(raw.get("notes") or "").strip()
     return clip
 
-
 def _clamp_clip_count(value):
     try:
         count = int(value)
     except (TypeError, ValueError):
         count = VIDEO_CLIP_MIN
     return max(VIDEO_CLIP_MIN, min(VIDEO_CLIP_MAX, count))
-
 
 def _normalize_loaded_video_state():
     raw_has = str(st.session_state.get("has_video") or "")
@@ -259,160 +342,6 @@ def _normalize_loaded_video_state():
     st.session_state.video_clips = clips[:count]
     st.session_state.video_clip_count = count
 
-
-def init_and_load_state():
-    if "state_initialized" in st.session_state:
-        return
-    if os.path.exists(DRAFT_FILE_PATH):
-        try:
-            with open(DRAFT_FILE_PATH, "r", encoding="utf-8") as draft_file:
-                saved_data = json.load(draft_file)
-            for key, default_val in DEFAULT_REPORT_STATE.items():
-                st.session_state[key] = saved_data.get(key, default_val)
-        except (OSError, json.JSONDecodeError, TypeError):
-            for key, default_val in DEFAULT_REPORT_STATE.items():
-                st.session_state.setdefault(key, default_val)
-    else:
-        for key, default_val in DEFAULT_REPORT_STATE.items():
-            st.session_state.setdefault(key, default_val)
-    if not isinstance(st.session_state.get("selected_articles"), list):
-        st.session_state.selected_articles = []
-    if not isinstance(st.session_state.get("video_findings"), list):
-        st.session_state.video_findings = []
-    for text_key in (
-        "accident_results",
-        "technical_description",
-        "legal_opinion",
-        "extra_procedure",
-        "video_timestamp",
-        "video_custom_notes",
-    ):
-        if not isinstance(st.session_state.get(text_key), str):
-            st.session_state[text_key] = ""
-    if not isinstance(st.session_state.get("show_page_numbers"), bool):
-        st.session_state.show_page_numbers = False
-    if not isinstance(st.session_state.get("auto_analyze_video"), bool):
-        st.session_state.auto_analyze_video = False
-    _normalize_loaded_video_state()
-    st.session_state.law_selection_sig = tuple(
-        st.session_state.get("selected_articles") or []
-    )
-    st.session_state["state_initialized"] = True
-
-
-def save_current_work():
-    data_to_save = {}
-    for key in DEFAULT_REPORT_STATE:
-        if key in st.session_state and key != "confirm_clear":
-            data_to_save[key] = st.session_state[key]
-    for secret_key_name in (
-        "api_key_persist",
-        "api_key_persistent",
-        "widget_api_key_input",
-        "api_key_input",
-        "api_key_widget",
-        "analysis_api_key",
-    ):
-        data_to_save.pop(secret_key_name, None)
-    now_str = datetime.now(ZoneInfo("Asia/Riyadh")).strftime(
-        "%Y-%m-%d | %I:%M:%S %p"
-    )
-    data_to_save["last_saved_time"] = now_str
-    st.session_state["last_saved_time"] = now_str
-    try:
-        with open(DRAFT_FILE_PATH, "w", encoding="utf-8") as draft_file:
-            json.dump(data_to_save, draft_file, ensure_ascii=False, indent=2)
-        return True
-    except OSError as error:
-        st.error(f"حدث خطأ أثناء حفظ المسودة: {error}")
-        return False
-
-
-def clear_all_work():
-    if os.path.exists(DRAFT_FILE_PATH):
-        try:
-            os.remove(DRAFT_FILE_PATH)
-        except OSError:
-            pass
-    for key, default_val in DEFAULT_REPORT_STATE.items():
-        st.session_state[key] = default_val
-    st.session_state.law_selection_sig = ()
-    st.session_state["confirm_clear"] = False
-
-
-def inject_bayyinah_blue_styles():
-    st.markdown(
-        """
-    <style>
-    div[data-baseweb="select"] > div,
-    div[data-baseweb="input"] > div,
-    div[data-baseweb="textarea"] > div,
-    .stTextInput input,
-    .stTextArea textarea,
-    .stSelectbox div[role="button"],
-    .stMultiSelect div[role="button"] {
-        background: linear-gradient(135deg, rgba(8, 56, 114, 0.88), rgba(4, 38, 84, 0.92)) !important;
-        color: #ffffff !important;
-        border: 1.5px solid #00d2ff !important;
-        border-radius: 10px !important;
-        box-shadow: 0 0 10px rgba(0, 210, 255, 0.2) !important;
-    }
-    .save-bar-container,
-    [class*="st-key-save-bar"] {
-        background: linear-gradient(90deg, rgba(5, 45, 95, 0.95), rgba(10, 75, 145, 0.95));
-        border: 1px solid #00e1ff;
-        border-radius: 12px;
-        padding: 12px 18px;
-        margin-bottom: 18px;
-        box-shadow: 0 4px 15px rgba(0, 225, 255, 0.25);
-        direction: rtl;
-    }
-    .video-evidence-box,
-    [class*="st-key-video-evidence"] {
-        background: linear-gradient(135deg, rgba(6, 52, 108, 0.9), rgba(3, 33, 74, 0.95));
-        border: 1.5px solid #00d4ff;
-        border-radius: 14px;
-        padding: 16px;
-        margin: 15px 0;
-        box-shadow: 0 0 18px rgba(0, 212, 255, 0.22);
-        direction: rtl;
-    }
-    </style>
-    """,
-        unsafe_allow_html=True,
-    )
-
-
-def render_save_and_clear_toolbar():
-    with st.container(key="save-bar"):
-        col_status, col_save, col_clear = st.columns([3, 1.5, 1.5])
-        with col_status:
-            st.markdown(
-                "**🛡️ نظام حماية البيانات النشط:** آخر حفظ للعمل:"
-                f" `{st.session_state.get('last_saved_time', 'لم يتم الحفظ بعد')}`"
-            )
-        with col_save:
-            if st.button("💾 حفظ العمل الحالي", width="stretch", type="primary"):
-                if save_current_work():
-                    st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
-        with col_clear:
-            if not st.session_state.get("confirm_clear", False):
-                if st.button("🗑️ مسح جميع الحقول", width="stretch"):
-                    st.session_state["confirm_clear"] = True
-                    st.rerun()
-            else:
-                sub_c1, sub_c2 = st.columns(2)
-                with sub_c1:
-                    if st.button("⚠️ تأكيد المسح", width="stretch"):
-                        clear_all_work()
-                        st.toast("تم مسح البيانات وبدء تقرير جديد", icon="🔄")
-                        st.rerun()
-                with sub_c2:
-                    if st.button("إلغاء", width="stretch"):
-                        st.session_state["confirm_clear"] = False
-                        st.rerun()
-
-
 def _sync_video_clips(count):
     count = _clamp_clip_count(count)
     clips = [_normalize_video_clip(item) for item in (st.session_state.get("video_clips") or [])]
@@ -420,7 +349,6 @@ def _sync_video_clips(count):
         clips.append(_blank_video_clip())
     st.session_state.video_clips = clips[:count]
     return st.session_state.video_clips
-
 
 def _store_clip_fields():
     count = _clamp_clip_count(st.session_state.get("video_clip_count"))
@@ -439,7 +367,6 @@ def _store_clip_fields():
     st.session_state.video_clips = clips
     save_current_work()
 
-
 def _active_video_clips():
     count = _clamp_clip_count(st.session_state.get("video_clip_count"))
     stored = _sync_video_clips(count)
@@ -457,22 +384,19 @@ def _active_video_clips():
         }))
     return clips
 
-
 def _extract_marked_block(text):
     text = str(text or "")
     if VIDEO_MARKER_START in text and VIDEO_MARKER_END in text:
         return text.split(VIDEO_MARKER_START, 1)[1].split(VIDEO_MARKER_END, 1)[0].strip()
     return ""
 
-
 def _strip_marked_block(text):
     text = str(text or "")
-    while VIDEO_MARKER_START in text and VIDEO_MARKER_END in text:
+    if VIDEO_MARKER_START in text and VIDEO_MARKER_END in text:
         pre, rest = text.split(VIDEO_MARKER_START, 1)
         _, post = rest.split(VIDEO_MARKER_END, 1)
-        text = f"{pre.rstrip()}\n\n{post.lstrip()}".strip()
+        return f"{pre.rstrip()}\n\n{post.lstrip()}".strip()
     return text.strip()
-
 
 def _upsert_marked_block(text, block):
     base = _strip_marked_block(text)
@@ -482,12 +406,10 @@ def _upsert_marked_block(text, block):
     marked = f"{VIDEO_MARKER_START}\n{block}\n{VIDEO_MARKER_END}"
     return f"{base}\n\n{marked}".strip() if base else marked
 
-
 def _clip_shows_criminal_suspicion(clip):
     observations = " ".join(clip.get("findings") or [])
     observations = f"{observations} {clip.get('notes') or ''}"
     return any(marker in observations for marker in CRIMINAL_SUSPICION_MARKERS)
-
 
 def _manual_evidence_blocks():
     clips = _active_video_clips()
@@ -511,7 +433,6 @@ def _manual_evidence_blocks():
             legal_line = f"{legal_line} {CRIMINAL_SUSPICION_SENTENCE}"
         legal_lines.append(legal_line)
     return "\n".join(how_lines), "\n".join(result_lines), "\n".join(legal_lines)
-
 
 def _apply_marked_analysis(parsed):
     how_text = str((parsed or {}).get("technical_description") or "").strip()
@@ -538,7 +459,6 @@ def _apply_marked_analysis(parsed):
     save_current_work()
     return True
 
-
 def insert_manual_video_evidence():
     how_block, results_block, legal_block = _manual_evidence_blocks()
     _apply_marked_analysis({
@@ -547,7 +467,6 @@ def insert_manual_video_evidence():
         "legal_opinion": legal_block,
     })
 
-
 def remove_manual_video_evidence():
     st.session_state.technical_description = _strip_marked_block(st.session_state.get("technical_description", ""))
     st.session_state.accident_results = _strip_marked_block(st.session_state.get("accident_results", ""))
@@ -555,10 +474,8 @@ def remove_manual_video_evidence():
     st.session_state.video_injected_text = ""
     save_current_work()
 
-
 def _local_secrets_file():
     return Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"
-
 
 def _groq_key_from_local_file():
     path = _local_secrets_file()
@@ -574,7 +491,6 @@ def _groq_key_from_local_file():
         return ""
     return str(data.get("GROQ_API_KEY") or "").strip()
 
-
 def _groq_secret_key():
     try:
         if "GROQ_API_KEY" in st.secrets:
@@ -583,6 +499,8 @@ def _groq_secret_key():
         pass
     return _groq_key_from_local_file()
 
+def _sync_analysis_key_from_widget():
+    st.session_state.api_key_persist = str(st.session_state.get("widget_api_key_input") or "").strip()
 
 def get_active_analysis_key():
     typed = str(st.session_state.get("api_key_persist") or "").strip()
@@ -590,14 +508,12 @@ def get_active_analysis_key():
         return typed
     return _groq_secret_key()
 
-
 def _analysis_base_url(api_key):
     if api_key.startswith("xai-"):
         return "https://api.x.ai/v1"
     if api_key.startswith("sk-") and not api_key.startswith("gsk_"):
         return "https://api.openai.com/v1"
     return "https://api.groq.com/openai/v1"
-
 
 def _sections_from_model_text(text):
     raw = str(text or "")
@@ -607,7 +523,6 @@ def _sections_from_model_text(text):
     results_text = raw.split(RESULTS_SECTION, 1)[1].strip()
     return how_text, results_text
 
-
 def _optional_cv2():
     try:
         import cv2
@@ -615,14 +530,12 @@ def _optional_cv2():
         return None
     return cv2
 
-
 def _redact_secret(message, *secrets):
     text = str(message or "")
     for secret in secrets:
         if secret:
             text = text.replace(secret, "•••")
     return text
-
 
 def _upload_token(uploaded):
     if uploaded is None:
@@ -637,7 +550,6 @@ def _upload_token(uploaded):
             size = 0
     return f"{file_id}:{name}:{size}"
 
-
 def _bulk_uploads():
     bulk = st.session_state.get("video_bulk_files") or []
     if bulk is None:
@@ -645,7 +557,6 @@ def _bulk_uploads():
     if isinstance(bulk, list):
         return [item for item in bulk if item is not None]
     return [bulk]
-
 
 def _effective_clip_file(index, bulk):
     per_clip = st.session_state.get(f"clip_file_{index}")
@@ -655,6 +566,16 @@ def _effective_clip_file(index, bulk):
         return bulk[index]
     return None
 
+def _video_files_signature(count, bulk):
+    parts = ["bulk:" + "|".join(_upload_token(item) for item in bulk)]
+    for index in range(count):
+        parts.append(f"{index}:{_upload_token(st.session_state.get(f'clip_file_{index}'))}")
+    signature = "||".join(parts)
+    if not any(_upload_token(item) for item in bulk) and all(
+        not _upload_token(st.session_state.get(f"clip_file_{index}")) for index in range(count)
+    ):
+        return ""
+    return signature
 
 def _clip_prompt_line(index, clip):
     findings = "، ".join(clip["findings"]) if clip["findings"] else "لا توجد مشاهدات مدونة"
@@ -663,7 +584,6 @@ def _clip_prompt_line(index, clip):
         f"وقت اللقطة {clip['timestamp'] or 'غير محدد'}، المشاهدات المدونة: {findings}، "
         f"ملاحظات الباحث: {clip['notes'] or 'لا يوجد'}."
     )
-
 
 def _analysis_prompt(clips, watched):
     if watched:
@@ -687,7 +607,6 @@ def _analysis_prompt(clips, watched):
         "البيانات المكتوبة:",
         *[_clip_prompt_line(index, clip) for index, clip in enumerate(clips)],
     ])
-
 
 def _extract_clip_frames(uploads):
     cv2 = _optional_cv2()
@@ -740,7 +659,6 @@ def _extract_clip_frames(uploads):
                     pass
     return frames
 
-
 def _chat_completion(base_url, api_key, model_name, content):
     import requests
     response = requests.post(
@@ -759,7 +677,6 @@ def _chat_completion(base_url, api_key, model_name, content):
     response.raise_for_status()
     payload = response.json()
     return payload["choices"][0]["message"]["content"]
-
 
 def _available_model_names(base_url, api_key):
     import requests
@@ -785,7 +702,6 @@ def _available_model_names(base_url, api_key):
         names.append(model_id)
     return names
 
-
 def _message_content(prompt, frames):
     if not frames:
         return prompt
@@ -796,7 +712,6 @@ def _message_content(prompt, frames):
             "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
         })
     return content
-
 
 def _apply_section_analysis(how_text, results_text):
     if not how_text and not results_text:
@@ -815,6 +730,51 @@ def _apply_section_analysis(how_text, results_text):
     save_current_work()
     return True
 
+def analyze_video_evidence():
+    api_key = get_active_analysis_key()
+    clips = _active_video_clips()
+    bulk = _bulk_uploads()
+    uploads = []
+    for index, clip in enumerate(clips):
+        media = _effective_clip_file(index, bulk)
+        if media is not None:
+            uploads.append((index, clip, media))
+    has_notes = any(clip["notes"] or clip["findings"] for clip in clips)
+    if not uploads and not has_notes:
+        st.warning("أرفق مقطعاً أو دوّن مشاهدات الباحث قبل التحليل.")
+        return False
+    if not api_key:
+        st.error("لا يوجد مفتاح تحليل في حقل القائمة أو في الأسرار.")
+        return False
+    frames = _extract_clip_frames(uploads) if uploads else []
+    base_url = _analysis_base_url(api_key)
+    text_models = list(TEXT_MODEL_NAMES)
+    for model_name in _available_model_names(base_url, api_key):
+        if model_name not in text_models:
+            text_models.append(model_name)
+    attempts = []
+    if frames:
+        attempts.extend((model_name, True) for model_name in VISION_MODEL_NAMES)
+    attempts.extend((model_name, False) for model_name in text_models)
+    last_error = None
+    for model_name, use_frames in attempts:
+        try:
+            content = _message_content(
+                _analysis_prompt(clips, watched=bool(use_frames and frames)),
+                frames if use_frames else [],
+            )
+            raw = _chat_completion(base_url, api_key, model_name, content)
+            how_text, results_text = _sections_from_model_text(raw)
+            if not _apply_section_analysis(how_text, results_text):
+                last_error = RuntimeError(f"{model_name} بلا قسمين قابلين للإدراج")
+                continue
+            st.session_state.video_analysis_backend = "vision" if use_frames else "text"
+            st.toast("تم إدراج ناتج التحليل في حقلي الكيفية والنتائج", icon="🎥")
+            return True
+        except Exception as error:
+            last_error = error
+    st.error(f"تعذر التحليل: {_redact_secret(last_error, api_key)}")
+    return False
 
 def render_video_evidence_engine():
     with st.container(key="video-evidence"):
@@ -944,13 +904,12 @@ def render_video_evidence_engine():
         with btn_insert:
             if st.button("إدراج وتحديث فقرة القرائن", width="stretch"):
                 insert_manual_video_evidence()
-                st.toast("تم تحديث القرائن في الكيفية والنتائج والرأي", icon="🎥")
+                st.toast("تم تحديث القرائن في الكيفية والنتائج والرأي بين علامتي البداية والنهاية", icon="🎥")
         with btn_remove:
             if st.button("إزالة فقرات القرائن", width="stretch"):
                 remove_manual_video_evidence()
                 st.session_state.video_analysis_backend = ""
                 st.toast("تمت إزالة فقرات القرائن المرئية من الحقول الثلاثة", icon="ℹ️")
-
 
 def _reset_new_accident():
     if os.path.exists(DRAFT_FILE_PATH):
@@ -967,7 +926,6 @@ def _reset_new_accident():
     except OSError:
         pass
 
-
 _HIJRI_MONTH_LABELS = (
     "01 - محرم",
     "02 - صفر",
@@ -982,8 +940,7 @@ _HIJRI_MONTH_LABELS = (
     "11 - ذو القعدة",
     "12 - ذو الحجة",
 )
-_HIJRI_YEAR_LABELS = ("1446", "1447", "1448", "1449", "1450")
-
+_HIJRI_YEAR_LABELS = tuple(str(year) for year in range(1430, 1451))
 
 def _hijri_picker_state(value):
     parts = str(value).split("/")
@@ -998,6 +955,28 @@ def _hijri_picker_state(value):
         day = "01"
     return year, _HIJRI_MONTH_LABELS[int(month) - 1], f"{int(day):02d}"
 
+def _apply_manual_hijri_date():
+    raw = str(st.session_state.get("hijri_manual_date") or "").strip()
+    if not raw:
+        st.session_state.hijri_manual_error = ""
+        return
+    parts = raw.split("/")
+    valid = (
+        len(parts) == 3
+        and all(part.isdigit() for part in parts)
+        and len(parts[0]) == 4
+        and parts[0] in _HIJRI_YEAR_LABELS
+        and 1 <= int(parts[1]) <= 12
+        and 1 <= int(parts[2]) <= 30
+    )
+    if not valid:
+        st.session_state.hijri_manual_error = "الصيغة غير صحيحة. اكتب التاريخ هكذا: YYYY/MM/DD"
+        return
+    year, month, day = parts
+    st.session_state.hijri_date = f"{year}/{int(month):02d}/{int(day):02d}"
+    st.session_state.hijri_manual_date = st.session_state.hijri_date
+    st.session_state.hijri_parts_sync = True
+    st.session_state.hijri_manual_error = ""
 
 def _absorb_groq_env():
     if os.getenv("GROQ_API_KEY"):
@@ -1033,6 +1012,53 @@ def _absorb_groq_env():
                         os.environ["GROQ_API_KEY"] = value
                         return
 
+def _arabic_font(size):
+    for path in ARABIC_FONT_CANDIDATES:
+        if os.path.isfile(path):
+            try:
+                return ImageFont.truetype(path, size)
+            except OSError:
+                continue
+    return ImageFont.load_default()
+
+def get_base64_image(image_filename):
+    name = Path(str(image_filename or "")).name
+    if not name:
+        return ""
+    root = Path(__file__).resolve().parent
+    path = next((item for item in (root / name, root / "assets" / name) if item.is_file()), None)
+    if path is None:
+        return ""
+    mime = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(path.suffix.lower(), "")
+    if not mime:
+        return ""
+    try:
+        encoded = base64.b64encode(path.read_bytes()).decode("ascii")
+    except OSError:
+        return ""
+    return f"data:{mime};base64,{encoded}"
+
+def _signature_data_url(*names):
+    for name in names:
+        found = get_base64_image(name)
+        if found:
+            return found
+    return ""
+
+def _signature_box(sig_base64):
+    image_html = ""
+    if str(sig_base64 or "").startswith("data:image/"):
+        image_html = (
+            f'<img src="{sig_base64}" style="max-height: 42px; width: auto; display: block; margin: 4px auto;" '
+            "onerror=\"this.style.display='none'\">"
+        )
+    return (
+        '<div style="margin-top: 6px; min-height: 45px;">'
+        '<span style="font-weight: bold;">التوقيع:</span><br>'
+        f"{image_html}"
+        '<div style="border-bottom: 1px solid #111; height: 18px; margin: 4px 10px 0;"></div>'
+        "</div>"
+    )
 
 def _project_logo_path():
     root = Path(__file__).resolve().parent
@@ -1042,14 +1068,537 @@ def _project_logo_path():
             return candidate
     return None
 
+def _open_fixed_logo():
+    path = _project_logo_path()
+    if path is None:
+        return None
+    try:
+        return Image.open(path).convert("RGBA")
+    except OSError:
+        return None
+
+def _save_upload_once(uploaded):
+    try:
+        SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    raw = uploaded.getvalue()
+    digest = hashlib.sha256(raw).hexdigest()[:20]
+    ext = Path(getattr(uploaded, "name", "") or "").suffix.lower()
+    if ext not in {".png", ".jpg", ".jpeg", ".webp"}:
+        ext = ".jpg"
+    dest = SAVED_IMAGES_DIR / f"{digest}{ext}"
+    try:
+        if not dest.exists():
+            dest.write_bytes(raw)
+    except OSError:
+        return dest
+    return dest
+
+def persist_uploads(uploads):
+    if not uploads:
+        return []
+    return [_save_upload_once(item) for item in uploads]
+
+def list_saved_images():
+    if not SAVED_IMAGES_DIR.exists():
+        return []
+    files = [
+        path for path in SAVED_IMAGES_DIR.iterdir()
+        if path.suffix.lower() in {".png", ".jpg", ".jpeg", ".webp"}
+    ]
+    return sorted(files, key=lambda path: path.stat().st_mtime)
+
+def _parse_model_json(text):
+    cleaned = (text or "").strip()
+    if cleaned.startswith("```"):
+        cleaned = cleaned.split("\n", 1)[-1]
+        cleaned = cleaned.rsplit("```", 1)[0]
+    start = cleaned.find("{")
+    end = cleaned.rfind("}")
+    if start >= 0 and end > start:
+        cleaned = cleaned[start:end + 1]
+    data = json.loads(cleaned)
+    if not isinstance(data, dict):
+        raise ValueError("not an object")
+    return data
+
+def _groq_vision(api_key, image_paths):
+    import urllib.request
+    prompt = (
+        "أنت خبير تحقيق حوادث مرورية في الأمن العام السعودي. "
+        "حلّل صور الحادث وأعد JSON فقط دون شرح. "
+        "scenario يجب أن تكون واحدة من هذه القيم حرفياً: "
+        "تجاوز واصطدام أمامي بزاوية | استدارة يوتيرن واصطدام جانبي | تصادم خلفي | تصادم تقاطع | "
+        "انحراف واصطدام بجسم ثابت | انقلاب | دهس. "
+        "road_type واحد من: مزدوج بجزيرة وسطية | مفرد مسارين | تقاطع | جبلي. "
+        "lane_direction: يمين أو يسار لمسار الطرف الأول. "
+        "vehicle1_type و vehicle1_color و vehicle2_type و vehicle2_color والألوان بصيغة #hex. "
+        "collision_angle رقم من 20 إلى 70، و skid_length رقم من 40 إلى 220. "
+        "how_it_happened صياغة عربية رسمية لكيفية الوقوع. "
+        "keys أربع عبارات عربية لمفاتيح الكروكي. "
+        "date_text و coordinates_text هما نص ختم الكاميرا أسفل الصورة (التاريخ والإحداثيات)، "
+        "و camera_timestamp النص الكامل لذلك الختم، واتركها فارغة إن لم تُقرأ."
+    )
+    parts = [{"type": "text", "text": prompt}]
+    for path in image_paths:
+        image = Image.open(path)
+        image.thumbnail((1280, 1280))
+        buffer = io.BytesIO()
+        image.convert("RGB").save(buffer, format="JPEG", quality=85)
+        encoded = base64.b64encode(buffer.getvalue()).decode()
+        parts.append({
+            "type": "image_url",
+            "image_url": {"url": f"data:image/jpeg;base64,{encoded}"},
+        })
+    last_error = None
+    for model in GROQ_VISION_MODELS:
+        payload = json.dumps({
+            "model": model,
+            "temperature": 0.2,
+            "messages": [{"role": "user", "content": parts}],
+        }).encode()
+        request = urllib.request.Request(
+            "https://api.groq.com/openai/v1/chat/completions",
+            data=payload,
+            headers={
+                "Content-Type": "application/json",
+                "Authorization": f"Bearer {api_key}",
+            },
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=90) as response:
+                body = json.loads(response.read().decode())
+            content = body["choices"][0]["message"]["content"]
+            return _parse_model_json(content)
+        except Exception:
+            last_error = "vision"
+            continue
+    raise RuntimeError(last_error or "vision")
+
+def _lerp(a, b, t):
+    return (a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t)
+
+def _badge(draw, xy, number, font):
+    draw.ellipse([xy[0], xy[1], xy[0] + 30, xy[1] + 30], fill="white", outline="#9b2226", width=3)
+    draw.text((xy[0] + 9, xy[1] + 4), str(number), fill="#9b2226", font=font)
+
+SKETCH_SCENARIOS = (
+    "تجاوز واصطدام أمامي بزاوية",
+    "استدارة يوتيرن واصطدام جانبي",
+    "تصادم خلفي",
+    "تصادم تقاطع",
+    "انحراف واصطدام بجسم ثابت",
+    "انقلاب",
+    "دهس",
+)
+_COLOR_NAMES = {
+    "أبيض": "#ffffff", "white": "#ffffff",
+    "زيتوني": "#556b2f", "olive": "#556b2f",
+    "أسود": "#222222", "اسود": "#222222", "black": "#222222",
+    "أحمر": "#c1121f", "احمر": "#c1121f", "red": "#c1121f",
+    "أزرق": "#1d4e89", "ازرق": "#1d4e89", "blue": "#1d4e89",
+    "فضي": "#adb5bd", "رمادي": "#6c757d", "silver": "#adb5bd", "gray": "#6c757d",
+    "أخضر": "#2d6a4f", "اخضر": "#2d6a4f", "green": "#2d6a4f",
+    "بيج": "#d4a373", "بني": "#6f4e37", "برتقالي": "#e76f51", "أصفر": "#ffd60a", "اصفر": "#ffd60a",
+}
+
+def _match_scenario(value):
+    text = str(value or "").strip()
+    for name in SKETCH_SCENARIOS:
+        if text == name or name in text or text in name:
+            return name
+    hints = (
+        ("يوتيرن", SKETCH_SCENARIOS[1]),
+        ("جانبي", SKETCH_SCENARIOS[1]),
+        ("خلفي", SKETCH_SCENARIOS[2]),
+        ("تقاطع", SKETCH_SCENARIOS[3]),
+        ("جسم", SKETCH_SCENARIOS[4]),
+        ("انحراف", SKETCH_SCENARIOS[4]),
+        ("انقلاب", SKETCH_SCENARIOS[5]),
+        ("دهس", SKETCH_SCENARIOS[6]),
+        ("أمامي", SKETCH_SCENARIOS[0]),
+        ("تجاوز", SKETCH_SCENARIOS[0]),
+    )
+    for hint, name in hints:
+        if hint in text:
+            return name
+    return None
+
+def _paint(color, fallback):
+    text = str(color or "").strip()
+    if text.startswith("#") and len(text) in (4, 7):
+        return text
+    return _COLOR_NAMES.get(text, fallback)
+
+def _text_fill(color):
+    raw = str(color or "").lstrip("#")
+    if len(raw) == 3:
+        raw = "".join(ch * 2 for ch in raw)
+    try:
+        red, green, blue = int(raw[0:2], 16), int(raw[2:4], 16), int(raw[4:6], 16)
+    except (ValueError, IndexError):
+        return "white"
+    return "#111111" if (red * 0.3 + green * 0.59 + blue * 0.11) > 165 else "white"
+
+def _lane_is_left(lane_direction):
+    text = str(lane_direction or "")
+    return "يسر" in text or text.lower() in {"left", "l"}
+
+def _clamp_number(value, low, high, fallback):
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return fallback
+    return max(low, min(high, number))
+
+def _vehicle_field(data, index, field, fallback):
+    direct = data.get(f"vehicle{index}_{field}") or data.get(f"car{index}_{field}")
+    if direct:
+        return str(direct)
+    vehicles = data.get("vehicles") or []
+    if index - 1 < len(vehicles) and isinstance(vehicles[index - 1], dict):
+        item = vehicles[index - 1]
+        if field == "type":
+            return str(item.get("type") or item.get("name") or fallback)
+        return str(item.get("color") or fallback)
+    return fallback
+
+def _store_analysis(data, road_name):
+    st.session_state.ai_sketch = data
+    scenario = _match_scenario(data.get("scenario") or data.get("collision_type"))
+    if scenario:
+        st.session_state.sketch_scenario = scenario
+    if data.get("road_type"):
+        st.session_state.sketch_road_type = str(data.get("road_type"))
+    lane = str(data.get("lane_direction") or data.get("lane") or "")
+    if "يسر" in lane or lane.lower() == "left":
+        st.session_state.sketch_lane = "يسار"
+    elif "يمن" in lane or lane.lower() == "right":
+        st.session_state.sketch_lane = "يمين"
+    st.session_state.sketch_v1_type = _vehicle_field(data, 1, "type", st.session_state.get("sketch_v1_type", "نيسان باترول"))
+    st.session_state.sketch_v1_color = _paint(
+        _vehicle_field(data, 1, "color", st.session_state.get("sketch_v1_color", "#556b2f")),
+        "#556b2f",
+    )
+    st.session_state.sketch_v2_type = _vehicle_field(data, 2, "type", st.session_state.get("sketch_v2_type", "تويوتا هايلكس"))
+    st.session_state.sketch_v2_color = _paint(
+        _vehicle_field(data, 2, "color", st.session_state.get("sketch_v2_color", "#ffffff")),
+        "#ffffff",
+    )
+    if data.get("collision_angle") is not None:
+        st.session_state.collision_angle = int(_clamp_number(data.get("collision_angle"), 20, 70, 45))
+    if data.get("skid_length") is not None:
+        st.session_state.sketch_skid_length = int(_clamp_number(data.get("skid_length"), 40, 220, 140))
+    st.session_state.sketch_swapped = False
+    keys = data.get("keys") if isinstance(data.get("keys"), list) else []
+    lane_label = st.session_state.get("sketch_lane", "يسار")
+    fallbacks = [
+        f"1 - {data.get('road_type') or road_name}",
+        f"2 - {st.session_state.sketch_v1_type} في المسار {lane_label}",
+        f"3 - {scenario or data.get('collision_point') or 'نقطة الاصطدام'}",
+        "4 - آثار الكبح والفرامل",
+    ]
+    for index in range(4):
+        text = str(keys[index]).strip() if index < len(keys) and str(keys[index]).strip() else fallbacks[index]
+        if not text.startswith(f"{index + 1}"):
+            text = f"{index + 1} - {text}"
+        st.session_state[f"legend_key_{index + 1}"] = text
+    how = str(data.get("how_it_happened") or "").strip()
+    date_text = str(data.get("date_text") or "").strip()
+    coordinates = str(data.get("coordinates_text") or "").strip()
+    timestamp = str(data.get("camera_timestamp") or "").strip()
+    if not date_text and timestamp:
+        date_text = timestamp
+    extras = []
+    if date_text:
+        extras.append(f"التاريخ المقروء أسفل الصورة: {date_text}")
+        st.session_state.acc_date_override = date_text
+    if coordinates:
+        extras.append(f"الإحداثيات المقروءة أسفل الصورة: {coordinates}")
+        st.session_state.acc_loc_override = coordinates
+    articles = data.get("traffic_law_articles") or []
+    if articles:
+        extras.append("مواد نظام المرور: " + "، ".join(str(item) for item in articles))
+    narrative = "\n".join(part for part in [how, *extras] if part)
+    if narrative:
+        st.session_state.acc_how_override = narrative
+
+def _car_sprite(label, color, kind_name):
+    text = str(kind_name or "")
+    pickup = any(word in text for word in ("هايل", "وانيت", "غمار", "بيك", "داتسن"))
+    suv = any(word in text for word in ("باترول", "رباعي", "جيب"))
+    sprite = Image.new("RGBA", (96, 158), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(sprite)
+    pen.rounded_rectangle([18, 8, 78, 148], radius=12, fill=color, outline="#222222", width=2)
+    pen.polygon([(26, 16), (70, 16), (64, 42), (32, 42)], fill="#d7ecf5", outline="#243028")
+    if pickup:
+        pen.rectangle([24, 102, 72, 140], fill="#d7ecf5", outline="#333333")
+        if "هايل" in text:
+            pen.rectangle([18, 48, 26, 140], fill="#d00000")
+            pen.rectangle([70, 48, 78, 140], fill="#d00000")
+    if suv:
+        pen.ellipse([36, 116, 60, 142], fill="#111111")
+    for tire in ((2, 24), (78, 24), (2, 108), (78, 108)):
+        pen.rounded_rectangle([tire[0], tire[1], tire[0] + 16, tire[1] + 30], radius=3, fill="#111111")
+    pen.text((22, 62), str(label)[:8], fill=_text_fill(color), font=_arabic_font(14))
+    return sprite
+
+def _rolled_sprite(label, color):
+    sprite = Image.new("RGBA", (176, 84), (0, 0, 0, 0))
+    pen = ImageDraw.Draw(sprite)
+    pen.rounded_rectangle([8, 34, 166, 76], radius=12, fill=color, outline="#222222", width=2)
+    for x in (22, 58, 100, 136):
+        pen.ellipse([x, 6, x + 24, 30], fill="#111111", outline="#333333")
+    pen.text((48, 46), str(label)[:8], fill=_text_fill(color), font=_arabic_font(14))
+    return sprite
+
+def _road_x(y, frac):
+    t = min(1.0, max(0.0, (y - 36) / (830 - 36)))
+    left = 250 + (130 - 250) * t
+    right = 470 + (590 - 470) * t
+    return left + (right - left) * frac
+
+def _rotated_anchor(size, anchor, angle):
+    layer = Image.new("RGBA", size, (0, 0, 0, 0))
+    mark = ImageDraw.Draw(layer)
+    x, y = anchor
+    mark.ellipse([x - 3, y - 3, x + 3, y + 3], fill=(255, 0, 0, 255))
+    turned = layer.rotate(angle, expand=True, resample=Image.Resampling.BICUBIC)
+    width, height = turned.size
+    total_x = total_y = count = 0
+    for index, pixel in enumerate(turned.getdata()):
+        if pixel[0] > 200 and pixel[3] > 120 and pixel[1] < 90:
+            total_x += index % width
+            total_y += index // width
+            count += 1
+    if not count:
+        return turned.size, (width / 2, height / 2)
+    return turned.size, (total_x / count, total_y / count)
+
+def _place_front(base, sprite, front_xy, rotation):
+    rotation = float(rotation or 0)
+    anchor = (sprite.size[0] / 2, 14)
+    if abs(rotation) < 0.1:
+        base.paste(sprite, (int(front_xy[0] - anchor[0]), int(front_xy[1] - anchor[1])), sprite)
+        return
+    _, (ax, ay) = _rotated_anchor(sprite.size, anchor, rotation)
+    turned = sprite.rotate(rotation, expand=True, resample=Image.Resampling.BICUBIC)
+    base.paste(turned, (int(front_xy[0] - ax), int(front_xy[1] - ay)), turned)
+
+def _impact(draw, x, y, radius=68):
+    box = [x - radius, y - radius, x + radius, y + radius]
+    for start in range(0, 360, 28):
+        draw.arc(box, start, start + 16, fill="#d00000", width=4)
+    for dx, dy, color in (
+        (-16, 6, "#adb5bd"), (8, 14, "#f8f9fa"), (18, -4, "#4cc9f0"),
+        (-6, 22, "#6c757d"), (16, 24, "#dee2e6"), (-22, 18, "#90e0ef"),
+    ):
+        draw.ellipse([x + dx, y + dy, x + dx + 8, y + dy + 8], fill=color, outline="#495057")
+
+def _skid(draw, x, y, length, dx=0):
+    end_y = min(820, y + length)
+    draw.line([(x, y), (x + dx, end_y)], fill="#111111", width=5)
+    draw.line([(x + 34, y), (x + 34 + dx, end_y)], fill="#111111", width=5)
+
+def _compass(draw, font):
+    draw.rectangle([600, 28, 690, 112], fill="white", outline="#1b4332", width=2)
+    draw.polygon([(645, 36), (630, 68), (660, 68)], fill="#1b4332")
+    draw.text((620, 74), "شمال", fill="#1b4332", font=font)
+
+def _person(draw, x, y):
+    draw.ellipse([x - 9, y - 30, x + 9, y - 12], fill="#f4a261", outline="#222222", width=2)
+    draw.line([(x, y - 12), (x, y + 16)], fill="#222222", width=4)
+    draw.line([(x - 14, y), (x + 14, y)], fill="#222222", width=4)
+    draw.line([(x, y + 16), (x - 12, y + 38)], fill="#222222", width=4)
+    draw.line([(x, y + 16), (x + 12, y + 38)], fill="#222222", width=4)
+
+def _open_board(road_type):
+    mountainous = "جبل" in str(road_type)
+    img = Image.new("RGB", (720, 860), "#d8f3dc" if mountainous else "#e9ecef")
+    draw = ImageDraw.Draw(img)
+    if mountainous:
+        draw.polygon([(0, 0), (210, 0), (150, 210), (0, 300)], fill="#1b4332")
+        draw.polygon([(0, 180), (170, 250), (80, 520), (0, 600)], fill="#2d6a4f")
+        draw.polygon([(0, 480), (150, 620), (40, 860), (0, 860)], fill="#40916c")
+        draw.polygon([(720, 0), (500, 0), (560, 230), (720, 340)], fill="#1b4332")
+        draw.polygon([(720, 200), (540, 280), (620, 560), (720, 640)], fill="#2d6a4f")
+        draw.polygon([(720, 500), (560, 640), (680, 860), (720, 860)], fill="#40916c")
+    else:
+        draw.rectangle([0, 0, 720, 860], fill="#c7d0c3")
+    return img, draw
+
+def _straight_road(draw, road_type):
+    draw.polygon([(250, 36), (470, 36), (590, 830), (130, 830)], fill="#3a3f45")
+    left_top, left_bottom = (250, 36), (130, 830)
+    right_top, right_bottom = (470, 36), (590, 830)
+    draw.line([_lerp(left_top, left_bottom, 0.02), _lerp(left_top, left_bottom, 0.98)], fill="#ffd60a", width=5)
+    draw.line([_lerp(right_top, right_bottom, 0.02), _lerp(right_top, right_bottom, 0.98)], fill="#ffd60a", width=5)
+    median = "جزيرة" in str(road_type) or "مزدوج" in str(road_type)
+    if median:
+        island = [
+            _lerp(left_top, right_top, 0.42), _lerp(left_top, right_top, 0.58),
+            _lerp(left_bottom, right_bottom, 0.58), _lerp(left_bottom, right_bottom, 0.42),
+        ]
+        draw.polygon(island, fill="#2d6a4f")
+        for frac in (0.40, 0.60):
+            draw.line([_lerp(left_top, right_top, frac), _lerp(left_bottom, right_bottom, frac)], fill="white", width=4)
+    else:
+        for frac in (0.47, 0.53):
+            draw.line([_lerp(left_top, right_top, frac), _lerp(left_bottom, right_bottom, frac)], fill="white", width=4)
+
+def _cross_road(draw):
+    draw.rectangle([210, 20, 510, 840], fill="#3a3f45")
+    draw.rectangle([20, 330, 700, 530], fill="#3a3f45")
+    draw.rectangle([214, 20, 228, 330], fill="#ffd60a")
+    draw.rectangle([492, 20, 506, 330], fill="#ffd60a")
+    draw.rectangle([214, 530, 228, 840], fill="#ffd60a")
+    draw.rectangle([492, 530, 506, 840], fill="#ffd60a")
+    draw.rectangle([20, 334, 210, 348], fill="#ffd60a")
+    draw.rectangle([510, 334, 700, 348], fill="#ffd60a")
+    draw.rectangle([20, 512, 210, 526], fill="#ffd60a")
+    draw.rectangle([510, 512, 700, 526], fill="#ffd60a")
+    for x in range(250, 470, 28):
+        draw.line([(x, 40), (x + 14, 40)], fill="white", width=3)
+        draw.line([(x, 820), (x + 14, 820)], fill="white", width=3)
+    for y in range(360, 510, 28):
+        draw.line([(40, y), (40, y + 14)], fill="white", width=3)
+        draw.line([(680, y), (680, y + 14)], fill="white", width=3)
+
+def _lane_x(y, left_lane, primary):
+    if left_lane:
+        frac = 0.27 if primary else 0.73
+    else:
+        frac = 0.73 if primary else 0.27
+    return _road_x(y, frac)
+
+def generate_ai_vision_sketch(
+    scenario,
+    road_type,
+    lane_direction,
+    vehicle1_type,
+    vehicle1_color,
+    vehicle2_type,
+    vehicle2_color,
+    collision_angle,
+    skid_length,
+):
+    font = _arabic_font(18)
+    name = _match_scenario(scenario) or SKETCH_SCENARIOS[0]
+    angle = _clamp_number(collision_angle, 15, 80, 45)
+    skid = _clamp_number(skid_length, 40, 220, 140)
+    left_lane = _lane_is_left(lane_direction)
+    color1 = _paint(vehicle1_color, "#556b2f")
+    color2 = _paint(vehicle2_color, "#ffffff")
+    car1 = _car_sprite(vehicle1_type, color1, vehicle1_type)
+    car2 = _car_sprite(vehicle2_type, color2, vehicle2_type)
+    img, draw = _open_board(road_type)
+    if name == "تصادم تقاطع":
+        _cross_road(draw)
+        contact = (360, 430)
+        _place_front(img, car1, (contact[0] - 70, contact[1] + 20), 0)
+        side = -90 if left_lane else 90
+        _place_front(img, car2, (contact[0] + (80 if left_lane else -80), contact[1]), side + (angle - 45) * 0.3)
+        _skid(draw, contact[0] - 88, contact[1] + 150, skid, -8)
+        _impact(draw, contact[0], contact[1])
+        _badge(draw, (250, 80), 1, font)
+        _badge(draw, (250, 620), 2, font)
+        _badge(draw, (430, 360), 3, font)
+        _badge(draw, (250, 740), 4, font)
+    else:
+        _straight_road(draw, road_type)
+        if name == "استدارة يوتيرن واصطدام جانبي":
+            contact_y = 470
+            contact_x = _lane_x(contact_y, left_lane, True)
+            turn = (70 + (angle - 45)) if left_lane else -(70 + (angle - 45))
+            _place_front(img, car2, (contact_x, contact_y - 10), turn)
+            _place_front(img, car1, (contact_x, contact_y + 78), 0)
+            arc_box = [contact_x - 40, 180, contact_x + 220, 460] if left_lane else [contact_x - 220, 180, contact_x + 40, 460]
+            draw.arc(arc_box, 200 if left_lane else 20, 330 if left_lane else 150, fill="#f4a261", width=5)
+            _skid(draw, contact_x - 18, contact_y + 200, skid)
+            _impact(draw, contact_x, contact_y + 20, 60)
+            _badge(draw, (int(_road_x(100, 0.2)), 80), 1, font)
+            _badge(draw, (int(contact_x - 70), contact_y + 120), 2, font)
+            _badge(draw, (int(contact_x + 50), contact_y - 40), 3, font)
+            _badge(draw, (int(contact_x - 20), min(790, contact_y + 200 + skid * 0.4)), 4, font)
+        elif name == "تصادم خلفي":
+            lane_x = _lane_x(420, left_lane, True)
+            _place_front(img, car2, (lane_x, 300), 0)
+            _place_front(img, car1, (lane_x, 470), (angle - 45) * 0.15)
+            _skid(draw, lane_x - 18, 610, skid)
+            _impact(draw, lane_x, 455, 48)
+            _badge(draw, (int(_road_x(90, 0.18)), 70), 1, font)
+            _badge(draw, (int(lane_x + 60), 330), 2, font)
+            _badge(draw, (int(lane_x - 80), 430), 3, font)
+            _badge(draw, (int(lane_x + 50), min(790, 640 + skid * 0.35)), 4, font)
+        elif name == "انحراف واصطدام بجسم ثابت":
+            contact_y = 430
+            contact_x = _road_x(contact_y, 0.08 if left_lane else 0.92)
+            barrier = (int(contact_x - 30), contact_y - 20)
+            draw.rectangle([barrier[0], barrier[1], barrier[0] + 42, barrier[1] + 86], fill="#6c757d", outline="#222222", width=2)
+            draw.line([(barrier[0] + 6, barrier[1] + 10), (barrier[0] + 36, barrier[1] + 74)], fill="#ffd60a", width=4)
+            draw.line([(barrier[0] + 36, barrier[1] + 10), (barrier[0] + 6, barrier[1] + 74)], fill="#ffd60a", width=4)
+            yaw = -angle if left_lane else angle
+            _place_front(img, car1, (contact_x + (20 if left_lane else -20), contact_y + 30), yaw)
+            other_x = _lane_x(260, left_lane, False)
+            _place_front(img, car2, (other_x, 230), 180)
+            _skid(draw, _lane_x(560, left_lane, True), 560, skid, -40 if left_lane else 40)
+            _impact(draw, contact_x, contact_y + 10, 54)
+            _badge(draw, (int(_road_x(90, 0.2)), 70), 1, font)
+            _badge(draw, (int(other_x - 40), 250), 2, font)
+            _badge(draw, (barrier[0] - 10, barrier[1] + 90), 3, font)
+            _badge(draw, (int(_lane_x(700, left_lane, True)), 730), 4, font)
+        elif name == "انقلاب":
+            lane_x = _lane_x(480, left_lane, True)
+            rolled = _rolled_sprite(vehicle1_type, color1)
+            img.paste(rolled, (int(lane_x - 90), 390), rolled)
+            other_x = _lane_x(300, left_lane, False)
+            _place_front(img, car2, (other_x, 260), 180)
+            _skid(draw, lane_x - 10, 500, skid, 20 if left_lane else -20)
+            _impact(draw, lane_x, 430, 58)
+            _badge(draw, (int(_road_x(90, 0.18)), 70), 1, font)
+            _badge(draw, (int(other_x + 40), 280), 2, font)
+            _badge(draw, (int(lane_x + 70), 400), 3, font)
+            _badge(draw, (int(lane_x - 50), min(790, 560 + skid * 0.3)), 4, font)
+        elif name == "دهس":
+            lane_x = _lane_x(430, left_lane, True)
+            zebra_y = 390
+            x0 = _road_x(zebra_y, 0.08)
+            x1 = _road_x(zebra_y, 0.92)
+            step = x0
+            while step < x1:
+                draw.rectangle([step, zebra_y, step + 16, zebra_y + 46], fill="white")
+                step += 30
+            _person(draw, lane_x, zebra_y + 8)
+            _place_front(img, car1, (lane_x, zebra_y + 70), 0)
+            shoulder_x = _road_x(260, 0.04 if left_lane else 0.96)
+            _place_front(img, car2, (shoulder_x, 240), 90 if left_lane else -90)
+            _skid(draw, lane_x - 16, zebra_y + 200, skid)
+            _impact(draw, lane_x, zebra_y + 16, 46)
+            _badge(draw, (int(_road_x(90, 0.18)), 70), 1, font)
+            _badge(draw, (int(lane_x + 56), zebra_y + 90), 2, font)
+            _badge(draw, (int(lane_x - 70), zebra_y - 10), 3, font)
+            _badge(draw, (int(lane_x + 40), min(790, zebra_y + 230 + skid * 0.25)), 4, font)
+        else:
+            contact_y = 450
+            contact_x = _lane_x(contact_y, left_lane, True)
+            _place_front(img, car1, (contact_x, contact_y), 0)
+            yaw = -(180 - angle) if left_lane else (180 - angle)
+            _place_front(img, car2, (contact_x, contact_y - 6), yaw)
+            _skid(draw, contact_x - 18, contact_y + 150, skid)
+            _impact(draw, contact_x, contact_y)
+            _badge(draw, (int(_road_x(90, 0.18)), 70), 1, font)
+            _badge(draw, (int(contact_x - 70), contact_y + 80), 2, font)
+            _badge(draw, (int(contact_x + 46), contact_y - 36), 3, font)
+            _badge(draw, (int(contact_x + 10), min(790, contact_y + 170 + skid * 0.25)), 4, font)
+    _compass(draw, font)
+    return img.convert("RGB")
 
 _absorb_groq_env()
 try:
     SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 except OSError:
     pass
-
-
 def _find_bayyinah_logo():
     folder = Path(__file__).resolve().parent
     for name in ("bayyinah_logo.jpg", "bayyinah_logo.png"):
@@ -1064,13 +1613,10 @@ def _find_bayyinah_logo():
         return candidate
     return None
 
-
 _bayyinah_logo_path = _find_bayyinah_logo()
-
 
 def _bayyinah_logo_ready():
     return _bayyinah_logo_path is not None
-
 
 _ui_icon_path = Path(__file__).resolve().parent / "bayyinah_logo.jpg"
 _page_icon = "🚨"
@@ -1079,14 +1625,12 @@ if _ui_icon_path.is_file():
         _page_icon = Image.open(_ui_icon_path)
     except OSError:
         _page_icon = str(_ui_icon_path)
-
 st.set_page_config(
     page_title="منظومة بينة الذكي للحوادث المرورية",
     page_icon=_page_icon,
     layout="wide",
-    initial_sidebar_state="expanded",
+    initial_sidebar_state="expanded"
 )
-
 st.components.v1.html(
     """
 <script>
@@ -1122,12 +1666,10 @@ st.components.v1.html(
     """,
     height=0,
 )
-
 if _bayyinah_logo_ready():
     st.logo(str(_bayyinah_logo_path), icon_image=str(_bayyinah_logo_path), size="large")
-
-st.markdown(
-    """
+# تنسيق واجهة البرنامج باللون الأخضر الرسمي
+st.markdown("""
 <style>
     @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
     html, body, [class*="css"] {
@@ -1209,6 +1751,8 @@ st.markdown(
         border-radius: 50%;
         object-fit: cover;
     }
+    .logo-fallback { display: none; font-weight: 700; line-height: 1.25; }
+    .bayyinah-logo-ring.show-fallback .logo-fallback { display: block; }
     .bh-word {
         color: #ffffff;
         font-size: 34px;
@@ -1239,6 +1783,15 @@ st.markdown(
     [data-testid="stTextArea"] [data-baseweb="base-input"],
     [data-testid="stSelectbox"] [data-baseweb="select"] > div,
     [data-testid="stMultiSelect"] [data-baseweb="select"] > div,
+    [data-testid="stDateInput"] [data-baseweb="select"] > div,
+    [data-testid="stTimeInput"] [data-baseweb="select"] > div,
+    [data-testid="stTextInputRootElement"],
+    [data-testid="stTextAreaRootElement"],
+    [data-testid="stNumberInputContainer"],
+    [data-testid="stSelectbox"] .react-aria-ComboBox > div,
+    [data-testid="stMultiSelect"] .react-aria-ComboBox > div,
+    [data-testid="stSelectboxVirtualDropdown"],
+    [data-testid="stMultiSelectVirtualDropdown"],
     [data-testid="stFileUploaderDropzone"] {
         background: linear-gradient(180deg, #1b6cb8 0%, #14508f 100%) !important;
         color: #f7fcff !important;
@@ -1246,9 +1799,17 @@ st.markdown(
         border-radius: 10px !important;
         box-shadow: 0 0 14px rgba(0, 229, 255, 0.34), inset 0 0 10px rgba(0, 242, 254, 0.12) !important;
     }
+    [data-testid="stRadioOption"] {
+        background: linear-gradient(180deg, rgba(27, 108, 184, 0.72), rgba(20, 80, 143, 0.72)) !important;
+        border: 1px solid #7ad7ff !important;
+        border-radius: 10px !important;
+        padding: 4px 10px !important;
+    }
     [data-testid="stTextInput"] input,
     [data-testid="stTextArea"] textarea,
     [data-testid="stNumberInput"] input,
+    [data-testid="stDateInput"] input,
+    [data-testid="stTimeInput"] input,
     [data-testid="stSelectbox"] input,
     [data-testid="stMultiSelect"] input {
         background: transparent !important;
@@ -1257,6 +1818,117 @@ st.markdown(
         caret-color: #00f2fe !important;
         border: 0 !important;
         box-shadow: none !important;
+    }
+    [data-testid="stTextInput"] input::placeholder,
+    [data-testid="stTextArea"] textarea::placeholder,
+    [data-testid="stNumberInput"] input::placeholder,
+    [data-testid="stSelectbox"] input::placeholder,
+    [data-testid="stMultiSelect"] input::placeholder {
+        color: #d7f3ff !important;
+        -webkit-text-fill-color: #d7f3ff !important;
+        opacity: 1 !important;
+    }
+    [data-testid="stTextInput"] input:-webkit-autofill,
+    [data-testid="stTextArea"] textarea:-webkit-autofill,
+    [data-testid="stNumberInput"] input:-webkit-autofill {
+        -webkit-box-shadow: 0 0 0 1000px #14508f inset !important;
+        -webkit-text-fill-color: #f7fcff !important;
+    }
+    [data-testid="stTextInput"] [data-baseweb="input"]:focus-within,
+    [data-testid="stNumberInput"] [data-baseweb="input"]:focus-within,
+    [data-testid="stDateInput"] [data-baseweb="input"]:focus-within,
+    [data-testid="stTextArea"] [data-baseweb="textarea"]:focus-within,
+    [data-testid="stSelectbox"] [data-baseweb="select"] > div:focus-within,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] > div:focus-within {
+        border-color: #00f2fe !important;
+        box-shadow: 0 0 18px rgba(0, 242, 254, 0.62) !important;
+    }
+    [data-testid="stSelectbox"] [data-baseweb="select"] span,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] span,
+    [data-testid="stSelectbox"] [data-baseweb="select"] div,
+    [data-testid="stMultiSelect"] [data-baseweb="select"] div {
+        color: #f7fcff !important;
+    }
+    [data-testid="stMultiSelect"] [data-baseweb="tag"],
+    [data-testid="stMultiSelect"] [data-baseweb="tag"] span {
+        color: #071422 !important;
+    }
+    [data-testid="stSelectbox"] svg,
+    [data-testid="stMultiSelect"] svg,
+    [data-testid="stDateInput"] svg,
+    [data-testid="stNumberInput"] svg {
+        fill: #00f2fe !important;
+    }
+    [data-testid="stNumberInput"] button {
+        background: #1d6ec4 !important;
+        color: #f7fcff !important;
+        border: 1px solid #7ad7ff !important;
+    }
+    [data-baseweb="tag"] {
+        background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
+        color: #071422 !important;
+        border: 0 !important;
+        border-radius: 8px !important;
+    }
+    [data-baseweb="tag"] span,
+    [data-baseweb="tag"] svg {
+        color: #071422 !important;
+        fill: #071422 !important;
+    }
+    [data-baseweb="popover"],
+    [data-baseweb="menu"],
+    [data-baseweb="calendar"],
+    [data-baseweb="datepicker"],
+    ul[role="listbox"] {
+        background: #0f4f92 !important;
+        color: #f7fcff !important;
+        border: 1px solid #7ad7ff !important;
+        border-radius: 10px !important;
+        box-shadow: 0 0 18px rgba(0, 229, 255, 0.35) !important;
+    }
+    [role="option"] {
+        background: #1460a8 !important;
+        color: #f7fcff !important;
+    }
+    [role="option"] * {
+        color: #f7fcff !important;
+    }
+    [role="option"]:hover,
+    [role="option"][aria-selected="true"] {
+        background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
+    }
+    [role="option"]:hover *,
+    [role="option"][aria-selected="true"] * {
+        color: #071422 !important;
+    }
+    [data-testid="stRadio"] [role="radiogroup"] label,
+    [data-testid="stCheckbox"] label {
+        background: linear-gradient(180deg, rgba(27, 108, 184, 0.55), rgba(20, 80, 143, 0.55));
+        border: 1px solid rgba(122, 215, 255, 0.7);
+        border-radius: 10px;
+        padding: 4px 10px;
+    }
+    [data-testid="stFileUploader"] section,
+    [data-testid="stFileUploaderDropzone"] {
+        background: linear-gradient(180deg, #1b6cb8 0%, #14508f 100%) !important;
+        border: 1px dashed #7ad7ff !important;
+        color: #f7fcff !important;
+    }
+    [data-testid="stFileUploader"] section small,
+    [data-testid="stFileUploader"] span,
+    [data-testid="stFileUploader"] p {
+        color: #e7f6ff !important;
+    }
+    [data-testid="stSlider"] [role="slider"] {
+        background: #00f2fe !important;
+        box-shadow: 0 0 10px rgba(0, 242, 254, 0.8) !important;
+    }
+    .stTabs [data-baseweb="tab-list"],
+    .stTabs [role="tablist"] {
+        gap: 8px;
+        background: transparent;
+        flex-wrap: wrap !important;
+        overflow: visible !important;
     }
     .stTabs [data-baseweb="tab"],
     .stTabs [data-testid="stTab"] {
@@ -1268,6 +1940,14 @@ st.markdown(
         border: 1px solid rgba(0, 242, 254, 0.45) !important;
         box-shadow: 0 0 10px rgba(79, 172, 254, 0.28);
     }
+    .stTabs [data-testid="stTab"]:hover {
+        background: #1d4f86 !important;
+        color: #ffffff !important;
+        box-shadow: 0 0 18px rgba(0, 242, 254, 0.7);
+    }
+    .stTabs [data-testid="stTab"]:hover {
+        transform: scale(1.04);
+    }
     .stTabs [aria-selected="true"],
     .stTabs [data-testid="stTab"][aria-selected="true"] {
         background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
@@ -1276,6 +1956,25 @@ st.markdown(
         border-color: #00f2fe !important;
         box-shadow: 0 0 18px rgba(0, 242, 254, 0.8);
     }
+    .stTabs [aria-selected="true"] p,
+    .stTabs [aria-selected="true"] span,
+    .stTabs [aria-selected="true"] div {
+        color: #0a192f !important;
+        font-weight: 700 !important;
+    }
+    .stTabs [data-testid="stTab"]:not([aria-selected="true"]):hover p,
+    .stTabs [data-testid="stTab"]:not([aria-selected="true"]):hover span {
+        color: #ffffff !important;
+        font-weight: 700 !important;
+    }
+    .stTabs [data-testid="stTab"]:not([aria-selected="true"]) p,
+    .stTabs [data-testid="stTab"]:not([aria-selected="true"]) span,
+    .stTabs [data-testid="stTab"]:not([aria-selected="true"]) div {
+        color: #d6f4ff !important;
+        font-weight: 500 !important;
+    }
+    .stTabs [data-baseweb="tab-highlight"] { background-color: #00f2fe !important; }
+    .stTabs [data-baseweb="tab-border"] { background-color: rgba(79, 172, 254, 0.35) !important; }
     div.stButton > button,
     div.stDownloadButton > button,
     [data-testid="stBaseButton-secondary"],
@@ -1288,6 +1987,21 @@ st.markdown(
         font-family: 'Tajawal', sans-serif !important;
         box-shadow: 0 0 14px rgba(0, 242, 254, 0.4);
         transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    div.stButton > button:hover,
+    div.stDownloadButton > button:hover,
+    [data-testid="stBaseButton-secondary"]:hover,
+    [data-testid="stBaseButton-primary"]:hover {
+        background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
+        color: #0a192f !important;
+        transform: scale(1.05);
+        box-shadow: 0 0 22px rgba(0, 242, 254, 0.9);
+    }
+    div.stButton > button p,
+    div.stDownloadButton > button p,
+    [data-testid="stBaseButton-secondary"] p,
+    [data-testid="stBaseButton-primary"] p {
+        color: #0a192f !important;
     }
     [class*="st-key-adopt-hidden"],
     [class*="st-key-adopt_sketch_form"],
@@ -1304,19 +2018,104 @@ st.markdown(
         border: 0 !important;
         visibility: hidden !important;
     }
+    iframe[title="st.iframe"] {
+        background: #0d2137 !important;
+        border-radius: 14px;
+        border: 1px solid rgba(0, 242, 254, 0.35) !important;
+    }
+    [data-testid="collapsedControl"],
+    [data-testid="stSidebarCollapsedControl"],
+    [data-testid="stExpandSidebarButton"],
+    [data-testid="stSidebarCollapseButton"] button,
+    [data-testid="stSidebarHeader"] button,
+    button[kind="headerNoPadding"] {
+        background-color: rgba(0, 229, 255, 0.18) !important;
+        border: 2px solid #00e5ff !important;
+        border-radius: 10px !important;
+        box-shadow: 0 0 15px #00e5ff, 0 0 25px rgba(0, 229, 255, 0.6), inset 0 0 8px rgba(0, 229, 255, 0.45) !important;
+        z-index: 999999 !important;
+    }
+    [data-testid="collapsedControl"] svg,
+    [data-testid="stSidebarCollapsedControl"] svg,
+    [data-testid="stExpandSidebarButton"] svg,
+    [data-testid="stSidebarCollapseButton"] button svg,
+    [data-testid="stSidebarHeader"] button svg,
+    button[kind="headerNoPadding"] svg {
+        fill: #00e5ff !important;
+        stroke: #00e5ff !important;
+        width: 24px !important;
+        height: 24px !important;
+    }
+    @media screen and (max-width: 768px) {
+        html, body,
+        [data-testid="stAppViewContainer"],
+        [data-testid="stMain"],
+        .main,
+        .block-container,
+        .main .block-container {
+            margin-left: 0 !important;
+            margin-right: 0 !important;
+            left: 0 !important;
+            right: 0 !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            transform: none !important;
+            overflow-x: hidden !important;
+            box-sizing: border-box !important;
+        }
+        .main .block-container {
+            padding-left: 0.5rem !important;
+            padding-right: 0.5rem !important;
+            padding-top: 2rem !important;
+        }
+        [data-testid="stSidebar"][aria-expanded="false"],
+        [data-testid="stSidebar"][data-collapsed="true"] {
+            width: 0 !important;
+            min-width: 0 !important;
+            max-width: 0 !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            border: none !important;
+            box-shadow: none !important;
+            transform: none !important;
+            overflow: hidden !important;
+        }
+        [data-testid="stSidebar"][data-collapsed="true"] [data-testid="stSidebarResizeHandle"] {
+            display: none !important;
+            width: 0 !important;
+            background: none !important;
+            box-shadow: none !important;
+        }
+        iframe {
+            width: 100% !important;
+            max-width: 100% !important;
+            box-sizing: border-box !important;
+        }
+        .stTabs [data-baseweb="tab-list"],
+        .stTabs [role="tablist"] {
+            flex-wrap: wrap !important;
+        }
+        h1 { font-size: 1.3rem !important; }
+        h2 { font-size: 1.1rem !important; }
+        h3 { font-size: 1rem !important; }
+    }
+    @media print {
+        section[data-testid="stSidebar"],
+        [data-testid="stHeader"],
+        [data-testid="stToolbar"],
+        [data-testid="stSidebarCollapsedControl"],
+        .stButton, .stDownloadButton, button {
+            display: none !important;
+        }
+    }
 </style>
-""",
-    unsafe_allow_html=True,
-)
-
+""", unsafe_allow_html=True)
 init_and_load_state()
 inject_bayyinah_blue_styles()
-
-if "parties" not in st.session_state:
+if 'parties' not in st.session_state:
     st.session_state.parties = _blank_parties()
-if "vehicles" not in st.session_state:
+if 'vehicles' not in st.session_state:
     st.session_state.vehicles = _blank_vehicles()
-
 with st.sidebar:
     if st.button("🔄 حادث جديد", type="primary", width="stretch", key="new_accident_btn"):
         _reset_new_accident()
@@ -1339,24 +2138,12 @@ with st.sidebar:
         officer_2_rank = st.text_input("رتبة مشرف الحوادث", value="")
         manager_name = st.text_input("اسم مدير القسم / الشعبة", value="")
         manager_rank = st.text_input("رتبة المدير", value="")
-
-app_logo_b64 = ""
-if _bayyinah_logo_ready():
-    try:
-        with Image.open(_bayyinah_logo_path) as app_logo:
-            _hero_buf = io.BytesIO()
-            app_logo.convert("RGBA").save(_hero_buf, format="PNG")
-            app_logo_b64 = base64.b64encode(_hero_buf.getvalue()).decode()
-    except OSError:
-        app_logo_b64 = ""
-
-if app_logo_b64:
-    _hero_ring = f'<div class="bayyinah-logo-ring"><img src="data:image/png;base64,{app_logo_b64}" alt="بَيِّنَة"/></div>'
+app_logo_src = get_base64_image("bayyinah_logo.jpg")
+if app_logo_src:
+    _hero_ring = f'<div class="bayyinah-logo-ring"><img src="{app_logo_src}" alt="بَيِّنَة"/></div>'
 else:
     _hero_ring = '<div class="bayyinah-logo-ring"></div>'
-
-st.html(
-    f"""
+st.html(f"""
 <div class="glow-container bayyinah-hero">
   {_hero_ring}
   <div>
@@ -1367,20 +2154,15 @@ st.html(
     <div class="bh-4">منصة التحليل</div>
   </div>
 </div>
-""",
-    unsafe_allow_javascript=False,
-)
-
+""", unsafe_allow_javascript=False)
 render_save_and_clear_toolbar()
-
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "1️⃣ الصفحة (1): البيانات والأطراف",
     "2️⃣ الصفحة (2): الوصف ومواد المرور (حسم)",
     "3️⃣ الصفحة (3): الإجراءات والتوقيعات",
     "4️⃣ الصفحة (4): استوديو الكروكي",
-    "5️⃣ الملحق والطباعة النهائية (PDF)",
+    "5️⃣ الملحق والطباعة النهائية (PDF)"
 ])
-
 with tab1:
     st.subheader("معلومات الحادث الأساسية")
     col1, col2, col3, col4 = st.columns(4)
@@ -1407,6 +2189,16 @@ with tab1:
                 st.session_state.hijri_date = get_today_hijri()
                 st.session_state.hijri_parts_sync = True
                 st.rerun()
+            if "hijri_manual_date" not in st.session_state:
+                st.session_state.hijri_manual_date = st.session_state.hijri_date or ""
+            st.text_input(
+                "كتابة التاريخ يدوياً",
+                key="hijri_manual_date",
+                placeholder="YYYY/MM/DD",
+                on_change=_apply_manual_hijri_date,
+            )
+            if st.session_state.get("hijri_manual_error"):
+                st.error(st.session_state.hijri_manual_error)
             st.divider()
             sel_month_label = st.selectbox("الشهر", _HIJRI_MONTH_LABELS, key="hijri_month_label", index=None, placeholder="اختر الشهر")
             sel_y = st.selectbox("السنة", _HIJRI_YEAR_LABELS, key="hijri_year_label", index=None, placeholder="اختر السنة")
@@ -1431,9 +2223,11 @@ with tab1:
                             if sel_y and sel_m:
                                 st.session_state.hijri_date = f"{sel_y}/{sel_m}/{_day}"
                                 st.rerun()
-        acc_date = st.session_state.hijri_date
+        accident_date = st.session_state.hijri_date
+        acc_date = accident_date
     with col2:
-        acc_time = st.text_input("الوقت", value="")
+        accident_time = st.text_input("الوقت", value="")
+        acc_time = accident_time
         if "acc_loc_value" not in st.session_state:
             st.session_state.acc_loc_value = ""
         if st.session_state.get("acc_loc_override"):
@@ -1455,7 +2249,7 @@ with tab1:
     with col4:
         acc_injuries = st.number_input("عدد الإصابات", min_value=0, value=0)
         acc_deaths = st.number_input("عدد الوفيات", min_value=0, value=0)
-
+    
     acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", value="")
     st.divider()
     _party_columns = [
@@ -1487,7 +2281,7 @@ with tab1:
             "المشاركة": st.column_config.SelectboxColumn("نوع المشاركة", options=["", "سائق", "راكب", "مشاة"]),
             "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=["", "سليم", "مصاب", "متوفي"]),
             "التأهيل": st.column_config.TextColumn("تأهيل للقيادة"),
-        },
+        }
     )
     st.divider()
     st.subheader("جدول معلومات المركبات")
@@ -1503,9 +2297,8 @@ with tab1:
             "الرقم التسلسلي": st.column_config.TextColumn("الرقم التسلسلي"),
             "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=["", "خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
             "التأمين": st.column_config.SelectboxColumn("التأمين", options=["", "مؤمنة", "غير مؤمنة"]),
-        },
+        }
     )
-
 TRAFFIC_LAW_ARTICLES = [
     {
         "id": "art_8_c",
@@ -1870,7 +2663,6 @@ TRAFFIC_LAW_ARTICLES = [
 ]
 TRAFFIC_LAW_BY_ID = {article["id"]: article for article in TRAFFIC_LAW_ARTICLES}
 
-
 def generate_accident_report_fields(selected_article_ids):
     selected_ids = set(selected_article_ids or [])
     selected_articles = [article for article in TRAFFIC_LAW_ARTICLES if article["id"] in selected_ids]
@@ -1912,7 +2704,6 @@ def generate_accident_report_fields(selected_article_ids):
         "legalOpinionText": legal_opinion_text,
         "hasCriminalSuspicion": has_criminal_suspicion,
     }
-
 
 with tab2:
     st.subheader("📚 محرك المواد النظامية وفروعها")
@@ -1969,7 +2760,6 @@ with tab2:
         height=160,
         on_change=save_current_work,
     )
-
 with tab3:
     st.subheader("الحقوق والإجراءات المتخذة")
     nature_options = ["حادث مروري اعتيادي", "حادث مروري مقترن بشق جنائي / أمني"]
@@ -2052,9 +2842,34 @@ with tab3:
     selected_actions = list(taken_procedures)
     if extra_procedure:
         selected_actions.append(extra_procedure)
+_SKETCH_ATTACH_LABEL = "إرفاق صفحة الكروكي في التقرير"
+_SKETCH_OMIT_LABEL = "حذف صفحة الكروكي من التقرير (حادث قديم بدون كروكي)"
+
+def _on_sketch_choice_tab4():
+    st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab4") == _SKETCH_ATTACH_LABEL
+    save_current_work()
+
+def _on_sketch_choice_tab5():
+    st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab5") == _SKETCH_ATTACH_LABEL
+    save_current_work()
+
+def _sketch_availability_control(widget_key, on_change):
+    if not isinstance(st.session_state.get("include_sketch"), bool):
+        st.session_state.include_sketch = True
+    selected = _SKETCH_ATTACH_LABEL if st.session_state.include_sketch else _SKETCH_OMIT_LABEL
+    if st.session_state.get(widget_key) != selected:
+        st.session_state[widget_key] = selected
+    st.radio(
+        "هل يتوفر رسم كروكي للحادث؟",
+        (_SKETCH_ATTACH_LABEL, _SKETCH_OMIT_LABEL),
+        key=widget_key,
+        on_change=on_change,
+    )
+    st.session_state.include_sketch = st.session_state.get(widget_key) == _SKETCH_ATTACH_LABEL
 
 with tab4:
     st.subheader("🎨 محرر الكروكي التفاعلي (Fabric.js)")
+    _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
     _fabric_html = r'''
 <!DOCTYPE html>
 <html lang="ar" dir="rtl">
@@ -2793,8 +3608,6 @@ else document.body.insertAdjacentHTML("beforeend", "<p>تعذر تحميل Fabri
     ]
     adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
     sketch_img = Image.open(adopted_path).convert("RGB") if adopted_path.is_file() else None
-
-
 def convert_gallery_image(uploaded_file):
     try:
         uploaded_file.seek(0)
@@ -2808,7 +3621,6 @@ def convert_gallery_image(uploaded_file):
         return f"data:image/jpeg;base64,{encoded}"
     except Exception:
         return None
-
 
 def generate_clean_print_html(how_text, results_text, show_numbers=False):
     page_counter_css = """
@@ -2829,6 +3641,7 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
         <title>تقرير حادث مروري رسمي</title>
         <style>
             @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@400;700&display=swap');
+            
             @page {{
                 size: A4 portrait;
                 margin: 12mm 15mm 18mm 15mm;
@@ -2841,7 +3654,7 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
                 color: #000;
                 background: #fff;
                 direction: rtl;
-                font-size: 12pt;
+                font-size: 11px;
                 line-height: 1.6;
             }}
             .report-container {{
@@ -2854,7 +3667,7 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
                 border-radius: 6px;
                 padding: 12px 15px;
                 margin-bottom: 12px;
-                page-break-inside: avoid;
+                page-break-inside: avoid; break-inside: avoid; page-break-after: avoid;
                 break-inside: avoid;
                 background-color: #fff;
             }}
@@ -2872,8 +3685,27 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
             .content-text {{
                 white-space: pre-wrap;
                 text-align: justify;
-                direction: rtl;
-                unicode-bidi: plaintext;
+            }}
+            /* ضبط الصور والقرائن المرئية لتتلاءم مع الصفحة ولا تسبب صفحات فارغة */
+            .evidence-image-container {{
+                display: flex;
+                flex-wrap: wrap;
+                gap: 10px;
+                justify-content: center;
+                margin-top: 10px;
+                page-break-inside: avoid; break-inside: avoid; page-break-after: avoid;
+                break-inside: avoid;
+            }}
+            .evidence-image-container img {{
+                max-width: 45%;
+                max-height: 60mm;
+                object-fit: contain;
+                border: 1px solid #ccc;
+                border-radius: 4px;
+                padding: 3px;
+            }}
+            .content-text, .report-box {{
+                font-size: 11px;
             }}
             @media screen {{
                 body {{
@@ -2884,6 +3716,11 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
                     background: #fff;
                     padding: 15mm;
                     box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+                }}
+            }}
+            @media print {{
+                body, .content-text, .report-box {{
+                    font-size: 9px !important;
                 }}
             }}
         </style>
@@ -2908,7 +3745,6 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
     </html>
     """
 
-
 with tab5:
     st.subheader("📸 إرفاق صور موقع الحادث والمركبات للتقرير الرسمي")
     _max_accident_photos = 10
@@ -2920,7 +3756,7 @@ with tab5:
             if entry.get("id"):
                 st.session_state.uploaded_ids.add(entry["id"])
     gallery_uploads = st.file_uploader(
-        "📸 اضغط هنا لاختيار صور الحادث من معرض الجوال أو الكمبيوتر (حتى 10 صور)",
+        "📸 اضغط هنا لاختيار صور الحادث من معرض الجوال (حتى 10 صور)",
         type=None,
         accept_multiple_files=True,
         key="mobile_gallery_uploader",
@@ -3013,6 +3849,7 @@ with tab5:
             image_b64 = convert_gallery_image(item)
             if not image_b64:
                 continue
+            number = len(gallery_photos) + 1
             gallery_photos.append({
                 "id": uid,
                 "b64": image_b64,
@@ -3027,6 +3864,7 @@ with tab5:
     for row_start in range(0, len(gallery_photos), 2):
         cols = st.columns(2)
         for offset, entry in enumerate(gallery_photos[row_start:row_start + 2]):
+            number = row_start + offset + 1
             cap_key = f"annex_cap_{entry['id']}"
             if cap_key not in st.session_state:
                 st.session_state[cap_key] = entry.get("caption") or ""
@@ -3041,50 +3879,40 @@ with tab5:
             entry for entry in gallery_photos if entry["id"] != pending_remove
         ]
         st.rerun()
-
-    def _clean_cell(val):
-        if val is None:
-            return ""
-        try:
-            if pd.isna(val):
-                return ""
-        except Exception:
-            pass
-        text = str(val).strip()
-        if text.lower() in ("nan", "none", "null"):
-            return ""
-        return html.escape(text)
-
-    def _clean_report_text(text):
-        cleaned = str(text or "")
-        cleaned = cleaned.replace(VIDEO_MARKER_START, "").replace(VIDEO_MARKER_END, "")
-        return cleaned.strip()
-
+    
     def img_to_b64(img_obj):
         buf = io.BytesIO()
         img_obj.save(buf, format="PNG")
         return base64.b64encode(buf.getvalue()).decode()
-
     sketch_b64 = img_to_b64(sketch_img) if sketch_img is not None else ""
     sketch_figure = (
-        f'<img src="data:image/png;base64,{sketch_b64}" style="max-width:100%; height:420px; object-fit:contain; border:1px solid #ccc;">'
+        f'<img src="data:image/png;base64,{sketch_b64}" style="max-width:100%; height:440px; border:1px solid #ccc;">'
         if sketch_b64 else ""
     )
-    logo_b64 = ""
-    _fixed_logo_path = _project_logo_path()
-    if _fixed_logo_path is not None and _fixed_logo_path.is_file():
-        try:
-            logo_b64 = img_to_b64(Image.open(_fixed_logo_path).convert("RGBA"))
-        except OSError:
-            logo_b64 = ""
-
+    logo_src = get_base64_image("traffic_logo.png")
+    sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
+    stored_sig = str(st.session_state.get("sig_base64") or "").strip()
+    if not sig_officer and stored_sig.startswith("data:image/"):
+        sig_officer = stored_sig
+    elif not sig_officer and stored_sig:
+        sig_officer = get_base64_image(stored_sig)
+    sig_supervisor = _signature_data_url(
+        "signature_supervisor.png",
+        "signature_supervisor.jpg",
+        "signature_supervisor.jpeg",
+    )
+    sig_manager = _signature_data_url(
+        "signature_manager.png",
+        "signature_manager.jpg",
+        "signature_manager.jpeg",
+    )
     def build_header():
-        logo_html = f'<img src="data:image/png;base64,{logo_b64}" alt="شعار المرور">' if logo_b64 else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
+        logo_html = f'<img src="{logo_src}" alt="شعار المرور">' if logo_src else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
         return f"""
         <div class="header-Title">بسم الله الرحمن الرحيم</div>
         <div class="header-box">
             <div class="header-right">
-                المملكة العربية السعودية<br>وزارة الداخلية<br>الأمن العام<br>الإدارة العامة للمرور<br>{html.escape(dept_region)}<br>{html.escape(dept_branch)}
+                المملكة العربية السعودية<br>وزارة الداخلية<br>الأمن العام<br>الإدارة العامة للمرور<br>{dept_region}<br>{dept_branch}
             </div>
             <div class="header-logo">{logo_html}</div>
             <div class="header-center">
@@ -3095,71 +3923,61 @@ with tab5:
             </div>
         </div>
         """
-
     parties_head = "".join(f"<th>{label}</th>" for _key, label in _party_columns)
     vehicles_head = "".join(f"<th>{label}</th>" for _key, label in _vehicle_columns)
     parties_rows = ""
     for _, row in parties_df.iterrows():
-        cells = [_clean_cell(row.get(key, "")) for key, _label in _party_columns]
-        if any(cells):
-            parties_rows += "<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
+        parties_rows += "<tr>" + "".join(f"<td>{row.get(key, '')}</td>" for key, _label in _party_columns) + "</tr>"
     vehicles_rows = ""
     for _, row in vehicles_df.iterrows():
-        cells = [_clean_cell(row.get(key, "")) for key, _label in _vehicle_columns]
-        if any(cells):
-            vehicles_rows += "<tr>" + "".join(f"<td>{c}</td>" for c in cells) + "</tr>"
-
-    clean_results_str = _clean_report_text(acc_results)
-    clean_how_str = _clean_report_text(acc_how)
-    clean_laws_str = _clean_report_text(custom_laws)
-
-    results_html = "<br>".join(html.escape(line) for line in clean_results_str.split("\n") if line.strip())
-    acc_how_html = "<br>".join(html.escape(line) for line in clean_how_str.split("\n") if line.strip())
+        vehicles_rows += "<tr>" + "".join(f"<td>{row.get(key, '')}</td>" for key, _label in _vehicle_columns) + "</tr>"
+    results_html = "<br>".join(html.escape(line) for line in acc_results.split("\n") if line.strip())
+    acc_how_html = html.escape(acc_how or "").replace("\n", "<br>")
     laws_html = "".join(
-        f"<li>{html.escape(line.lstrip('•-* ').strip())}</li>"
-        for line in clean_laws_str.split("\n") if line.strip()
+        f"<li>{html.escape(line)}</li>" for line in custom_laws.split("\n") if line.strip()
     )
     actions_html = "".join(
-        f"<tr><td style='text-align:right; padding:6px 10px;'>{i+1}- {html.escape(str(act))}</td></tr>"
-        for i, act in enumerate(selected_actions)
+        f"<tr><td>{i+1}- {html.escape(str(act))}</td></tr>" for i, act in enumerate(selected_actions)
     )
     criminal_details_html = ""
     if "جنائي" in (accident_nature or ""):
         criminal_details_html = f"""
-            <div class="table-scroll"><table style="margin-top:10px; margin-bottom:8px;">
-                <tr><th style="font-size:15px; padding:6px;">تفاصيل الشق الجنائي والأمني</th></tr>
-                <tr><td style="padding:7px 10px; font-size:14px; text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
-                <tr><td style="padding:7px 10px; font-size:14px; text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
-                <tr><td style="padding:7px 10px; font-size:14px; text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
-                <tr><td style="padding:7px 10px; font-size:14px; text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
+            <div class="table-scroll"><table>
+                <tr><th style="font-size:16px;">تفاصيل الشق الجنائي والأمني</th></tr>
+                <tr><td style="font-size:16px; text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
+                <tr><td style="font-size:16px; text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
+                <tr><td style="font-size:16px; text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
+                <tr><td style="font-size:16px; text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
             </table></div>
         """
-
+    photos_list = list(st.session_state.gallery_photos or [])
+    include_sketch = st.session_state.get("include_sketch", True) is True
     photos_pages_html = ""
     photos_per_page = 6
-    all_photos = st.session_state.gallery_photos
-    for page_offset in range(0, len(all_photos), photos_per_page):
-        chunk = all_photos[page_offset:page_offset + photos_per_page]
+    annex_first_page = 5 if include_sketch else 4
+    for page_idx in range(0, len(photos_list), photos_per_page):
+        page_photos = photos_list[page_idx:page_idx + photos_per_page]
+        if not page_photos:
+            continue
         photo_cards = ""
-        for idx, entry in enumerate(chunk, start=page_offset + 1):
-            safe_caption = html.escape(entry.get("caption") or "").replace("\n", "<br>")
+        for offset, entry in enumerate(page_photos):
+            number = page_idx + offset + 1
+            safe_caption = html.escape(entry.get("caption") or "")
             photo_cards += f"""
-            <div class="photo-card">
-                <img src="{entry['b64']}" alt="صورة {idx}">
-                <div class="photo-meta">{idx}<br>{safe_caption}</div>
-            </div>
-            """
-        page_num_val = 5 + (page_offset // photos_per_page)
-        badge_suffix = "" if page_num_val == 5 else f" (تابع - {page_num_val - 4})"
+        <div class="photo-card">
+            <img src="{entry['b64']}" alt="صورة {number}">
+            <div class="photo-meta">{number}<br>{safe_caption}</div>
+        </div>
+        """
+        page_number = annex_first_page + (page_idx // photos_per_page)
         photos_pages_html += f"""
         <div class="page report-page photo-annex">
             {build_header()}
-            <div class="section-badge" style="margin:8px auto 10px auto;">ملحق الصور الفوتوغرافية لموقع الحادث{badge_suffix}</div>
+            <div class="section-badge">ملحق الصور الفوتوغرافية لموقع الحادث</div>
             <div class="photo-grid">{photo_cards}</div>
-            <div class="page-num">{page_num_val}</div>
+            <div class="page-num">{page_number}</div>
         </div>
         """
-
     if not isinstance(st.session_state.get("show_page_numbers"), bool):
         st.session_state.show_page_numbers = False
     show_page_numbers = st.checkbox(
@@ -3170,30 +3988,48 @@ with tab5:
     page_number_css = ""
     body_class = ""
     clean_print_html = generate_clean_print_html(
-        html.escape(clean_how_str),
-        html.escape(clean_results_str),
+        html.escape(acc_how or ""),
+        html.escape(acc_results or ""),
         show_numbers=bool(show_page_numbers),
     )
     if show_page_numbers:
         body_class = "with-page-numbers"
         page_number_css = """
-        .with-page-numbers .page { padding-bottom: 16mm !important; }
+        .with-page-numbers .page { padding-bottom: 22mm !important; }
         .with-page-numbers .page-num {
-            bottom: 4mm; left: 0; right: 0; transform: none; text-align: center;
-            height: 7mm; line-height: 7mm; margin: 0;
+            bottom: 5mm; left: 0; right: 0; transform: none; text-align: center;
+            height: 8mm; line-height: 8mm; margin: 0;
         }
         @media print {
             .with-page-numbers .page { padding-bottom: 12mm !important; }
             .with-page-numbers .page-num { display: none !important; }
-            @page { size: A4; margin: 8mm 8mm 14mm 8mm; }
+            @page { size: A4; margin: 8mm 8mm 16mm 8mm; }
             @page { @bottom-center { content: counter(page); font-family: "Tajawal", sans-serif; font-size: 11pt; } }
         }
         """
-
-    legend_html = "".join(
-        f"<div>{html.escape(line)}</div>" for line in legend_keys if str(line or "").strip()
-    )
-
+    sketch_page_html = ""
+    if include_sketch:
+        sketch_page_html = f"""
+        <div class="page report-page">
+            {build_header()}
+            <div class="section-badge">كروكي الحادث</div>
+            <div style="text-align:center; font-weight:bold; font-size:18px; margin-bottom:15px;">رسم كروكي {road_name_sign}</div>
+            <div style="display:flex; justify-content:space-around; align-items:center; margin-top:20px;">
+                <div style="text-align:center; width:35%;">
+                    <div class="road-sign">{road_name_sign}</div>
+                    <div style="font-size:75px; line-height:1; margin:20px 0;">✥</div>
+                    <div style="font-weight:bold;">اتجاهات الطريق</div>
+                </div>
+                <div style="width:55%; text-align:center;">
+                    {sketch_figure}
+                </div>
+            </div>
+            <div style="margin-top:30px; font-weight:bold; font-size:16px; line-height:2; padding-right:30px;">
+                {"".join(f"<div>{line}</div>" for line in legend_keys)}
+            </div>
+            <div class="page-num">4</div>
+        </div>
+        """
     full_report_html = f"""
     <!DOCTYPE html>
     <html lang="ar" dir="rtl">
@@ -3205,7 +4041,6 @@ with tab5:
         body {{
             font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0;
             display: flex; flex-direction: column; overflow: hidden;
-            direction: rtl; unicode-bidi: embed;
         }}
         .report-viewport {{
             flex: 1 1 auto; width: 100%; min-width: 0; max-width: 100%;
@@ -3215,57 +4050,44 @@ with tab5:
         .report-sheet {{
             width: 210mm; min-width: 750px; margin: 12px auto 20px auto;
         }}
+        .report-sheet .box-content,
+        .report-sheet table,
+        .report-sheet th,
+        .report-sheet td,
+        .report-sheet .photo-meta,
+        .report-sheet p,
+        .report-sheet li {{
+            font-size: 11px !important;
+        }}
         .page {{
             background: white; width: 210mm; min-width: 750px; min-height: 297mm; margin: 0 auto 20px auto;
-            padding: 10mm 14mm 14mm 14mm; box-sizing: border-box; position: relative;
+            padding: 15mm 18mm; box-sizing: border-box; position: relative;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
         }}
         .photo-annex {{ page-break-before: always; }}
-        .photo-grid {{
-            display: grid;
-            grid-template-columns: repeat(2, 1fr);
-            gap: 10px 14px;
-            align-items: start;
-        }}
-        .photo-card {{
-            width: 100%;
-            margin-bottom: 2px;
-            text-align: center;
-            break-inside: avoid;
-            page-break-inside: avoid;
-        }}
+        .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; }}
+        .photo-card {{ width: 48%; margin-bottom: 18px; text-align: center; }}
         .photo-card img {{
-            width: 100%;
-            height: 185px;
-            max-height: 185px;
-            object-fit: cover;
-            border: 2px solid #1b4332;
-            border-radius: 6px;
-            background: #fff;
-            display: block;
-            margin: 0 auto;
+            width: auto; max-width: 100%; max-height: 185px; height: auto; object-fit: contain;
+            border: 2px solid #1b4332; border-radius: 6px; background: #fff;
         }}
-        .photo-card .photo-meta {{
-            margin-top: 4px;
-            font-weight: bold;
-            font-size: 12.5px;
-            line-height: 1.35;
-            min-height: 32px;
-        }}
+        .page-three table {{ margin-top: 6px !important; margin-bottom: 6px !important; }}
+        .page-three th, .page-three td {{ padding: 4px 4px !important; }}
+        .photo-card .photo-meta {{ margin-top: 6px; font-weight: bold; font-size: 14px; line-height: 1.6; }}
         .logo-fallback {{
-            border: 2px solid #1b4332; border-radius: 50%; width: 76px; height: 76px;
+            border: 2px solid #1b4332; border-radius: 50%; width: 80px; height: 80px;
             display: flex; align-items: center; justify-content: center; margin: auto;
             font-weight: bold; color: #1b4332; line-height: 1.25; text-align: center;
         }}
         .header-logo img {{
-            height: 95px; width: auto; max-width: 110px; object-fit: contain;
+            height: 110px; width: auto; max-width: 120px; object-fit: contain;
             display: block; margin: 0 auto;
         }}
-        .header-Title {{ text-align: center; font-size: 16px; font-weight: bold; margin-bottom: 4px; }}
+        .header-Title {{ text-align: center; font-size: 18px; font-weight: bold; margin-bottom: 6px; }}
         .header-box {{
             position: relative; display: flex; justify-content: space-between; align-items: center;
-            min-height: 110px; border-bottom: 3px double #1b4332; padding-bottom: 8px;
-            margin-bottom: 12px; font-size: 13.5px; font-weight: bold; line-height: 1.5;
+            min-height: 128px; border-bottom: 3px double #1b4332; padding-bottom: 10px;
+            margin-bottom: 18px; font-size: 14px; font-weight: bold; line-height: 1.6;
         }}
         .header-right {{ width: 36%; text-align: right; }}
         .header-center {{ width: 36%; text-align: center; }}
@@ -3275,27 +4097,19 @@ with tab5:
         }}
         .section-badge {{
             background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
-            padding: 4px 22px; font-weight: bold; font-size: 16px; display: table;
-            margin: 10px auto; text-align: center; color: #1b4332;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            padding: 5px 25px; font-weight: bold; font-size: 17px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
         }}
-        table {{ width: 100%; border-collapse: collapse; margin-bottom: 12px; font-size: 13.5px; }}
-        th, td {{ border: 1.5px solid #444; padding: 6px 5px; text-align: center; font-weight: bold; }}
-        th {{ background-color: #d8f3dc; color: #1b4332; -webkit-print-color-adjust: exact; print-color-adjust: exact; }}
-        .info-table th, .info-table td {{ font-size: 13px; }}
+        table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 14px; }}
+        th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-weight: bold; }}
+        th {{ background-color: #d8f3dc; color: #1b4332; }}
         .box-content {{
-            border: 1.5px solid #444; padding: 10px 12px; font-size: 14px; font-weight: bold;
-            line-height: 1.65; text-align: right; margin-bottom: 10px; min-height: 55px;
-            direction: rtl; unicode-bidi: plaintext;
+            border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
+            line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
         }}
-        .sig-table {{ margin-top: 14px; margin-bottom: 0; page-break-inside: avoid; break-inside: avoid; }}
-        .sig-table td {{ padding: 6px 8px; font-size: 14px; }}
-        .sig-row td {{ height: 55px; vertical-align: top; padding-top: 8px; text-align: right; padding-right: 14px; }}
-        .page-num {{ position: absolute; bottom: 6mm; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: 14px; }}
+        .page-num {{ position: absolute; bottom: 12mm; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: 16px; }}
         .road-sign {{
             background: #2d6a4f; color: white; border: 3px solid white; outline: 3px solid #2d6a4f;
-            border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 16px; display: inline-block; margin-bottom: 20px;
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+            border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 16px; display: inline-block; margin-bottom: 25px;
         }}
         .table-scroll {{ width: 100%; max-width: 100%; }}
         @media screen {{
@@ -3306,18 +4120,52 @@ with tab5:
             .report-viewport {{ max-width: 100%; }}
             .page, .report-page, .a4-page {{
                 width: 100%; min-width: 0; max-width: 850px;
-                min-height: 0; height: auto; overflow: visible; box-sizing: border-box;
+                min-height: 0; height: auto; overflow: hidden; box-sizing: border-box;
             }}
             .table-scroll {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
             table, .table-scroll table {{
-                table-layout: auto; width: 100%; min-width: 0; max-width: 100%;
+                table-layout: fixed; width: 100%; min-width: 0; max-width: 100%;
             }}
             th, td {{
-                white-space: normal; overflow-wrap: break-word;
+                white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+            }}
+        }}
+        @media screen and (max-width: 768px) {{
+            html, body {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
+            .report-viewport {{ overflow: hidden; width: 100%; max-width: 100%; }}
+            .report-sheet {{
+                width: 100%; min-width: 0; max-width: 850px;
+                margin: 0 auto 12px auto; zoom: 1;
+            }}
+            .page, .report-page, .a4-page {{
+                width: 100%; min-width: 0; max-width: 850px;
+                min-height: 0; height: auto; overflow: hidden; font-size: 12px;
+            }}
+            .report-page {{
+                box-sizing: border-box;
+                background: #fff;
+                color: #000;
+                border-radius: 8px;
+                padding: 12px;
+                margin-bottom: 15px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+            }}
+            .header-Title {{ font-size: 14px; }}
+            .header-box {{ font-size: 11px; min-height: 88px; }}
+            .header-logo img {{ height: 64px; max-width: 70px; }}
+            .section-badge {{ font-size: 13px; padding: 4px 10px; }}
+            .box-content {{ font-size: 12px; min-height: 0; padding: 8px; }}
+            .table-scroll {{ width: 100%; max-width: 100%; overflow-x: hidden; }}
+            table, .table-scroll table {{
+                table-layout: fixed; width: 100%; min-width: 0; max-width: 100%; font-size: 11px;
+            }}
+            th, td {{
+                font-size: 11px; padding: 4px 3px;
+                white-space: normal; overflow-wrap: anywhere; word-break: break-word;
             }}
         }}
         @media print {{
-            @page {{ size: A4 portrait; margin: 6mm; }}
+            @page {{ size: A4; margin: 8mm; }}
             html, body {{ height: auto; display: block; overflow: visible; background: white; padding: 0; }}
             button, .no-print, .stButton, .stDownloadButton,
             [data-testid="stSidebar"], [data-testid="stHeader"], [data-testid="stToolbar"] {{
@@ -3327,18 +4175,31 @@ with tab5:
             .report-sheet {{ width: auto; min-width: 0; margin: 0; zoom: 1; }}
             .page, .report-page, .a4-page {{
                 box-shadow: none; margin: 0 auto; zoom: 1; overflow: hidden;
-                width: 198mm; height: 284mm; max-width: 198mm; max-height: 284mm;
-                min-width: 0; min-height: 284mm; padding: 8mm 10mm 12mm 10mm;
-                page-break-after: always; break-after: page;
+                width: 210mm; height: 297mm; max-width: 210mm; max-height: 297mm;
+                min-width: 0; min-height: 297mm; page-break-after: always;
             }}
             .report-sheet > .report-page:last-child {{ page-break-after: auto; break-after: auto; }}
             .table-scroll {{ overflow: visible; max-width: none; }}
             table, .table-scroll table {{
-                width: 99.8% !important; min-width: 0 !important; border-collapse: collapse;
-                border: 1px solid #000; table-layout: auto;
+                width: 99.6% !important; min-width: 0 !important; border-collapse: collapse;
+                border: 1px solid #000;
             }}
             th, td {{ border: 1px solid #000 !important; }}
-            .header-logo img {{ height: 95px; max-width: 110px; }}
+            .report-sheet .box-content,
+            .report-sheet table,
+            .report-sheet th,
+            .report-sheet td,
+            .report-sheet .photo-meta,
+            .report-sheet p,
+            .report-sheet li {{
+                font-size: 9px !important;
+            }}
+            .sign-table, .sign-table tr, .sign-table td {{
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                page-break-after: avoid !important;
+            }}
+            .header-logo img {{ height: 110px; max-width: 120px; }}
         }}
         {page_number_css}
     </style>
@@ -3371,28 +4232,14 @@ with tab5:
             {build_header()}
             <div class="section-badge">تقرير حادث مروري</div>
             <div class="section-badge" style="font-size:15px;">معلومات الحادث</div>
-            <div class="table-scroll"><table class="info-table">
+            <div class="table-scroll"><table>
                 <tr>
-                    <th style="width:12%;">رقم الحادث</th>
-                    <th style="width:11%;">تاريخ الحادث</th>
-                    <th style="width:8%;">الوقت</th>
-                    <th style="width:18%;">موقع الحادث</th>
-                    <th style="width:12%;">نوع الحادث</th>
-                    <th style="width:7%;">عدد الإصابات</th>
-                    <th style="width:7%;">عدد الوفيات</th>
-                    <th style="width:7%;">الطقس</th>
-                    <th style="width:18%;">سبب الحادث</th>
+                    <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
+                    <th>نوع الحادث</th><th>عدد الإصابات</th><th>عدد الوفيات</th><th>الطقس</th><th>سبب الحادث</th>
                 </tr>
                 <tr>
-                    <td>{_clean_cell(acc_num)}</td>
-                    <td>{_clean_cell(acc_date)}</td>
-                    <td>{_clean_cell(acc_time)}</td>
-                    <td>{_clean_cell(acc_loc)}</td>
-                    <td>{_clean_cell(acc_type)}</td>
-                    <td>{_clean_cell(acc_injuries)}</td>
-                    <td>{_clean_cell(acc_deaths)}</td>
-                    <td>{_clean_cell(acc_weather)}</td>
-                    <td>{_clean_cell(acc_cause)}</td>
+                    <td>{acc_num}</td><td>{acc_date}</td><td>{acc_time}</td><td>{acc_loc}</td>
+                    <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
                 </tr>
             </table></div>
             <div class="section-badge" style="font-size:15px;">معلومات أطراف الحادث</div>
@@ -3415,70 +4262,36 @@ with tab5:
             <div class="box-content">{acc_how_html}</div>
             <div class="section-badge">الرأي والمسؤولية</div>
             <div class="box-content">
-                {html.escape(resp_summary or "")}<br>وذلك للأسباب التالية:
-                <ul style="margin-top:6px; margin-bottom:4px; padding-right:20px;">{laws_html}</ul>
+                {resp_summary}<br>وذلك للأسباب التالية:
+                <ul style="margin-top:8px;">{laws_html}</ul>
             </div>
             <div class="page-num">2</div>
         </div>
-        <div class="page report-page">
+        <div class="page report-page page-three">
             {build_header()}
-            <div class="table-scroll"><table style="margin-bottom:8px;">
-                <tr><th style="font-size:15px; padding:6px;">طبيعة وتصنيف الحادث</th></tr>
-                <tr><td style="padding:8px 10px; font-size:14.5px;">{html.escape(accident_nature or "")}</td></tr>
+            <div class="table-scroll"><table>
+                <tr><th style="font-size:16px;">طبيعة وتصنيف الحادث</th></tr>
+                <tr><td style="font-size:16px;">{html.escape(accident_nature or "")}</td></tr>
             </table></div>
-            <div class="table-scroll"><table style="margin-top:10px; margin-bottom:8px;">
-                <tr><th style="font-size:15px; padding:6px;">الحقوق الخاصة والعامة</th></tr>
-                <tr><td style="padding:8px 10px; font-size:14.5px;">{html.escape("" if rights_status == "اختر الحالة" else rights_status)}</td></tr>
+            <div class="table-scroll"><table>
+                <tr><th style="font-size:16px;">الحقوق الخاصة والعامة</th></tr>
+                <tr><td style="font-size:16px;">{html.escape("" if rights_status == "اختر الحالة" else rights_status)}</td></tr>
             </table></div>
-            <div class="table-scroll"><table style="margin-top:10px; margin-bottom:8px;">
-                <tr><th style="font-size:15px; padding:6px;">الإجراءات المتخذة</th></tr>
+            <div class="table-scroll"><table>
+                <tr><th style="font-size:16px;">الإجراءات المتخذة</th></tr>
                 {actions_html}
             </table></div>
             {criminal_details_html}
-            <div class="table-scroll"><table class="sig-table">
-                <tr><th colspan="3" style="font-size:15px; padding:6px;">معد التقرير</th></tr>
-                <tr>
-                    <th style="width:33.3%;">إجراء الحوادث</th>
-                    <th style="width:33.3%;">مشرف الحوادث</th>
-                    <th style="width:33.3%;">مدير {html.escape(dept_branch)}</th>
-                </tr>
-                <tr>
-                    <td>الاسم: {html.escape(officer_1_name)}</td>
-                    <td>الاسم: {html.escape(officer_2_name)}</td>
-                    <td>الاسم: {html.escape(manager_name)}</td>
-                </tr>
-                <tr>
-                    <td>الرتبة: {html.escape(officer_1_rank)}</td>
-                    <td>الرتبة: {html.escape(officer_2_rank)}</td>
-                    <td>الرتبة: {html.escape(manager_rank)}</td>
-                </tr>
-                <tr class="sig-row">
-                    <td>التوقيع:</td>
-                    <td>التوقيع:</td>
-                    <td>التوقيع:</td>
-                </tr>
+            <div class="table-scroll"><table class="sign-table">
+                <tr><th colspan="3" style="font-size:16px;">معد التقرير</th></tr>
+                <tr><th>إجراء الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
+                <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
+                <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
+                <tr><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
             </table></div>
             <div class="page-num">3</div>
         </div>
-        <div class="page report-page">
-            {build_header()}
-            <div class="section-badge">كروكي الحادث</div>
-            <div style="text-align:center; font-weight:bold; font-size:17px; margin-bottom:12px;">رسم كروكي {html.escape(road_name_sign)}</div>
-            <div style="display:flex; justify-content:space-around; align-items:center; margin-top:14px;">
-                <div style="text-align:center; width:35%;">
-                    <div class="road-sign">{html.escape(road_name_sign)}</div>
-                    <div style="font-size:68px; line-height:1; margin:16px 0;">✥</div>
-                    <div style="font-weight:bold;">اتجاهات الطريق</div>
-                </div>
-                <div style="width:58%; text-align:center;">
-                    {sketch_figure}
-                </div>
-            </div>
-            <div style="margin-top:18px; font-weight:bold; font-size:15px; line-height:1.85; padding-right:24px;">
-                {legend_html}
-            </div>
-            <div class="page-num">4</div>
-        </div>
+        {sketch_page_html}
         {photos_pages_html}
         </div>
         </div>
@@ -3493,7 +4306,7 @@ with tab5:
             data=full_report_html.encode("utf-8"),
             file_name=f"Accident_Report_{acc_num}.html",
             mime="text/html",
-            use_container_width=True,
+            use_container_width=True
         )
     with col_btn2:
         st.info("💡 بعد تحميل الملف وفتحه، اضغط على زر (طباعة التقرير الرسمي أو حفظه كـ PDF) في أعلى الصفحة.")
@@ -3521,5 +4334,24 @@ with tab5:
             """,
             unsafe_allow_html=True,
         )
+    _sketch_availability_control("include_sketch_choice_tab5", _on_sketch_choice_tab5)
     st.subheader("معاينة حية للتقرير قبل الطباعة:")
     st.components.v1.html(full_report_html, height=850, scrolling=False)
+st.markdown("""
+<style>
+@media screen and (max-width: 768px) {
+  html body section.stSidebar[data-testid="stSidebar"][data-collapsed="true"],
+  html body section[data-testid="stSidebar"][aria-expanded="false"] {
+    width: 0 !important;
+    min-width: 0 !important;
+    max-width: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    border: none !important;
+    box-shadow: none !important;
+    transform: none !important;
+    overflow: hidden !important;
+  }
+}
+</style>
+""", unsafe_allow_html=True)
