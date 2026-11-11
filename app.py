@@ -1681,7 +1681,7 @@ st.markdown("""
     [data-testid="stAppViewContainer"],
     section[data-testid="stSidebar"],
     [data-testid="stSidebarContent"] {
-        background: #8B0000 !important;
+        background: #0a192f !important;
         color: #e2eafc;
     }
     section[data-testid="stSidebar"] {
@@ -1692,7 +1692,7 @@ st.markdown("""
         width: 100% !important;
     }
     [data-testid="stHeader"] {
-        background: #8B0000 !important;
+        background: #0a192f !important;
     }
     h1, h2, h3,
     [data-testid="stHeading"],
@@ -3956,11 +3956,11 @@ with tab5:
     if "جنائي" in (accident_nature or ""):
         criminal_details_html = f"""
             <div class="table-scroll"><table>
-                <tr><th style="font-size:16px;">تفاصيل الشق الجنائي والأمني</th></tr>
-                <tr><td style="font-size:16px; text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
-                <tr><td style="font-size:16px; text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
-                <tr><td style="font-size:16px; text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
-                <tr><td style="font-size:16px; text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
+                <tr><th>تفاصيل الشق الجنائي والأمني</th></tr>
+                <tr><td style="text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
+                <tr><td style="text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
+                <tr><td style="text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
+                <tr><td style="text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
             </table></div>
         """
     photos_list = list(st.session_state.gallery_photos or [])
@@ -4026,7 +4026,7 @@ with tab5:
         <div class="page report-page">
             {build_header()}
             <div class="section-badge">كروكي الحادث</div>
-            <div style="text-align:center; font-weight:bold; font-size:18px; margin-bottom:15px;">رسم كروكي {road_name_sign}</div>
+            <div style="text-align:center; font-weight:bold; font-size:15px; margin-bottom:15px;">رسم كروكي {road_name_sign}</div>
             <div style="display:flex; justify-content:space-around; align-items:center; margin-top:20px;">
                 <div style="text-align:center; width:35%;">
                     <div class="road-sign">{road_name_sign}</div>
@@ -4037,7 +4037,7 @@ with tab5:
                     {sketch_figure}
                 </div>
             </div>
-            <div style="margin-top:30px; font-weight:bold; font-size:16px; line-height:2; padding-right:30px;">
+            <div style="margin-top:30px; font-weight:bold; font-size:15px; line-height:2; padding-right:30px;">
                 {"".join(f"<div>{line}</div>" for line in legend_keys)}
             </div>
             <div class="page-num">4</div>
@@ -4052,7 +4052,7 @@ with tab5:
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700&display=swap');
         html, body {{ height: 100%; margin: 0; }}
         body {{
-            font-family: 'Tajawal', sans-serif; background: #8B0000; margin: 0;
+            font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0;
             display: flex; flex-direction: column; overflow: hidden;
         }}
         .report-viewport {{
@@ -4063,9 +4063,10 @@ with tab5:
             width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
             transform: none;
         }}
-        .report-sheet .header-Title {{ font-size: 26px !important; font-weight: 700; }}
-        .report-sheet .section-badge {{ font-size: 22px !important; font-weight: 700; }}
-        .report-sheet .section-badge.badge-sub {{ font-size: 18px !important; }}
+        .report-sheet .header-Title,
+        .report-sheet .section-badge {{
+            font-size: 15px !important; font-weight: 700;
+        }}
         .report-sheet .box-content,
         .report-sheet .header-box,
         .report-sheet .photo-meta,
@@ -4094,19 +4095,16 @@ with tab5:
         .report-sheet li {{
             width: 100%; max-width: 100%; box-sizing: border-box;
         }}
-        .page.report-page.page-one {{
-            padding: 8mm 12mm 10mm;
-            display: flex; flex-direction: column; justify-content: flex-start;
-            align-items: stretch; align-content: flex-start; gap: 2px;
+        .page-flow {{
+            display: flex; flex-direction: column; justify-content: space-between;
         }}
-        .page-one .header-Title {{ margin-bottom: 2px; }}
-        .page-one .header-box {{
-            min-height: 96px; margin-bottom: 4px; padding-bottom: 4px; align-items: center;
+        .page-flow > .table-scroll,
+        .page-flow > .box-content {{
+            flex: 1 1 auto;
         }}
-        .page-one .header-logo img {{ height: 84px; max-width: 92px; }}
-        .page-one .section-badge {{ margin: 2px auto; padding: 2px 12px; }}
-        .page-one table {{ margin-top: 0 !important; margin-bottom: 4px !important; }}
-        .page-one th, .page-one td {{ padding: 4px 3px; }}
+        .page-flow > .table-scroll > table {{
+            height: 100%;
+        }}
         .photo-annex {{ page-break-before: always; overflow: visible; }}
         .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
         .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
@@ -4121,12 +4119,7 @@ with tab5:
             display: block; margin: 0 auto;
             border: 2px solid #1b4332; border-radius: 6px; background: #fff;
         }}
-        .page-three table {{ margin-top: 4px !important; margin-bottom: 4px !important; }}
-        .page-three th, .page-three td {{ padding: 3px 4px !important; }}
-        .page-three .sign-table {{ margin-top: 2px !important; margin-bottom: 0 !important; }}
-        .page-three .sign-table th, .page-three .sign-table td {{
-            padding: 2px 3px !important; line-height: 1.15;
-        }}
+        .page-three .sign-table {{ margin-top: 8px; }}
         .photo-card .photo-meta {{
             margin-top: 4px; font-weight: 600; font-size: 15px; line-height: 1.35;
             overflow: visible; white-space: normal;
@@ -4140,7 +4133,7 @@ with tab5:
             height: 110px; width: auto; max-width: 120px; object-fit: contain;
             display: block; margin: 0 auto;
         }}
-        .header-Title {{ text-align: center; font-size: 26px; font-weight: 700; margin-bottom: 6px; }}
+        .header-Title {{ text-align: center; font-size: 15px; font-weight: 700; margin-bottom: 6px; }}
         .header-box {{
             position: relative; display: flex; justify-content: space-between; align-items: center;
             min-height: 128px; border-bottom: 3px double #1b4332; padding-bottom: 10px;
@@ -4154,7 +4147,7 @@ with tab5:
         }}
         .section-badge {{
             background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
-            padding: 5px 25px; font-weight: 700; font-size: 22px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
+            padding: 5px 25px; font-weight: 700; font-size: 15px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
         }}
         table {{ width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 14px; }}
         th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-size: 14px; font-weight: 600; }}
@@ -4163,10 +4156,10 @@ with tab5:
             border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
             line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
         }}
-        .page-num {{ position: absolute; bottom: 12mm; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: 16px; }}
+        .page-num {{ position: absolute; bottom: 12mm; left: 50%; transform: translateX(-50%); font-weight: bold; font-size: 15px; }}
         .road-sign {{
             background: #2d6a4f; color: white; border: 3px solid white; outline: 3px solid #2d6a4f;
-            border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 16px; display: inline-block; margin-bottom: 25px;
+            border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 15px; display: inline-block; margin-bottom: 25px;
         }}
         .table-scroll {{ width: 100%; max-width: 100%; }}
         @media screen {{
@@ -4194,9 +4187,7 @@ with tab5:
                 min-height: 297mm !important; height: auto !important;
                 transform: none !important;
             }}
-            .page.report-page.page-one {{
-                padding: 8mm 12mm 10mm; gap: 2px; justify-content: flex-start;
-            }}
+            .page-flow {{ justify-content: space-between; }}
             .table-scroll, table, .table-scroll table {{
                 table-layout: fixed; width: 100% !important; max-width: 100% !important;
             }}
@@ -4230,9 +4221,10 @@ with tab5:
             }}
             table, .table-scroll table {{ border: 1px solid #000; }}
             th, td {{ border: 1px solid #000 !important; }}
-            .report-sheet .header-Title {{ font-size: 26px !important; font-weight: 700; }}
-            .report-sheet .section-badge {{ font-size: 22px !important; font-weight: 700; }}
-            .report-sheet .section-badge.badge-sub {{ font-size: 18px !important; }}
+            .report-sheet .header-Title,
+            .report-sheet .section-badge {{
+                font-size: 15px !important; font-weight: 700;
+            }}
             .report-sheet .box-content,
             .report-sheet .header-box,
             .report-sheet .photo-meta,
@@ -4248,14 +4240,7 @@ with tab5:
                 break-inside: avoid !important;
                 page-break-after: avoid !important;
             }}
-            .page.report-page.page-one {{
-                padding: 6mm 10mm 8mm; justify-content: flex-start; align-content: flex-start; gap: 2px;
-            }}
-            .page-one .header-box {{ min-height: 84px; margin-bottom: 2px; padding-bottom: 2px; }}
-            .page-one .section-badge {{ margin: 1px auto; }}
-            .page-one table {{ margin-bottom: 2px !important; }}
-            .page-three {{ padding: 8mm 12mm 8mm 12mm; }}
-            .page-three .sign-table th, .page-three .sign-table td {{ padding: 1px 3px !important; }}
+            .page-flow {{ justify-content: space-between; }}
             .photo-annex {{
                 overflow: visible; height: auto; max-height: none; min-height: 297mm;
                 padding: 8mm 10mm 12mm 10mm;
@@ -4291,7 +4276,7 @@ with tab5:
         </div>
         <div class="report-viewport">
         <div class="report-sheet">
-        <div class="page report-page page-one">
+        <div class="page report-page page-flow">
             {build_header()}
             <div class="section-badge">تقرير حادث مروري</div>
             <div class="section-badge badge-sub">معلومات الحادث</div>
@@ -4317,7 +4302,7 @@ with tab5:
             </table></div>
             <div class="page-num">1</div>
         </div>
-        <div class="page report-page">
+        <div class="page report-page page-flow">
             {build_header()}
             <div class="section-badge">نتائج الحادث</div>
             <div class="box-content">نتج عن الحادث :<br>{results_html}</div>
@@ -4330,23 +4315,23 @@ with tab5:
             </div>
             <div class="page-num">2</div>
         </div>
-        <div class="page report-page page-three">
+        <div class="page report-page page-three page-flow">
             {build_header()}
             <div class="table-scroll"><table>
-                <tr><th style="font-size:16px;">طبيعة وتصنيف الحادث</th></tr>
-                <tr><td style="font-size:16px;">{html.escape(accident_nature or "")}</td></tr>
+                <tr><th>طبيعة وتصنيف الحادث</th></tr>
+                <tr><td>{html.escape(accident_nature or "")}</td></tr>
             </table></div>
             <div class="table-scroll"><table>
-                <tr><th style="font-size:16px;">الحقوق الخاصة والعامة</th></tr>
-                <tr><td style="font-size:16px;">{html.escape("" if rights_status == "اختر الحالة" else rights_status)}</td></tr>
+                <tr><th>الحقوق الخاصة والعامة</th></tr>
+                <tr><td>{html.escape("" if rights_status == "اختر الحالة" else rights_status)}</td></tr>
             </table></div>
             <div class="table-scroll"><table>
-                <tr><th style="font-size:16px;">الإجراءات المتخذة</th></tr>
+                <tr><th>الإجراءات المتخذة</th></tr>
                 {actions_html}
             </table></div>
             {criminal_details_html}
             <div class="table-scroll"><table class="sign-table">
-                <tr><th colspan="3" style="font-size:16px;">معد التقرير</th></tr>
+                <tr><th colspan="3">معد التقرير</th></tr>
                 <tr><th>إجراء الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
                 <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
                 <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
