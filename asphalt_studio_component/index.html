@@ -78,6 +78,16 @@
             padding: 5px 8px;
             font-size: 12px;
         }
+        #flexRoadToolbar { display: none; }
+        #flexRoadToolbar select, #flexRoadToolbar input[type="number"] {
+            width: auto;
+            padding: 5px 8px;
+            font-size: 12px;
+        }
+        #flexWidthIn { width: 74px; }
+        #flexTerrainSel { width: 220px; max-width: 46vw; }
+        #flexCenterSel { width: 148px; }
+        .t-btn.active { background: #0369a1; border-color: #e0f2fe; }
         .canvas-wrap {
             width: 100%;
             max-width: 1080px;
@@ -171,6 +181,30 @@
                 <button class="t-btn" onclick="applyOrClonePosture('upright')">🚗 معتدلة</button>
             </div>
         </div>
+        <div id="flexRoadToolbar" class="toolbar-row">
+            <div class="btn-group">
+                <span style="font-size:11.5px;color:#93c5fd;font-weight:800;margin-left:4px;">طريق مرن:</span>
+                <button class="t-btn" id="flexEditToggle" onclick="toggleFlexRoadEdit()">✏️ تعديل المنحنى</button>
+                <label for="flexWidthIn">العرض</label>
+                <input id="flexWidthIn" type="number" min="60" max="220" step="2" value="112" oninput="updateFlexRoadParams()" />
+                <label for="flexTerrainSel">التضاريس</label>
+                <select id="flexTerrainSel" onchange="updateFlexRoadParams()">
+                    <option value="mountain">جبلي — جبل يسار وهاوية يمين</option>
+                    <option value="plain">سهلي</option>
+                </select>
+                <label for="flexCenterSel">خط الوسط</label>
+                <select id="flexCenterSel" onchange="updateFlexRoadParams()">
+                    <option value="double_yellow">خطان أصفران</option>
+                    <option value="dashed_white">خط أبيض متقطع</option>
+                    <option value="none">بدون خط</option>
+                </select>
+                <button class="t-btn" onclick="applyFlexCurvePreset('s_curve')">S جبلي</button>
+                <button class="t-btn" onclick="applyFlexCurvePreset('hairpin')">كوع حاد</button>
+                <button class="t-btn" onclick="applyFlexCurvePreset('gentle')">منحنى لطيف</button>
+                <button class="t-btn" onclick="addFlexRoadNode()">➕ نقطة</button>
+                <button class="t-btn danger" onclick="removeFlexRoadNode()">➖ نقطة</button>
+            </div>
+        </div>
         <div class="canvas-wrap">
             <canvas id="asphaltCanvas" width="960" height="500"></canvas>
         </div>
@@ -207,7 +241,8 @@
         parking_lot: "12. مواقف مركبات جانبية / ساحة وقوف",
         dirt_shoulder: "13. طريق أسفلتي مع منطقة ترابية / صحراوية جانبية",
         signalized_cross: "14. تقاطع رباعي منظم بإشارات ضوئية ومعابر مشاة",
-        mountain_cliff_curve: "15. منعطفات S جبلية (جبل يسار، هاوية يمين، خطان أصفران)"
+        mountain_cliff_curve: "15. منعطفات S جبلية (جبل يسار، هاوية يمين، خطان أصفران)",
+        custom_flex_road: "🛠️ 16. طريق مرن حر التشكيل بالماوس (تعديل المنحنيات والتعرجات يدوياً)"
     };
     const SCENARIOS = [
         { id:"s_mountain_cliff_fatal", name:"منعطفات S جبلية: تصادم ثم زحف على الجانب الأيمن وسقوط من الهاوية", road:"mountain_cliff_curve", fallMeters:48,
@@ -381,6 +416,12 @@
     let selectedIdx = -1;
     let dragMode = null;
     let dragOffset = {x:0, y:0};
+    let flexEditActive = false;
+    let flexRoadNodes = [];
+    let flexRoadWidth = 112;
+    let flexRoadTerrain = "mountain";
+    let flexRoadCenterLine = "double_yellow";
+    let flexDragIndex = -1;
     let autoSaveTimer = null;
     SCENARIOS.forEach((s, idx) => {
         const opt = document.createElement("option");
@@ -399,7 +440,8 @@
                 road: currentRoad,
                 roadName: roadNameIn.value,
                 fallMeters: Number(fallMetersIn && fallMetersIn.value) || 35,
-                items: items
+                items: items,
+                flexRoad: flexRoadState()
             }));
         } catch (err) {}
     }
@@ -425,13 +467,23 @@
         items = JSON.parse(JSON.stringify(sc.items)).filter(it => it.type !== "compass");
         items.push(compass);
         if (sc.fallMeters) updateFallMeters(sc.fallMeters, false);
+        if (sc.road === "mountain_cliff_curve") setFlexPreset("s_curve", false);
         selectedIdx = -1;
         syncCloneCarDropdown();
+        syncFlexToolbarVisibility();
         renderAll(false);
         if (!quiet) markDirty();
     }
     scenSel.addEventListener("change", () => loadScenario(Number(scenSel.value)));
-    roadSel.addEventListener("change", () => { currentRoad = roadSel.value; renderAll(false); scheduleAutoCommit(); });
+    roadSel.addEventListener("change", () => {
+        currentRoad = roadSel.value;
+        if ((currentRoad === "custom_flex_road" || currentRoad === "mountain_cliff_curve") && flexRoadNodes.length < 2) {
+            setFlexPreset(currentRoad === "mountain_cliff_curve" ? "s_curve" : "gentle", false);
+        }
+        syncFlexToolbarVisibility();
+        renderAll(false);
+        scheduleAutoCommit();
+    });
     roadNameIn.addEventListener("input", () => { renderAll(false); scheduleAutoCommit(); });
     if (fallMetersIn) {
         fallMetersIn.addEventListener("input", () => {
@@ -789,8 +841,324 @@
         }
         ctx.restore();
     }
+    const FLEX_PRESETS = {
+        s_curve: [
+            { x: 250, y: 8 }, { x: 230, y: 48 }, { x: 390, y: 145 },
+            { x: 175, y: 255 }, { x: 370, y: 365 }, { x: 210, y: 460 }, { x: 250, y: 492 }
+        ],
+        hairpin: [
+            { x: 140, y: 78 }, { x: 360, y: 86 }, { x: 700, y: 118 },
+            { x: 830, y: 240 }, { x: 690, y: 360 }, { x: 260, y: 402 }, { x: 110, y: 436 }
+        ],
+        gentle: [
+            { x: 30, y: 340 }, { x: 220, y: 280 }, { x: 480, y: 190 }, { x: 740, y: 150 }, { x: 950, y: 170 }
+        ]
+    };
+    function cloneFlexNodes(list) {
+        return (list || []).map(p => ({ x: Number(p.x) || 0, y: Number(p.y) || 0 }));
+    }
+    function flexRoadState() {
+        return {
+            nodes: cloneFlexNodes(flexRoadNodes),
+            width: flexRoadWidth,
+            terrain: flexRoadTerrain,
+            centerLine: flexRoadCenterLine
+        };
+    }
+    function restoreFlexRoad(raw) {
+        if (!raw || typeof raw !== "object") return;
+        if (Array.isArray(raw.nodes)) {
+            const nodes = raw.nodes.map(n => ({ x: Number(n && n.x), y: Number(n && n.y) })).filter(n => Number.isFinite(n.x) && Number.isFinite(n.y));
+            if (nodes.length >= 2) flexRoadNodes = nodes;
+        }
+        const width = Math.round(Number(raw.width));
+        if (Number.isFinite(width)) flexRoadWidth = Math.max(60, Math.min(220, width));
+        if (raw.terrain === "plain" || raw.terrain === "mountain") flexRoadTerrain = raw.terrain;
+        if (raw.centerLine === "double_yellow" || raw.centerLine === "dashed_white" || raw.centerLine === "none") flexRoadCenterLine = raw.centerLine;
+    }
+    function setFlexPreset(preset, commit) {
+        const spec = FLEX_PRESETS[preset] || FLEX_PRESETS.gentle;
+        flexRoadNodes = cloneFlexNodes(spec);
+        if (preset === "gentle") {
+            flexRoadTerrain = "plain";
+            flexRoadCenterLine = "dashed_white";
+            flexRoadWidth = 100;
+        } else {
+            flexRoadTerrain = "mountain";
+            flexRoadCenterLine = "double_yellow";
+            flexRoadWidth = preset === "hairpin" ? 120 : 112;
+        }
+        syncFlexToolbarVisibility();
+        if (commit) {
+            renderAll(false);
+            scheduleAutoCommit();
+        }
+    }
+    function syncFlexToolbarVisibility() {
+        const bar = document.getElementById("flexRoadToolbar");
+        const flexible = currentRoad === "custom_flex_road" || currentRoad === "mountain_cliff_curve";
+        if (bar) bar.style.display = flexible ? "flex" : "none";
+        if (!flexible) {
+            flexEditActive = false;
+            flexDragIndex = -1;
+        } else if (flexRoadNodes.length < 2) {
+            setFlexPreset(currentRoad === "mountain_cliff_curve" ? "s_curve" : "gentle", false);
+            return;
+        }
+        const toggle = document.getElementById("flexEditToggle");
+        if (toggle) {
+            toggle.textContent = flexEditActive ? "✏️ إنهاء تعديل المنحنى" : "✏️ تعديل المنحنى";
+            toggle.classList.toggle("active", flexEditActive);
+        }
+        const widthIn = document.getElementById("flexWidthIn");
+        if (widthIn && document.activeElement !== widthIn) widthIn.value = String(flexRoadWidth);
+        const terrainSel = document.getElementById("flexTerrainSel");
+        if (terrainSel) terrainSel.value = flexRoadTerrain;
+        const centerSel = document.getElementById("flexCenterSel");
+        if (centerSel) centerSel.value = flexRoadCenterLine;
+        if (typeof syncFrameHeight === "function") syncFrameHeight();
+    }
+    function toggleFlexRoadEdit() {
+        if (currentRoad !== "custom_flex_road" && currentRoad !== "mountain_cliff_curve") return;
+        flexEditActive = !flexEditActive;
+        flexDragIndex = -1;
+        syncFlexToolbarVisibility();
+        renderAll(false);
+        scheduleAutoCommit();
+    }
+    function updateFlexRoadParams() {
+        const widthIn = document.getElementById("flexWidthIn");
+        const terrainSel = document.getElementById("flexTerrainSel");
+        const centerSel = document.getElementById("flexCenterSel");
+        const width = Math.round(Number(widthIn && widthIn.value));
+        if (Number.isFinite(width)) flexRoadWidth = Math.max(60, Math.min(220, width));
+        if (terrainSel && (terrainSel.value === "plain" || terrainSel.value === "mountain")) flexRoadTerrain = terrainSel.value;
+        if (centerSel && (centerSel.value === "double_yellow" || centerSel.value === "dashed_white" || centerSel.value === "none")) flexRoadCenterLine = centerSel.value;
+        renderAll(false);
+        scheduleAutoCommit();
+    }
+    function applyFlexCurvePreset(preset) {
+        if (currentRoad !== "custom_flex_road" && currentRoad !== "mountain_cliff_curve") {
+            currentRoad = "custom_flex_road";
+            if (roadSel) roadSel.value = currentRoad;
+        }
+        setFlexPreset(preset, true);
+    }
+    function addFlexRoadNode() {
+        if (flexRoadNodes.length < 2) setFlexPreset("gentle", false);
+        let bestI = 0;
+        let bestLen = -1;
+        for (let i = 0; i < flexRoadNodes.length - 1; i++) {
+            const a = flexRoadNodes[i];
+            const b = flexRoadNodes[i + 1];
+            const len = Math.hypot(b.x - a.x, b.y - a.y);
+            if (len > bestLen) { bestLen = len; bestI = i; }
+        }
+        const a = flexRoadNodes[bestI];
+        const b = flexRoadNodes[bestI + 1];
+        flexRoadNodes.splice(bestI + 1, 0, { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });
+        flexEditActive = true;
+        syncFlexToolbarVisibility();
+        renderAll(false);
+        scheduleAutoCommit();
+    }
+    function removeFlexRoadNode() {
+        if (flexRoadNodes.length <= 2) return;
+        const idx = flexDragIndex >= 0 && flexDragIndex < flexRoadNodes.length ? flexDragIndex : flexRoadNodes.length - 1;
+        flexRoadNodes.splice(idx, 1);
+        flexDragIndex = -1;
+        renderAll(false);
+        scheduleAutoCommit();
+    }
+    function buildFlexSplineSamples(nodes) {
+        const src = Array.isArray(nodes) ? nodes : flexRoadNodes;
+        if (!src || src.length < 2) return [];
+        function catmull(p0, p1, p2, p3, t) {
+            const t2 = t * t;
+            const t3 = t2 * t;
+            return {
+                x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
+                y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
+            };
+        }
+        const samples = [];
+        for (let i = 0; i < src.length - 1; i++) {
+            const p0 = src[Math.max(0, i - 1)];
+            const p1 = src[i];
+            const p2 = src[Math.min(src.length - 1, i + 1)];
+            const p3 = src[Math.min(src.length - 1, i + 2)];
+            for (let s = 0; s < 16; s++) samples.push(catmull(p0, p1, p2, p3, s / 16));
+        }
+        samples.push({ x: src[src.length - 1].x, y: src[src.length - 1].y });
+        return samples;
+    }
+    function insertFlexNodeAt(p) {
+        if (flexRoadNodes.length < 2) {
+            flexRoadNodes.push({ x: p.x, y: p.y });
+            return;
+        }
+        let best = 0;
+        let bestD = Infinity;
+        for (let i = 0; i < flexRoadNodes.length - 1; i++) {
+            const a = flexRoadNodes[i];
+            const b = flexRoadNodes[i + 1];
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const len2 = dx * dx + dy * dy || 1;
+            let t = ((p.x - a.x) * dx + (p.y - a.y) * dy) / len2;
+            t = Math.max(0, Math.min(1, t));
+            const d = Math.hypot(p.x - (a.x + dx * t), p.y - (a.y + dy * t));
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        flexRoadNodes.splice(best + 1, 0, { x: p.x, y: p.y });
+    }
+    function drawFlexibleSplineRoad() {
+        if (!flexRoadNodes || flexRoadNodes.length < 2) {
+            setFlexPreset(currentRoad === "mountain_cliff_curve" ? "s_curve" : "gentle", false);
+        }
+        const center = buildFlexSplineSamples(flexRoadNodes);
+        if (center.length < 2) return;
+        const half = Math.max(30, Math.min(110, flexRoadWidth / 2));
+        const asphaltColor = "#334155";
+        const yellow = "#fbbf24";
+        const white = "#f8fafc";
+        if (flexRoadTerrain === "mountain") {
+            const leftEdge = offsetPolyline(center, half + 16);
+            const rightEdge = offsetPolyline(center, -(half + 16));
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(leftEdge[0].x, leftEdge[0].y);
+            leftEdge.forEach(pt => ctx.lineTo(pt.x, pt.y));
+            ctx.lineTo(0, leftEdge[leftEdge.length - 1].y);
+            ctx.lineTo(0, 500);
+            ctx.closePath();
+            ctx.fillStyle = "#4d5c38";
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(rightEdge[0].x, rightEdge[0].y);
+            rightEdge.forEach(pt => ctx.lineTo(pt.x, pt.y));
+            ctx.lineTo(960, rightEdge[rightEdge.length - 1].y);
+            ctx.lineTo(960, rightEdge[0].y);
+            ctx.closePath();
+            ctx.fillStyle = "#6a5344";
+            ctx.fill();
+            ctx.save();
+            ctx.clip();
+            ctx.strokeStyle = "rgba(254, 243, 199, 0.38)";
+            ctx.lineWidth = 1.25;
+            for (let h = -180; h < 1400; h += 16) {
+                ctx.beginPath();
+                ctx.moveTo(h, 0);
+                ctx.lineTo(h + 220, 500);
+                ctx.stroke();
+            }
+            ctx.restore();
+        }
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.setLineDash([]);
+        ctx.strokeStyle = "#e2e8f0";
+        ctx.lineWidth = flexRoadWidth + 16;
+        tracePolyline(center);
+        ctx.stroke();
+        ctx.strokeStyle = asphaltColor;
+        ctx.lineWidth = flexRoadWidth;
+        tracePolyline(center);
+        ctx.stroke();
+        ctx.strokeStyle = white;
+        ctx.lineWidth = 2.6;
+        tracePolyline(offsetPolyline(center, half - 4));
+        ctx.stroke();
+        tracePolyline(offsetPolyline(center, -(half - 4)));
+        ctx.stroke();
+        if (flexRoadCenterLine === "double_yellow") {
+            ctx.setLineDash([]);
+            ctx.strokeStyle = yellow;
+            ctx.lineWidth = 3.2;
+            tracePolyline(offsetPolyline(center, 4.2));
+            ctx.stroke();
+            tracePolyline(offsetPolyline(center, -4.2));
+            ctx.stroke();
+        } else if (flexRoadCenterLine === "dashed_white") {
+            ctx.setLineDash([16, 12]);
+            ctx.strokeStyle = white;
+            ctx.lineWidth = 2.4;
+            tracePolyline(center);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        if (flexRoadTerrain === "mountain") {
+            const rocks = offsetPolyline(center, half + 48);
+            [8, 24, 40, 56, 72, 88].forEach((idx, n) => {
+                const rock = rocks[Math.min(rocks.length - 1, idx)];
+                if (rock && rock.x > 8 && rock.y > 8 && rock.y < 490) drawStaticMountainRock(rock.x, rock.y, 0.7 + (n % 3) * 0.12, false, true, -8);
+            });
+            ctx.save();
+            ctx.font = "900 13px Tahoma, Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillStyle = "#ecfccb";
+            ctx.fillText("جبل", 78, 250);
+            ctx.fillStyle = "#fef3c7";
+            ctx.fillText("أسفل الجبل — هاوية", 760, 250);
+            ctx.restore();
+        }
+    }
+    function nearestFlexNode(p, maxDist) {
+        let best = -1;
+        let bestD = maxDist;
+        flexRoadNodes.forEach((node, idx) => {
+            const d = Math.hypot(p.x - node.x, p.y - node.y);
+            if (d < bestD) { best = idx; bestD = d; }
+        });
+        return best;
+    }
+    function pointerHitsSceneItem(p) {
+        for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i];
+            if (!it) continue;
+            if (it.tailX !== undefined && Math.hypot(p.x - it.tailX, p.y - it.tailY) <= 14) return true;
+            if (it.type === "cliff_fall" && Math.hypot(p.x - it.x, p.y - it.y) <= 18) return true;
+            if (it.type !== "cliff_fall" && Math.hypot(p.x - it.x, p.y - it.y) <= itemHitRadius(it)) return true;
+        }
+        return false;
+    }
+    function drawFlexRoadHandlesOverlay(hideHandles) {
+        if (hideHandles || !flexEditActive) return;
+        if (currentRoad !== "custom_flex_road" && currentRoad !== "mountain_cliff_curve") return;
+        if (!flexRoadNodes || flexRoadNodes.length < 2) return;
+        ctx.save();
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 1.6;
+        ctx.setLineDash([5, 4]);
+        ctx.beginPath();
+        ctx.moveTo(flexRoadNodes[0].x, flexRoadNodes[0].y);
+        for (let i = 1; i < flexRoadNodes.length; i++) ctx.lineTo(flexRoadNodes[i].x, flexRoadNodes[i].y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        flexRoadNodes.forEach((node, idx) => {
+            ctx.beginPath();
+            ctx.arc(node.x, node.y, idx === flexDragIndex ? 9 : 7, 0, Math.PI * 2);
+            ctx.fillStyle = idx === flexDragIndex ? "#f97316" : "#fbbf24";
+            ctx.fill();
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#0f172a";
+            ctx.stroke();
+            ctx.fillStyle = "#0f172a";
+            ctx.font = "800 10px Tahoma, Arial";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(String(idx + 1), node.x, node.y + 0.5);
+        });
+        ctx.restore();
+    }
+    window.toggleFlexRoadEdit = toggleFlexRoadEdit;
+    window.updateFlexRoadParams = updateFlexRoadParams;
+    window.applyFlexCurvePreset = applyFlexCurvePreset;
+    window.addFlexRoadNode = addFlexRoadNode;
+    window.removeFlexRoadNode = removeFlexRoadNode;
     function drawAsphaltRoad(type) {
-        ctx.fillStyle = (type === "dirt_shoulder" || type.startsWith("mountain")) ? "#d6c7a9" : "#cbd5e1";
+        ctx.fillStyle = (type === "dirt_shoulder" || type.startsWith("mountain") || (type === "custom_flex_road" && flexRoadTerrain === "mountain")) ? "#d6c7a9" : "#cbd5e1";
         ctx.fillRect(0, 0, 960, 500);
         ctx.strokeStyle = "rgba(15,23,42,0.08)";
         ctx.lineWidth = 1;
@@ -911,130 +1279,8 @@
             ctx.strokeStyle = yellow; ctx.lineWidth = 3;
             ctx.beginPath(); ctx.moveTo(110, 145); ctx.quadraticCurveTo(790, 135, 720, 265); ctx.quadraticCurveTo(660, 385, 130, 375); ctx.stroke();
         }
-        else if (type === "mountain_cliff_curve") {
-            function catmullRom(p0, p1, p2, p3, t) {
-                const t2 = t * t;
-                const t3 = t2 * t;
-                return {
-                    x: 0.5 * ((2 * p1.x) + (-p0.x + p2.x) * t + (2 * p0.x - 5 * p1.x + 4 * p2.x - p3.x) * t2 + (-p0.x + 3 * p1.x - 3 * p2.x + p3.x) * t3),
-                    y: 0.5 * ((2 * p1.y) + (-p0.y + p2.y) * t + (2 * p0.y - 5 * p1.y + 4 * p2.y - p3.y) * t2 + (-p0.y + 3 * p1.y - 3 * p2.y + p3.y) * t3)
-                };
-            }
-            const knots = [
-                { x: 280, y: -36 },
-                { x: 230, y: 28 },
-                { x: 390, y: 145 },
-                { x: 175, y: 255 },
-                { x: 370, y: 365 },
-                { x: 200, y: 470 },
-                { x: 270, y: 536 }
-            ];
-            const center = [];
-            for (let i = 0; i < knots.length - 1; i++) {
-                const p0 = knots[Math.max(0, i - 1)];
-                const p1 = knots[i];
-                const p2 = knots[Math.min(knots.length - 1, i + 1)];
-                const p3 = knots[Math.min(knots.length - 1, i + 2)];
-                for (let s = 0; s < 18; s++) center.push(catmullRom(p0, p1, p2, p3, s / 18));
-            }
-            center.push(knots[knots.length - 1]);
-            const leftEdge = offsetPolyline(center, 70);
-            const rightEdge = offsetPolyline(center, -70);
-            ctx.fillStyle = "#cbb892";
-            ctx.fillRect(0, 0, 960, 500);
-            ctx.beginPath();
-            ctx.moveTo(0, 0);
-            ctx.lineTo(leftEdge[0].x, leftEdge[0].y);
-            leftEdge.forEach(p => ctx.lineTo(p.x, p.y));
-            ctx.lineTo(0, leftEdge[leftEdge.length - 1].y);
-            ctx.lineTo(0, 500);
-            ctx.closePath();
-            ctx.fillStyle = "#4d5c38";
-            ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(rightEdge[0].x, rightEdge[0].y);
-            rightEdge.forEach(p => ctx.lineTo(p.x, p.y));
-            ctx.lineTo(960, rightEdge[rightEdge.length - 1].y);
-            ctx.lineTo(960, rightEdge[0].y);
-            ctx.closePath();
-            ctx.fillStyle = "#6a5344";
-            ctx.fill();
-            ctx.save();
-            ctx.clip();
-            ctx.strokeStyle = "rgba(254, 243, 199, 0.38)";
-            ctx.lineWidth = 1.25;
-            for (let h = -180; h < 1400; h += 16) {
-                ctx.beginPath();
-                ctx.moveTo(h, 0);
-                ctx.lineTo(h + 220, 500);
-                ctx.stroke();
-            }
-            ctx.restore();
-            ctx.lineCap = "round";
-            ctx.lineJoin = "round";
-            ctx.setLineDash([]);
-            ctx.strokeStyle = "#e2e8f0";
-            ctx.lineWidth = 128;
-            tracePolyline(center);
-            ctx.stroke();
-            ctx.strokeStyle = asphalt;
-            ctx.lineWidth = 112;
-            tracePolyline(center);
-            ctx.stroke();
-            ctx.strokeStyle = white;
-            ctx.lineWidth = 2.6;
-            tracePolyline(offsetPolyline(center, 52));
-            ctx.stroke();
-            tracePolyline(offsetPolyline(center, -52));
-            ctx.stroke();
-            ctx.strokeStyle = yellow;
-            ctx.lineWidth = 3.4;
-            tracePolyline(offsetPolyline(center, 4.2));
-            ctx.stroke();
-            tracePolyline(offsetPolyline(center, -4.2));
-            ctx.stroke();
-            const rocks = offsetPolyline(center, 118);
-            [12, 30, 48, 66, 84, 102].forEach((idx, n) => {
-                const rock = rocks[Math.min(rocks.length - 1, idx)];
-                if (rock.x > 8 && rock.y > 8 && rock.y < 490) drawStaticMountainRock(rock.x, rock.y, 0.7 + (n % 3) * 0.12, false, true, -8);
-            });
-            [24, 78].forEach(idx => {
-                const pt = center[Math.min(center.length - 2, idx)];
-                const nxt = center[Math.min(center.length - 1, idx + 6)];
-                const ang = Math.atan2(nxt.y - pt.y, nxt.x - pt.x);
-                const lane = offsetPolyline(center, -26)[Math.min(center.length - 1, idx)];
-                ctx.save();
-                ctx.translate(lane.x, lane.y);
-                ctx.rotate(ang);
-                ctx.fillStyle = "#fbbf24";
-                ctx.strokeStyle = "#78350f";
-                ctx.lineWidth = 1.4;
-                ctx.beginPath();
-                ctx.moveTo(14, 0); ctx.lineTo(-2, -7); ctx.lineTo(-2, -3); ctx.lineTo(-14, -3);
-                ctx.lineTo(-14, 3); ctx.lineTo(-2, 3); ctx.lineTo(-2, 7);
-                ctx.closePath();
-                ctx.fill();
-                ctx.stroke();
-                ctx.restore();
-            });
-            ctx.save();
-            ctx.font = "900 13px Tahoma, Arial";
-            ctx.textAlign = "center";
-            ctx.textBaseline = "middle";
-            const ban = "ممنوع التجاوز";
-            const bw = ctx.measureText(ban).width + 16;
-            ctx.fillStyle = "rgba(255,255,255,0.96)";
-            ctx.strokeStyle = "#b45309";
-            ctx.lineWidth = 1.5;
-            ctx.beginPath(); ctx.roundRect(250 - bw / 2, 168, bw, 20, 4); ctx.fill(); ctx.stroke();
-            ctx.fillStyle = "#9a3412";
-            ctx.fillText(ban, 250, 178);
-            ctx.font = "900 15px Tahoma, Arial";
-            ctx.fillStyle = "#ecfccb";
-            ctx.fillText("جبل", 78, 250);
-            ctx.fillStyle = "#fef3c7";
-            ctx.fillText("أسفل الجبل — هاوية", 760, 250);
-            ctx.restore();
+        else if (type === "custom_flex_road" || type === "mountain_cliff_curve") {
+            drawFlexibleSplineRoad();
         }
         else if (type === "service_exit") {
             ctx.fillStyle = asphalt;
@@ -1486,6 +1732,7 @@
             if (it.type === "compass") drawCompassItem(it, idx === selectedIdx, hideSelectionHandles);
         });
         drawHudOverlay();
+        drawFlexRoadHandlesOverlay(hideSelectionHandles);
     }
     function getCanvasPos(evt) {
         const r = canvas.getBoundingClientRect();
@@ -1511,6 +1758,65 @@
         if (isVectorShape(it.type)) return 36;
         return 32;
     }
+    function flexEditArmed() {
+        return flexEditActive && (currentRoad === "custom_flex_road" || currentRoad === "mountain_cliff_curve");
+    }
+    canvas.addEventListener("mousedown", e => {
+        if (!flexEditArmed()) return;
+        const p = getCanvasPos(e);
+        const idx = nearestFlexNode(p, 14);
+        if (idx < 0) return;
+        flexDragIndex = idx;
+        e.stopPropagation();
+        e.preventDefault();
+        renderAll(false);
+    }, true);
+    window.addEventListener("mousemove", e => {
+        if (!flexEditArmed() || flexDragIndex < 0) return;
+        const node = flexRoadNodes[flexDragIndex];
+        if (!node) return;
+        const p = getCanvasPos(e);
+        node.x = Math.max(8, Math.min(952, p.x));
+        node.y = Math.max(8, Math.min(492, p.y));
+        e.stopPropagation();
+        renderAll(false);
+    }, true);
+    window.addEventListener("mouseup", e => {
+        if (flexDragIndex < 0) return;
+        flexDragIndex = -1;
+        e.stopPropagation();
+        renderAll(false);
+        scheduleAutoCommit();
+    }, true);
+    canvas.addEventListener("dblclick", e => {
+        if (!flexEditArmed()) return;
+        const p = getCanvasPos(e);
+        const idx = nearestFlexNode(p, 14);
+        if (idx >= 0) {
+            if (flexRoadNodes.length > 2) flexRoadNodes.splice(idx, 1);
+            flexDragIndex = -1;
+            e.stopPropagation();
+            e.preventDefault();
+            renderAll(false);
+            scheduleAutoCommit();
+            return;
+        }
+        if (pointerHitsSceneItem(p)) return;
+        const samples = buildFlexSplineSamples(flexRoadNodes);
+        let near = false;
+        for (let i = 0; i < samples.length; i++) {
+            if (Math.hypot(p.x - samples[i].x, p.y - samples[i].y) <= Math.max(28, flexRoadWidth / 2)) {
+                near = true;
+                break;
+            }
+        }
+        if (!near) return;
+        insertFlexNodeAt(p);
+        e.stopPropagation();
+        e.preventDefault();
+        renderAll(false);
+        scheduleAutoCommit();
+    }, true);
     canvas.addEventListener("mousedown", e => {
         const p = getCanvasPos(e);
         for (let i = items.length - 1; i >= 0; i--) {
@@ -1756,9 +2062,11 @@
                 roadNameIn.value = args.saved_state.roadName || args.default_loc || "";
                 if (args.saved_state.fallMeters != null) updateFallMeters(args.saved_state.fallMeters, false);
                 items = JSON.parse(JSON.stringify(args.saved_state.items));
+                if (args.saved_state.flexRoad) restoreFlexRoad(args.saved_state.flexRoad);
                 ensureCompass();
                 selectedIdx = -1;
                 syncCloneCarDropdown();
+                syncFlexToolbarVisibility();
                 renderAll(false);
             } else {
                 if (args.default_loc && !roadNameIn.value) {
@@ -1792,7 +2100,8 @@
                     road: currentRoad,
                     roadName: roadNameIn.value || "",
                     fallMeters: Number(fallMetersIn && fallMetersIn.value) || 35,
-                    items: items
+                    items: items,
+                    flexRoad: flexRoadState()
                 },
                 ts: Date.now()
             }
