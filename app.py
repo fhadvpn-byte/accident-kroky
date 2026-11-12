@@ -372,10 +372,16 @@ def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تا
 KSA_TZ = timezone(timedelta(hours=3))
 DEPT_STAFF_PATH = Path(".bayyinah_dept_staff.json")
 DEPT_STAFF_STORAGE_KEY = "bayyinah_dept_staff"
-MILITARY_RANKS = [
-    "", "جندي", "جندي أول", "عريف", "وكيل رقيب", "رقيب", "رقيب أول", "رئيس رقباء",
-    "ملازم", "ملازم أول", "نقيب", "رائد", "مقدم", "عقيد", "عميد", "لواء",
+RANKS_LIST = [
+    "جندي", "جندي أول", "عريف", "وكيل رقيب", "رقيب", "رقيب أول", "رئيس رقباء",
+    "ملازم", "ملازم أول", "نقيب", "رائد", "مقدم", "عقيد", "عميد",
 ]
+ROLE_RANK_DEFAULTS = {
+    "officer_1_rank": "عريف",
+    "officer_2_rank": "رقيب",
+    "manager_rank": "رئيس رقباء",
+}
+MANUAL_OFFICER_OPTION = "✍️ كتابة / تعديل اسم يدوياً..."
 DEFAULT_DEPT_STAFF = {
     "dept_region": "إدارة مرور منطقة جازان",
     "dept_section": "قسم مرور محافظة العارضة",
@@ -450,33 +456,81 @@ def _mirror_dept_staff_local_storage(data: dict):
         width=0,
     )
 
-def render_officer_quick_picker(presets: list, name_key: str, rank_key: str, role_label: str):
-    """قائمة سريعة لاختيار المنسوب المحفوظ وإنزال اسمه ورتبته بضغطة واحدة."""
-    clean_presets = [item for item in presets if isinstance(item, dict) and str(item.get("name") or "").strip()]
-    if not clean_presets:
-        return
-    options = ["-- اختيار سريع من المحفوظين --"] + [
-        f"{item.get('rank', '')} / {item.get('name', '')}".strip(" /") for item in clean_presets
-    ]
-    picked = st.selectbox(
-        f"اختيار سريع ({role_label})",
-        options=options,
-        key=f"_quick_pick_{name_key}",
-        label_visibility="collapsed",
-    )
-    applied_key = f"_quick_applied_{name_key}"
-    if picked != "-- اختيار سريع من المحفوظين --" and st.session_state.get(applied_key) != picked:
-        chosen = clean_presets[options.index(picked) - 1]
-        st.session_state[applied_key] = picked
-        st.session_state[name_key] = str(chosen.get("name") or "")
-        st.session_state[rank_key] = str(chosen.get("rank") or "")
+def _clean_saved_officers(presets) -> list:
+    cleaned = []
+    seen = set()
+    for item in presets or []:
+        if not isinstance(item, dict):
+            continue
+        name = str(item.get("name") or "").strip()
+        if not name:
+            continue
+        rank = str(item.get("rank") or "").strip()
+        if rank not in RANKS_LIST:
+            rank = ""
+        label = f"{rank} / {name}" if rank else name
+        if label in seen:
+            continue
+        seen.add(label)
+        cleaned.append({"name": name, "rank": rank, "label": label})
+    return cleaned
 
-def _rank_select(label: str, key: str, on_change):
-    current = str(st.session_state.get(key, "") or "")
-    options = list(MILITARY_RANKS)
-    if current not in options:
-        options = [current] + options
-    return st.selectbox(label, options=options, key=key, on_change=on_change)
+def _ensure_role_rank(rank_key: str) -> str:
+    default_rank = ROLE_RANK_DEFAULTS[rank_key]
+    current = st.session_state.get(rank_key)
+    if current is None or str(current).strip() not in RANKS_LIST:
+        st.session_state[rank_key] = default_rank
+    return default_rank
+
+def render_signatory_card(card_key: str, title: str, name_key: str, rank_key: str, presets, on_commit):
+    """بطاقة صفة واحدة: قائمة اسم محفوظة، والكتابة اليدوية تظهر عند طلبها فقط."""
+    default_rank = _ensure_role_rank(rank_key)
+    if name_key not in st.session_state or st.session_state.get(name_key) is None:
+        st.session_state[name_key] = ""
+    saved = _clean_saved_officers(presets)
+    options = [item["label"] for item in saved] + [MANUAL_OFFICER_OPTION]
+    pick_key = f"{name_key}_source"
+    current_name = str(st.session_state.get(name_key) or "").strip()
+    current_rank = str(st.session_state.get(rank_key) or "").strip()
+    if pick_key not in st.session_state or st.session_state.get(pick_key) not in options:
+        match = ""
+        for item in saved:
+            if item["name"] != current_name:
+                continue
+            match = item["label"]
+            if item["rank"] == current_rank:
+                break
+        st.session_state[pick_key] = match or MANUAL_OFFICER_OPTION
+
+    def _on_pick():
+        picked = st.session_state.get(pick_key)
+        for item in saved:
+            if item["label"] != picked:
+                continue
+            st.session_state[name_key] = item["name"]
+            st.session_state[rank_key] = item["rank"] if item["rank"] in RANKS_LIST else default_rank
+            break
+        on_commit()
+
+    with st.container(key=card_key):
+        st.markdown(
+            f'<div class="officer-role-card"><div class="officer-role-title">{html.escape(title)}</div></div>',
+            unsafe_allow_html=True,
+        )
+        picked_label = st.selectbox("الاسم", options=options, key=pick_key, on_change=_on_pick)
+        if picked_label != MANUAL_OFFICER_OPTION:
+            for item in saved:
+                if item["label"] == picked_label and st.session_state.get(name_key) != item["name"]:
+                    st.session_state[name_key] = item["name"]
+                    break
+        else:
+            st.text_input(
+                "كتابة الاسم",
+                key=name_key,
+                on_change=on_commit,
+                placeholder="اكتب الاسم المعتمد",
+            )
+        st.selectbox("الرتبة", options=list(RANKS_LIST), key=rank_key, on_change=on_commit)
 
 def render_persistent_sidebar_settings():
     """إعدادات القسم والمنسوبين: ملف محلي + localStorage، ولا يمسحها حادث جديد."""
@@ -521,15 +575,38 @@ def render_persistent_sidebar_settings():
     with st.container(key="glow-officers"):
         st.subheader("👮‍♂️ بيانات معدي التقرير المعتمدين")
         presets = data.get("saved_officers") or []
-        render_officer_quick_picker(presets, "officer_1_name", "officer_1_rank", "مباشر الحوادث")
-        officer_1_name = st.text_input("اسم مباشر/إجراء الحوادث", key="officer_1_name", on_change=_commit)
-        officer_1_rank = _rank_select("رتبة مباشر الحوادث", "officer_1_rank", _commit)
-        render_officer_quick_picker(presets, "officer_2_name", "officer_2_rank", "مشرف الحوادث")
-        officer_2_name = st.text_input("اسم مشرف الحوادث", key="officer_2_name", on_change=_commit)
-        officer_2_rank = _rank_select("رتبة مشرف الحوادث", "officer_2_rank", _commit)
-        render_officer_quick_picker(presets, "manager_name", "manager_rank", "مدير القسم")
-        manager_name = st.text_input("اسم مدير القسم / الشعبة", key="manager_name", on_change=_commit)
-        manager_rank = _rank_select("رتبة المدير", "manager_rank", _commit)
+        for rank_key in ROLE_RANK_DEFAULTS:
+            _ensure_role_rank(rank_key)
+        render_signatory_card(
+            "officer_role_direct",
+            "1️⃣ مباشر الحوادث (إجراءات الحوادث)",
+            "officer_1_name",
+            "officer_1_rank",
+            presets,
+            _commit,
+        )
+        render_signatory_card(
+            "officer_role_supervisor",
+            "2️⃣ مشرف الحوادث",
+            "officer_2_name",
+            "officer_2_rank",
+            presets,
+            _commit,
+        )
+        render_signatory_card(
+            "officer_role_manager",
+            "3️⃣ مدير القسم / الشعبة",
+            "manager_name",
+            "manager_rank",
+            presets,
+            _commit,
+        )
+        officer_1_name = str(st.session_state.get("officer_1_name") or "")
+        officer_1_rank = str(st.session_state.get("officer_1_rank") or "")
+        officer_2_name = str(st.session_state.get("officer_2_name") or "")
+        officer_2_rank = str(st.session_state.get("officer_2_rank") or "")
+        manager_name = str(st.session_state.get("manager_name") or "")
+        manager_rank = str(st.session_state.get("manager_rank") or "")
     _commit()
     return (
         dept_region,
@@ -3562,6 +3639,28 @@ st.markdown("""
             padding: 0 !important;
             margin: 0 !important;
         }
+    }
+    .officer-role-card { background: rgba(8, 25, 48, 0.75); border: 1px solid rgba(56, 189, 248, 0.35); border-right: 3.5px solid #38bdf8; border-radius: 10px; padding: 8px 10px 4px 10px; margin: 10px 0 6px 0; }
+    .officer-role-title { font-size: 13px; font-weight: 800; color: #7dd3fc; margin-bottom: 4px; }
+    section[data-testid="stSidebar"] > div:first-child { padding-bottom: 85px !important; }
+    div[data-testid="stPopover"] > button p { font-size: 13px !important; white-space: nowrap !important; overflow: visible !important; }
+    .st-key-officer_role_direct,
+    .st-key-officer_role_supervisor,
+    .st-key-officer_role_manager {
+        background: rgba(8, 25, 48, 0.75);
+        border: 1px solid rgba(56, 189, 248, 0.35);
+        border-right: 3.5px solid #38bdf8;
+        border-radius: 10px;
+        padding: 8px 10px 4px 10px;
+        margin: 10px 0 6px 0;
+    }
+    .st-key-officer_role_direct .officer-role-card,
+    .st-key-officer_role_supervisor .officer-role-card,
+    .st-key-officer_role_manager .officer-role-card {
+        background: transparent;
+        border: none;
+        padding: 0;
+        margin: 0;
     }
 </style>
 """, unsafe_allow_html=True)
