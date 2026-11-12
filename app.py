@@ -4697,7 +4697,10 @@ def _accept_asphalt_commit(sketch_image_state_key: str, default_loc: str):
         if result.get("ts") != last_ts:
             st.session_state["_last_sketch_commit_ts"] = result.get("ts")
             _store_committed_sketch(result["image"], sketch_image_state_key)
-            st.session_state["_saved_asphalt_state"] = result.get("state")
+            committed_state = result.get("state") if isinstance(result.get("state"), dict) else {}
+            if committed_state.get("fallMeters") is None and isinstance(saved_state, dict) and saved_state.get("fallMeters") is not None:
+                committed_state["fallMeters"] = saved_state.get("fallMeters")
+            st.session_state["_saved_asphalt_state"] = committed_state
             st.toast("✅ تم اعتماد الكروكي في تقرير A4 بنجاح!")
 
 def _render_aerial_reference():
