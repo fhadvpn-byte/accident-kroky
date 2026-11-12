@@ -1880,15 +1880,19 @@ def render_direct_print_button(
             button, .no-print, .print-btn, .toolbar, .bayyinah-print-bar { display: none !important; }
             html, body {
                 width: 210mm !important;
+                height: auto !important;
+                max-height: none !important;
                 margin: 0 !important;
                 padding: 0 !important;
                 background: #ffffff !important;
+                display: block !important;
+                overflow: visible !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
             }
             body > div:not(.bayyinah-print-bar),
             .report-viewport, .report-sheet,
-            .report-wrapper, .pages-wrapper, .preview-container {
+            .report-wrapper, .print-container, .pages-wrapper, .preview-container {
                 margin: 0 !important;
                 padding: 0 !important;
                 gap: 0 !important;
@@ -1896,6 +1900,9 @@ def render_direct_print_button(
                 box-shadow: none !important;
                 background: transparent !important;
                 display: block !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
             }
             .page, .a4-page, .report-page {
                 width: 210mm !important;
@@ -1911,11 +1918,12 @@ def render_direct_print_button(
                 position: relative !important;
                 display: flex !important;
                 flex-direction: column !important;
-                justify-content: flex-start !important;
+                justify-content: space-between !important;
                 page-break-after: always !important;
                 break-after: page !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
+                flex-shrink: 0 !important;
             }
             .official-page-footer, .official-footer, .page-footer, .footer {
                 position: relative !important;
@@ -6533,14 +6541,28 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700&display=swap');
         @page {{ size: A4 portrait; margin: 0mm; }}
-        html, body {{ height: 100%; margin: 0; }}
+        html, body {{
+            height: auto !important; max-height: none !important; margin: 0;
+            display: block !important; overflow: visible !important;
+        }}
         body {{
             font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0;
-            display: flex; flex-direction: column; overflow: hidden;
+        }}
+        .report-viewport,
+        .report-sheet,
+        .report-wrapper,
+        .print-container,
+        .pages-wrapper,
+        .preview-container {{
+            display: block !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            box-sizing: border-box;
         }}
         .report-viewport {{
-            flex: 1 1 auto; width: 100%; max-width: none;
-            overflow: auto; -webkit-overflow-scrolling: touch;
+            width: 100%; max-width: none;
+            -webkit-overflow-scrolling: touch;
         }}
         .report-sheet {{
             width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
@@ -6577,12 +6599,13 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .report-sheet th {{ font-weight: 700; }}
         .page, .report-page, .a4-page {{
             background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
-            min-height: 297mm; height: 297mm; max-height: 297mm; margin: 0 auto 8mm auto;
+            min-height: 297mm; height: 297mm; max-height: 297mm;
+            margin: 0 auto 20px auto;
             padding: 6mm 11mm 5mm 11mm; box-sizing: border-box; position: relative;
             display: flex; flex-direction: column; justify-content: space-between;
             overflow: hidden;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
-            transform: none;
+            transform: none; flex-shrink: 0;
         }}
         .report-sheet table,
         .report-sheet .table-scroll,
@@ -6817,14 +6840,23 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             flex-shrink: 0 !important;
         }}
         @media screen {{
-            html, body, .report-viewport {{ overflow: auto; }}
-            .report-sheet, .page, .report-page, .a4-page {{
+            html, body,
+            .report-viewport, .report-sheet, .report-wrapper,
+            .print-container, .pages-wrapper, .preview-container {{
+                display: block !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }}
+            .page, .report-page, .a4-page {{
                 width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
                 min-height: 297mm !important; height: 297mm !important; max-height: 297mm !important;
+                margin: 0 auto 20px auto !important;
                 overflow: hidden !important;
                 transform: none !important;
                 display: flex !important; flex-direction: column !important;
                 justify-content: space-between !important; box-sizing: border-box !important;
+                flex-shrink: 0 !important;
             }}
             .photo-annex, .photo-annex .photo-card, .photo-annex .photo-meta {{
                 overflow: visible; max-height: none;
@@ -6836,21 +6868,26 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             th, td {{
                 white-space: normal; overflow-wrap: anywhere; word-break: break-word;
             }}
-            .page.page-p1, .page.page-p2, .page.page-p3 {{
-                height: 297mm !important;
-                max-height: 297mm !important;
-                overflow: hidden !important;
-            }}
         }}
         @media screen and (max-width: 768px) {{
-            .report-viewport {{ overflow: auto; width: 100%; max-width: none; }}
-            .report-sheet, .page, .report-page, .a4-page {{
+            html, body,
+            .report-viewport, .report-sheet, .report-wrapper,
+            .print-container, .pages-wrapper, .preview-container {{
+                display: block !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
+            }}
+            .report-viewport {{ width: 100%; max-width: none; }}
+            .page, .report-page, .a4-page {{
                 width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
                 min-height: 297mm !important; height: 297mm !important; max-height: 297mm !important;
+                margin: 0 auto 20px auto !important;
                 overflow: hidden !important;
                 transform: none !important;
                 display: flex !important; flex-direction: column !important;
                 justify-content: space-between !important; box-sizing: border-box !important;
+                flex-shrink: 0 !important;
             }}
             .page-flow {{ justify-content: space-between; }}
             .table-scroll, table, .table-scroll table {{
@@ -6859,24 +6896,24 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             th, td {{
                 white-space: normal; overflow-wrap: anywhere; word-break: break-word;
             }}
-            .page.page-p1, .page.page-p2, .page.page-p3 {{
-                height: 297mm !important;
-                max-height: 297mm !important;
-                overflow: hidden !important;
-            }}
         }}
         @media print {{
             html, body {{
-                width: 210mm !important; height: auto; display: block; overflow: visible;
+                width: 210mm !important;
+                height: auto !important; max-height: none !important;
+                display: block !important; overflow: visible !important;
                 background: #ffffff; margin: 0 !important; padding: 0 !important;
                 -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
             }}
             body > div:not(.bayyinah-print-bar),
             .report-viewport, .report-sheet,
-            .report-wrapper, .pages-wrapper, .preview-container {{
+            .report-wrapper, .print-container, .pages-wrapper, .preview-container {{
                 margin: 0 !important; padding: 0 !important; gap: 0 !important;
                 border: none !important; box-shadow: none !important;
-                background: transparent !important; display: block !important;
+                background: transparent !important;
+                display: block !important;
+                height: auto !important; max-height: none !important;
+                overflow: visible !important;
             }}
             button, .no-print, .stButton, .stDownloadButton,
             section[data-testid="stSidebar"], [data-testid="stSidebar"],
@@ -6885,7 +6922,10 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"] {{
                 display: none !important;
             }}
-            .report-viewport {{ overflow: visible; height: auto; width: 210mm; max-width: 210mm; }}
+            .report-viewport {{
+                overflow: visible !important; height: auto !important; max-height: none !important;
+                width: 210mm; max-width: 210mm; display: block !important;
+            }}
             .page, .a4-page, .report-page {{
                 width: 210mm !important;
                 height: 294mm !important;
@@ -6906,11 +6946,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 transform: none !important;
+                flex-shrink: 0 !important;
             }}
             .page.page-p2 {{
                 height: 294mm !important;
                 max-height: 294mm !important;
-                overflow: hidden !important;
             }}
             .box-content.liability-box, .liability-box, .autofit-box {{
                 overflow: hidden !important;
@@ -7064,9 +7104,20 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
       var sheet = document.querySelector(".report-sheet");
       var height = 16;
       if (bar) height += bar.offsetHeight;
-      if (sheet) height += sheet.scrollHeight;
-      else height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-      if (window.frameElement) window.frameElement.style.height = Math.ceil(height) + "px";
+      if (sheet) {{
+        var pageSum = 0;
+        var pages = sheet.querySelectorAll(".page, .a4-page");
+        for (var i = 0; i < pages.length; i++) {{
+          pageSum += Math.max(pages[i].offsetHeight || 0, pages[i].scrollHeight || 0) + 24;
+        }}
+        height += Math.max(sheet.scrollHeight || 0, pageSum);
+      }} else {{
+        height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+      }}
+      if (window.frameElement) {{
+        window.frameElement.style.height = Math.ceil(height) + "px";
+        window.frameElement.style.overflow = "visible";
+      }}
     }}
     function _a4CssPx(name, fallback) {{
       var raw = getComputedStyle(document.documentElement).getPropertyValue(name);
@@ -7152,7 +7203,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
       }}
     }}
     function autoFitReportPages() {{
-      var pages = document.querySelectorAll(".page.report-page, .report-page.page, .a4-page");
+      /* يستهدف الأوراق المفردة فقط — لا يلمس الحاوية الأم ولا يغيّر ارتفاع الصفحات */
+      var pages = document.querySelectorAll(".page, .a4-page");
       var initialBase = {a4_autofit_base_font_px};
       var basePad = 14;
       var baseMargin = 16;
@@ -7164,13 +7216,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
       for (var p = 0; p < pages.length; p++) {{
         var page = pages[p];
         if (!page || page.classList.contains("photo-annex")) continue;
+        if (page.classList.contains("report-sheet") || page.classList.contains("report-viewport")) continue;
         var footer = page.querySelector(".official-page-footer, .official-footer, .page-footer, .footer");
         if (footer) {{
           var fPos = getComputedStyle(footer).position;
           if (fPos === "absolute" || fPos === "fixed") {{
             page.classList.add("has-absolute-footer");
-            var fh = Math.max(footer.offsetHeight || 0, 18);
-            page.style.setProperty("padding-bottom", (fh + 12) + "mm", "important");
           }} else {{
             page.classList.remove("has-absolute-footer");
             footer.style.setProperty("margin-top", "auto", "important");
@@ -7318,7 +7369,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         btn_id="tab4",
     )
     st.subheader("📄 معاينة حية للتقرير قبل الطباعة")
-    st.components.v1.html(full_report_html, height=850, scrolling=False)
+    st.components.v1.html(full_report_html, height=1200, scrolling=True)
 inject_tab_completion_badges(_report_tab_done_flags())
 st.markdown("""
 <style>
