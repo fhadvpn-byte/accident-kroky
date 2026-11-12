@@ -78,16 +78,21 @@
             padding: 5px 8px;
             font-size: 12px;
         }
-        #flexRoadToolbar { display: none; }
-        #flexRoadToolbar select, #flexRoadToolbar input[type="number"] {
+        #flexRoadToolbar { display: flex; flex-direction: column; gap: 6px; }
+        #flexRoadToolbar .btn-group { width: 100%; }
+        #flexRoadToolbar select, #flexRoadToolbar input[type="number"], #flexRoadToolbar input[type="range"] {
             width: auto;
             padding: 5px 8px;
             font-size: 12px;
         }
         #flexWidthIn { width: 74px; }
-        #flexTerrainSel { width: 220px; max-width: 46vw; }
-        #flexCenterSel { width: 148px; }
+        #flexTerrainSel, #roadTerrainBgSel { width: 170px; max-width: 42vw; }
+        #flexCenterSel, #flexStyleSel { width: 148px; max-width: 40vw; }
+        #roadAngleIn { width: 190px; max-width: 42vw; }
+        #roadWidthScaleIn { width: 160px; max-width: 40vw; }
+        #roadAngleVal, #roadWidthScaleVal { min-width: 42px; color: #e0f2fe; font-weight: 800; font-size: 12px; }
         .t-btn.active { background: #0369a1; border-color: #e0f2fe; }
+        #flexBendTools { display: none; flex-wrap: wrap; gap: 5px; align-items: center; }
         .canvas-wrap {
             width: 100%;
             max-width: 1080px;
@@ -183,11 +188,41 @@
         </div>
         <div id="flexRoadToolbar" class="toolbar-row">
             <div class="btn-group">
-                <span style="font-size:11.5px;color:#93c5fd;font-weight:800;margin-left:4px;">طريق مرن:</span>
+                <span style="font-size:11.5px;color:#93c5fd;font-weight:800;margin-left:4px;">تخصيص وتعديل هندسة الأسفلت الشامل:</span>
+                <label for="roadAngleIn">🔄 زاوية اتجاه الطريق</label>
+                <input id="roadAngleIn" type="range" min="0" max="360" step="1" value="0" oninput="updateRoadGlobalParams()" />
+                <span id="roadAngleVal">0°</span>
+                <button class="t-btn" onclick="setRoadAngle(0)">0°</button>
+                <button class="t-btn" onclick="setRoadAngle(45)">45°</button>
+                <button class="t-btn" onclick="setRoadAngle(90)">90°</button>
+                <button class="t-btn" onclick="setRoadAngle(180)">180°</button>
+                <button class="t-btn" onclick="toggleRoadFlip()">↔️ عكس الاتجاه</button>
+                <label for="roadWidthScaleIn">📏 مقياس عرض الأسفلت</label>
+                <input id="roadWidthScaleIn" type="range" min="0.75" max="1.35" step="0.01" value="1" oninput="updateRoadGlobalParams()" />
+                <span id="roadWidthScaleVal">1.00×</span>
+                <label for="roadTerrainBgSel">🌍 طبيعة المحيط</label>
+                <select id="roadTerrainBgSel" onchange="updateRoadGlobalParams()">
+                    <option value="default">افتراضي</option>
+                    <option value="rocky">جبلي صخري</option>
+                    <option value="sandy">رملي صحراوي</option>
+                    <option value="wadi">مجرى وادي</option>
+                    <option value="urban">عمراني</option>
+                </select>
+                <button class="t-btn" onclick="convertCurrentRoadToFlexBend()">✋ تحويل وثني هذا الطريق بالماوس</button>
+            </div>
+            <div id="flexBendTools" class="btn-group">
+                <span style="font-size:11.5px;color:#fde68a;font-weight:800;margin-left:4px;">ثني بالماوس:</span>
                 <button class="t-btn" id="flexEditToggle" onclick="toggleFlexRoadEdit()">✏️ تعديل المنحنى</button>
+                <label for="flexStyleSel">نمط الأسفلت</label>
+                <select id="flexStyleSel" onchange="updateFlexRoadParams()">
+                    <option value="single_2lane">مفرد مساران</option>
+                    <option value="dual_island">مزدوج بجزيرة وسطية</option>
+                    <option value="highway_3lane">سريع 3 مسارات</option>
+                    <option value="jersey_guardrail">جسر بحواجز نيوجيرسي</option>
+                </select>
                 <label for="flexWidthIn">العرض</label>
                 <input id="flexWidthIn" type="number" min="60" max="220" step="2" value="112" oninput="updateFlexRoadParams()" />
-                <label for="flexTerrainSel">التضاريس</label>
+                <label for="flexTerrainSel">تضاريس المنحنى</label>
                 <select id="flexTerrainSel" onchange="updateFlexRoadParams()">
                     <option value="mountain">جبلي — جبل يسار وهاوية يمين</option>
                     <option value="plain">سهلي</option>
@@ -242,9 +277,67 @@
         dirt_shoulder: "13. طريق أسفلتي مع منطقة ترابية / صحراوية جانبية",
         signalized_cross: "14. تقاطع رباعي منظم بإشارات ضوئية ومعابر مشاة",
         mountain_cliff_curve: "15. منعطفات S جبلية (جبل يسار، هاوية يمين، خطان أصفران)",
-        custom_flex_road: "🛠️ 16. طريق مرن حر التشكيل بالماوس (تعديل المنحنيات والتعرجات يدوياً)"
+        custom_flex_road: "🛠️ 16. طريق مرن حر التشكيل بالماوس (تعديل المنحنيات والتعرجات يدوياً)",
+        wadi_flood_crossing: "17. طريق أسفلتي يقطعه مجرى وادي / معبر سيول (مزلقان وادي)",
+        bridge_jersey_barrier: "18. جسر / كوبري علوي بحواجز خرسانية (نيوجيرسي)",
+        workzone_detour: "19. منطقة عمل وتحويلة مرورية مؤقتة بحواجز تحذيرية",
+        speed_bump_school: "20. طريق بمطب تهدئة صناعي ومعبر مشاة",
+        skewed_intersection: "21. تقاطع مائل غير متعامد (زاوية حادة للشوارع الفرعية)",
+        curved_dual_island: "22. طريق مزدوج بجزيرة وسطية منحنية (قابل للتشكيل بالماوس)"
     };
     const SCENARIOS = [
+        { id:"s_flex_headon", name:"تجاوز خاطئ في مسار مفرد واصطدام وجهاً لوجه", road:"straight_2lane",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:430, y:220, angle:-12, tailX:180, tailY:285, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:540, y:210, angle:180, tailX:780, tailY:210, skid:true},
+             {type:"impact", x:490, y:214}
+           ]},
+        { id:"s_flex_sideswipe", name:"انحراف مفاجئ بين المسارات واصطدام جانبي", road:"highway_6lane",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:450, y:220, angle:-24, tailX:210, tailY:280, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:500, y:175, angle:0, tailX:250, tailY:175},
+             {type:"impact", x:482, y:196}
+           ]},
+        { id:"s_flex_t_priority", name:"دخول طريق رئيسي من فرعي دون إعطاء أولوية (تقاطع T)", road:"t_junction",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:470, y:245, angle:-80, tailX:475, tailY:430, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:530, y:198, angle:180, tailX:760, tailY:198, skid:true},
+             {type:"impact", x:490, y:205}
+           ]},
+        { id:"s_flex_uturn", name:"دوران خاطئ من فتحة U-Turn واصطدام بالمسار المقابل", road:"uturn_median",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:465, y:195, angle:-70, tailX:320, tailY:310, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:525, y:172, angle:180, tailX:760, tailY:172, skid:true},
+             {type:"impact", x:494, y:180}
+           ]},
+        { id:"s_flex_pileup", name:"تصادم متتابع من الخلف لعدم ترك مسافة آمنة (3 مركبات)", road:"divided_4lane",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:320, y:190, angle:0, tailX:140, tailY:190, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:430, y:190, angle:0, tailX:360, tailY:190},
+             {type:"car", label:"3", color:"#10b981", x:545, y:190, angle:0, tailX:480, tailY:190},
+             {type:"impact", x:380, y:190},
+             {type:"impact", x:490, y:190}
+           ]},
+        { id:"s_flex_roundabout", name:"عدم إعطاء الأفضلية لمن بداخل الدوار المروري", road:"roundabout",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:570, y:268, angle:-155, tailX:770, tailY:285, skid:true},
+             {type:"car", label:"2", color:"#3b82f6", x:525, y:215, angle:55, tailX:450, tailY:140},
+             {type:"impact", x:545, y:245}
+           ]},
+        { id:"s_flex_workzone", name:"فقدان السيطرة في منطقة عمل واصطدام بالحواجز الخرسانية", road:"workzone_detour",
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:420, y:250, angle:18, tailX:230, tailY:290, skid:true},
+             {type:"obstacle", x:560, y:220, angle:0},
+             {type:"obstacle", x:610, y:250, angle:12},
+             {type:"impact", x:545, y:235}
+           ]},
+        { id:"s_flex_wadi", name:"انجراف مركبة وسقوطها في معبر وادي / مجرى سيل", road:"wadi_flood_crossing", fallMeters:18,
+           items:[
+             {type:"car", label:"1", color:"#ef4444", x:360, y:210, angle:20, tailX:180, tailY:200, skid:true},
+             {type:"cliff_fall", x:520, y:340, tailX:390, tailY:230, fallMeters:18, slideLabel:"انجراف في مزلقان الوادي", color:"#b91c1c"},
+             {type:"overturned_car", label:"1", color:"#ef4444", x:560, y:360, angle:40, posture:"right_side", tailX:470, tailY:290, skid:true},
+             {type:"compass", x:88, y:72, angle:0}
+           ]},
         { id:"s_mountain_cliff_fatal", name:"منعطفات S جبلية: تصادم ثم زحف على الجانب الأيمن وسقوط من الهاوية", road:"mountain_cliff_curve", fallMeters:48,
            items:[
              {type:"car", label:"1", color:"#ef4444", x:300, y:92, angle:32, tailX:175, tailY:28, skid:true},
@@ -421,7 +514,13 @@
     let flexRoadWidth = 112;
     let flexRoadTerrain = "mountain";
     let flexRoadCenterLine = "double_yellow";
+    let flexRoadStyle = "single_2lane";
     let flexDragIndex = -1;
+    let roadGlobalAngle = 0;
+    let roadFlipX = false;
+    let roadFlipY = false;
+    let roadWidthScale = 1;
+    let roadTerrainBg = "default";
     let autoSaveTimer = null;
     SCENARIOS.forEach((s, idx) => {
         const opt = document.createElement("option");
@@ -441,7 +540,13 @@
                 roadName: roadNameIn.value,
                 fallMeters: Number(fallMetersIn && fallMetersIn.value) || 35,
                 items: items,
-                flexRoad: flexRoadState()
+                flexRoad: flexRoadState(),
+                roadGlobalAngle: roadGlobalAngle,
+                roadFlipX: roadFlipX,
+                roadFlipY: roadFlipY,
+                roadWidthScale: roadWidthScale,
+                roadTerrainBg: roadTerrainBg,
+                flexRoadStyle: flexRoadStyle
             }));
         } catch (err) {}
     }
@@ -468,6 +573,16 @@
         items.push(compass);
         if (sc.fallMeters) updateFallMeters(sc.fallMeters, false);
         if (sc.road === "mountain_cliff_curve") setFlexPreset("s_curve", false);
+        if (sc.road === "curved_dual_island") {
+            flexRoadStyle = "dual_island";
+            flexRoadNodes = [
+                { x: 20, y: 250 }, { x: 220, y: 200 }, { x: 480, y: 270 }, { x: 740, y: 210 }, { x: 940, y: 250 }
+            ];
+            flexRoadTerrain = "plain";
+            flexRoadCenterLine = "none";
+            flexRoadWidth = 118;
+        }
+        if (sc.roadGeometry) restoreRoadGeometry(sc.roadGeometry);
         selectedIdx = -1;
         syncCloneCarDropdown();
         syncFlexToolbarVisibility();
@@ -477,9 +592,20 @@
     scenSel.addEventListener("change", () => loadScenario(Number(scenSel.value)));
     roadSel.addEventListener("change", () => {
         currentRoad = roadSel.value;
-        if ((currentRoad === "custom_flex_road" || currentRoad === "mountain_cliff_curve") && flexRoadNodes.length < 2) {
-            setFlexPreset(currentRoad === "mountain_cliff_curve" ? "s_curve" : "gentle", false);
+        if (isSplineRoad(currentRoad) && flexRoadNodes.length < 2) {
+            if (currentRoad === "curved_dual_island") {
+                flexRoadStyle = "dual_island";
+                flexRoadNodes = [
+                    { x: 20, y: 250 }, { x: 220, y: 200 }, { x: 480, y: 270 }, { x: 740, y: 210 }, { x: 940, y: 250 }
+                ];
+                flexRoadTerrain = "plain";
+                flexRoadCenterLine = "none";
+                flexRoadWidth = 118;
+            } else {
+                setFlexPreset(currentRoad === "mountain_cliff_curve" ? "s_curve" : "gentle", false);
+            }
         }
+        if (currentRoad === "curved_dual_island") flexRoadStyle = "dual_island";
         syncFlexToolbarVisibility();
         renderAll(false);
         scheduleAutoCommit();
@@ -862,7 +988,8 @@
             nodes: cloneFlexNodes(flexRoadNodes),
             width: flexRoadWidth,
             terrain: flexRoadTerrain,
-            centerLine: flexRoadCenterLine
+            centerLine: flexRoadCenterLine,
+            style: flexRoadStyle
         };
     }
     function restoreFlexRoad(raw) {
@@ -875,7 +1002,152 @@
         if (Number.isFinite(width)) flexRoadWidth = Math.max(60, Math.min(220, width));
         if (raw.terrain === "plain" || raw.terrain === "mountain") flexRoadTerrain = raw.terrain;
         if (raw.centerLine === "double_yellow" || raw.centerLine === "dashed_white" || raw.centerLine === "none") flexRoadCenterLine = raw.centerLine;
+        if (["single_2lane","dual_island","highway_3lane","jersey_guardrail"].includes(raw.style)) flexRoadStyle = raw.style;
     }
+    function roadGeometryState() {
+        return {
+            roadGlobalAngle: roadGlobalAngle,
+            roadFlipX: !!roadFlipX,
+            roadFlipY: !!roadFlipY,
+            roadWidthScale: roadWidthScale,
+            roadTerrainBg: roadTerrainBg,
+            flexRoadStyle: flexRoadStyle
+        };
+    }
+    function restoreRoadGeometry(raw) {
+        if (!raw || typeof raw !== "object") return;
+        const ang = Number(raw.roadGlobalAngle);
+        if (Number.isFinite(ang)) roadGlobalAngle = ((ang % 360) + 360) % 360;
+        roadFlipX = !!raw.roadFlipX;
+        roadFlipY = !!raw.roadFlipY;
+        const scale = Number(raw.roadWidthScale);
+        if (Number.isFinite(scale)) roadWidthScale = Math.max(0.75, Math.min(1.35, scale));
+        if (["default","rocky","sandy","wadi","urban"].includes(raw.roadTerrainBg)) roadTerrainBg = raw.roadTerrainBg;
+        if (["single_2lane","dual_island","highway_3lane","jersey_guardrail"].includes(raw.flexRoadStyle)) flexRoadStyle = raw.flexRoadStyle;
+    }
+    function isSplineRoad(type) {
+        return type === "custom_flex_road" || type === "mountain_cliff_curve" || type === "curved_dual_island";
+    }
+    function styleForBaseRoad(type) {
+        if (type === "divided_4lane" || type === "uturn_median" || type === "curved_dual_island") return "dual_island";
+        if (type === "highway_6lane") return "highway_3lane";
+        if (type === "bridge_jersey_barrier") return "jersey_guardrail";
+        return "single_2lane";
+    }
+    function fillTerrainBackground() {
+        const colors = {
+            default: "#cbd5e1",
+            rocky: "#cbb892",
+            sandy: "#e7d3a4",
+            wadi: "#b7c4a4",
+            urban: "#94a3b8"
+        };
+        let fill = colors[roadTerrainBg] || colors.default;
+        if (roadTerrainBg === "default") {
+            if (currentRoad === "dirt_shoulder" || String(currentRoad).startsWith("mountain") || currentRoad === "wadi_flood_crossing") fill = "#d6c7a9";
+            else if (currentRoad === "custom_flex_road" && flexRoadTerrain === "mountain") fill = "#d6c7a9";
+            else if (currentRoad === "curved_dual_island") fill = "#cbd5e1";
+        }
+        ctx.fillStyle = fill;
+        ctx.fillRect(0, 0, 960, 500);
+        if (roadTerrainBg === "rocky") {
+            ctx.strokeStyle = "rgba(90,70,40,0.22)";
+            ctx.lineWidth = 1.2;
+            for (let h = -120; h < 1200; h += 18) {
+                ctx.beginPath(); ctx.moveTo(h, 0); ctx.lineTo(h - 180, 500); ctx.stroke();
+            }
+        } else if (roadTerrainBg === "sandy") {
+            ctx.fillStyle = "rgba(180,140,70,0.12)";
+            for (let i = 0; i < 40; i++) ctx.fillRect((i * 97) % 960, (i * 53) % 500, 18, 8);
+        } else if (roadTerrainBg === "wadi") {
+            ctx.fillStyle = "rgba(147,197,253,0.18)";
+            ctx.beginPath();
+            ctx.moveTo(0, 420); ctx.quadraticCurveTo(240, 360, 480, 430); ctx.quadraticCurveTo(720, 500, 960, 400); ctx.lineTo(960, 500); ctx.lineTo(0, 500); ctx.closePath();
+            ctx.fill();
+        } else if (roadTerrainBg === "urban") {
+            ctx.fillStyle = "rgba(15,23,42,0.08)";
+            for (let x = 40; x < 960; x += 120) ctx.fillRect(x, 30, 70, 40);
+        } else {
+            ctx.strokeStyle = "rgba(15,23,42,0.08)";
+            ctx.lineWidth = 1;
+            for (let gx = 0; gx < 960; gx += 30) { ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,500); ctx.stroke(); }
+            for (let gy = 0; gy < 500; gy += 30) { ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(960,gy); ctx.stroke(); }
+        }
+    }
+    function updateRoadGlobalParams() {
+        const angIn = document.getElementById("roadAngleIn");
+        const scaleIn = document.getElementById("roadWidthScaleIn");
+        const terrainSel = document.getElementById("roadTerrainBgSel");
+        if (angIn) {
+            roadGlobalAngle = ((Number(angIn.value) % 360) + 360) % 360;
+            const angVal = document.getElementById("roadAngleVal");
+            if (angVal) angVal.textContent = Math.round(roadGlobalAngle) + "°";
+        }
+        if (scaleIn) {
+            roadWidthScale = Math.max(0.75, Math.min(1.35, Number(scaleIn.value) || 1));
+            const scaleVal = document.getElementById("roadWidthScaleVal");
+            if (scaleVal) scaleVal.textContent = roadWidthScale.toFixed(2) + "×";
+        }
+        if (terrainSel && ["default","rocky","sandy","wadi","urban"].includes(terrainSel.value)) roadTerrainBg = terrainSel.value;
+        renderAll(false);
+        scheduleAutoCommit();
+    }
+    function setRoadAngle(deg) {
+        roadGlobalAngle = ((Number(deg) % 360) + 360) % 360;
+        const angIn = document.getElementById("roadAngleIn");
+        if (angIn) angIn.value = String(Math.round(roadGlobalAngle));
+        updateRoadGlobalParams();
+    }
+    function toggleRoadFlip() {
+        if (!roadFlipX && !roadFlipY) roadFlipX = true;
+        else if (roadFlipX && !roadFlipY) { roadFlipX = false; roadFlipY = true; }
+        else if (!roadFlipX && roadFlipY) { roadFlipX = true; roadFlipY = true; }
+        else { roadFlipX = false; roadFlipY = false; }
+        renderAll(false);
+        scheduleAutoCommit();
+    }
+    function convertCurrentRoadToFlexBend() {
+        const style = styleForBaseRoad(currentRoad);
+        flexRoadStyle = style;
+        if (currentRoad === "mountain_cliff_curve" || currentRoad === "mountain_scurve" || currentRoad === "mountain_hairpin") {
+            setFlexPreset("s_curve", false);
+            flexRoadTerrain = "mountain";
+            flexRoadCenterLine = "double_yellow";
+        } else if (style === "dual_island") {
+            setFlexPreset("gentle", false);
+            flexRoadNodes = [
+                { x: 20, y: 250 }, { x: 220, y: 210 }, { x: 480, y: 250 }, { x: 740, y: 290 }, { x: 940, y: 250 }
+            ];
+            flexRoadTerrain = "plain";
+            flexRoadCenterLine = "none";
+            flexRoadWidth = 118;
+        } else if (style === "highway_3lane") {
+            setFlexPreset("gentle", false);
+            flexRoadTerrain = "plain";
+            flexRoadCenterLine = "dashed_white";
+            flexRoadWidth = 130;
+        } else if (style === "jersey_guardrail") {
+            setFlexPreset("gentle", false);
+            flexRoadTerrain = "plain";
+            flexRoadCenterLine = "double_yellow";
+            flexRoadWidth = 120;
+        } else {
+            setFlexPreset("gentle", false);
+            flexRoadTerrain = "plain";
+            flexRoadCenterLine = "double_yellow";
+            flexRoadWidth = 110;
+        }
+        currentRoad = "custom_flex_road";
+        if (roadSel) roadSel.value = currentRoad;
+        flexEditActive = true;
+        syncFlexToolbarVisibility();
+        renderAll(false);
+        scheduleAutoCommit();
+    }
+    window.updateRoadGlobalParams = updateRoadGlobalParams;
+    window.setRoadAngle = setRoadAngle;
+    window.toggleRoadFlip = toggleRoadFlip;
+    window.convertCurrentRoadToFlexBend = convertCurrentRoadToFlexBend;
     function setFlexPreset(preset, commit) {
         const spec = FLEX_PRESETS[preset] || FLEX_PRESETS.gentle;
         flexRoadNodes = cloneFlexNodes(spec);
@@ -896,15 +1168,27 @@
     }
     function syncFlexToolbarVisibility() {
         const bar = document.getElementById("flexRoadToolbar");
-        const flexible = currentRoad === "custom_flex_road" || currentRoad === "mountain_cliff_curve";
-        if (bar) bar.style.display = flexible ? "flex" : "none";
+        if (bar) bar.style.display = "flex";
+        const flexible = isSplineRoad(currentRoad);
+        const bend = document.getElementById("flexBendTools");
+        if (bend) bend.style.display = flexible ? "flex" : "none";
         if (!flexible) {
             flexEditActive = false;
             flexDragIndex = -1;
         } else if (flexRoadNodes.length < 2) {
-            setFlexPreset(currentRoad === "mountain_cliff_curve" ? "s_curve" : "gentle", false);
-            return;
+            if (currentRoad === "curved_dual_island") {
+                flexRoadStyle = "dual_island";
+                flexRoadNodes = [
+                    { x: 20, y: 250 }, { x: 220, y: 200 }, { x: 480, y: 270 }, { x: 740, y: 210 }, { x: 940, y: 250 }
+                ];
+                flexRoadTerrain = "plain";
+                flexRoadCenterLine = "none";
+                flexRoadWidth = 118;
+            } else {
+                setFlexPreset(currentRoad === "mountain_cliff_curve" ? "s_curve" : "gentle", false);
+            }
         }
+        if (currentRoad === "curved_dual_island") flexRoadStyle = "dual_island";
         const toggle = document.getElementById("flexEditToggle");
         if (toggle) {
             toggle.textContent = flexEditActive ? "✏️ إنهاء تعديل المنحنى" : "✏️ تعديل المنحنى";
@@ -916,10 +1200,22 @@
         if (terrainSel) terrainSel.value = flexRoadTerrain;
         const centerSel = document.getElementById("flexCenterSel");
         if (centerSel) centerSel.value = flexRoadCenterLine;
+        const styleSel = document.getElementById("flexStyleSel");
+        if (styleSel) styleSel.value = flexRoadStyle;
+        const angIn = document.getElementById("roadAngleIn");
+        if (angIn && document.activeElement !== angIn) angIn.value = String(Math.round(roadGlobalAngle));
+        const angVal = document.getElementById("roadAngleVal");
+        if (angVal) angVal.textContent = Math.round(roadGlobalAngle) + "°";
+        const scaleIn = document.getElementById("roadWidthScaleIn");
+        if (scaleIn && document.activeElement !== scaleIn) scaleIn.value = String(roadWidthScale);
+        const scaleVal = document.getElementById("roadWidthScaleVal");
+        if (scaleVal) scaleVal.textContent = Number(roadWidthScale).toFixed(2) + "×";
+        const bgSel = document.getElementById("roadTerrainBgSel");
+        if (bgSel) bgSel.value = roadTerrainBg;
         if (typeof syncFrameHeight === "function") syncFrameHeight();
     }
     function toggleFlexRoadEdit() {
-        if (currentRoad !== "custom_flex_road" && currentRoad !== "mountain_cliff_curve") return;
+        if (!isSplineRoad(currentRoad)) return;
         flexEditActive = !flexEditActive;
         flexDragIndex = -1;
         syncFlexToolbarVisibility();
@@ -930,15 +1226,17 @@
         const widthIn = document.getElementById("flexWidthIn");
         const terrainSel = document.getElementById("flexTerrainSel");
         const centerSel = document.getElementById("flexCenterSel");
+        const styleSel = document.getElementById("flexStyleSel");
         const width = Math.round(Number(widthIn && widthIn.value));
         if (Number.isFinite(width)) flexRoadWidth = Math.max(60, Math.min(220, width));
         if (terrainSel && (terrainSel.value === "plain" || terrainSel.value === "mountain")) flexRoadTerrain = terrainSel.value;
         if (centerSel && (centerSel.value === "double_yellow" || centerSel.value === "dashed_white" || centerSel.value === "none")) flexRoadCenterLine = centerSel.value;
+        if (styleSel && ["single_2lane","dual_island","highway_3lane","jersey_guardrail"].includes(styleSel.value)) flexRoadStyle = styleSel.value;
         renderAll(false);
         scheduleAutoCommit();
     }
     function applyFlexCurvePreset(preset) {
-        if (currentRoad !== "custom_flex_road" && currentRoad !== "mountain_cliff_curve") {
+        if (!isSplineRoad(currentRoad)) {
             currentRoad = "custom_flex_road";
             if (roadSel) roadSel.value = currentRoad;
         }
@@ -1014,17 +1312,38 @@
     }
     function drawFlexibleSplineRoad() {
         if (!flexRoadNodes || flexRoadNodes.length < 2) {
-            setFlexPreset(currentRoad === "mountain_cliff_curve" ? "s_curve" : "gentle", false);
+            if (currentRoad === "curved_dual_island") {
+                flexRoadStyle = "dual_island";
+                flexRoadNodes = [
+                    { x: 20, y: 250 }, { x: 220, y: 200 }, { x: 480, y: 270 }, { x: 740, y: 210 }, { x: 940, y: 250 }
+                ];
+                flexRoadTerrain = "plain";
+                flexRoadCenterLine = "none";
+                flexRoadWidth = 118;
+            } else {
+                setFlexPreset(currentRoad === "mountain_cliff_curve" ? "s_curve" : "gentle", false);
+            }
         }
+        if (currentRoad === "curved_dual_island") flexRoadStyle = "dual_island";
         const center = buildFlexSplineSamples(flexRoadNodes);
         if (center.length < 2) return;
-        const half = Math.max(30, Math.min(110, flexRoadWidth / 2));
-        const asphaltColor = "#334155";
-        const yellow = "#fbbf24";
-        const white = "#f8fafc";
+        const halfW = Math.max(30, Math.min(110, flexRoadWidth / 2));
+        const asphaltCol = "#334155";
+        const yellowCol = "#fbbf24";
+        const whiteCol = "#f8fafc";
+        const curbCol = "#94a3b8";
+        function strokeRibbon(offset, width, color, dash) {
+            ctx.strokeStyle = color;
+            ctx.lineWidth = width;
+            ctx.setLineDash(dash || []);
+            const poly = offset ? offsetPolyline(center, offset) : center;
+            tracePolyline(poly);
+            ctx.stroke();
+            ctx.setLineDash([]);
+        }
         if (flexRoadTerrain === "mountain") {
-            const leftEdge = offsetPolyline(center, half + 16);
-            const rightEdge = offsetPolyline(center, -(half + 16));
+            const leftEdge = offsetPolyline(center, halfW + 18);
+            const rightEdge = offsetPolyline(center, -(halfW + 18));
             ctx.beginPath();
             ctx.moveTo(0, 0);
             ctx.lineTo(leftEdge[0].x, leftEdge[0].y);
@@ -1056,39 +1375,46 @@
         }
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
-        ctx.setLineDash([]);
-        ctx.strokeStyle = "#e2e8f0";
-        ctx.lineWidth = flexRoadWidth + 16;
-        tracePolyline(center);
-        ctx.stroke();
-        ctx.strokeStyle = asphaltColor;
-        ctx.lineWidth = flexRoadWidth;
-        tracePolyline(center);
-        ctx.stroke();
-        ctx.strokeStyle = white;
-        ctx.lineWidth = 2.6;
-        tracePolyline(offsetPolyline(center, half - 4));
-        ctx.stroke();
-        tracePolyline(offsetPolyline(center, -(half - 4)));
-        ctx.stroke();
-        if (flexRoadCenterLine === "double_yellow") {
-            ctx.setLineDash([]);
-            ctx.strokeStyle = yellow;
-            ctx.lineWidth = 3.2;
-            tracePolyline(offsetPolyline(center, 4.2));
-            ctx.stroke();
-            tracePolyline(offsetPolyline(center, -4.2));
-            ctx.stroke();
-        } else if (flexRoadCenterLine === "dashed_white") {
-            ctx.setLineDash([16, 12]);
-            ctx.strokeStyle = white;
-            ctx.lineWidth = 2.4;
-            tracePolyline(center);
-            ctx.stroke();
-            ctx.setLineDash([]);
+        if (flexRoadStyle === "dual_island") {
+            const totalW = flexRoadWidth * 1.65;
+            strokeRibbon(0, totalW + 14, curbCol, []);
+            strokeRibbon(0, totalW, asphaltCol, []);
+            strokeRibbon(-(totalW * 0.27), 2, "#ffffff", [14, 12]);
+            strokeRibbon(+(totalW * 0.27), 2, "#ffffff", [14, 12]);
+            strokeRibbon(0, 16, "#94a3b8", []);
+            strokeRibbon(-8, 2.5, yellowCol, [9, 6]);
+            strokeRibbon(+8, 2.5, yellowCol, [9, 6]);
+        } else if (flexRoadStyle === "highway_3lane") {
+            const totalW = flexRoadWidth * 1.75;
+            strokeRibbon(0, totalW + 18, "#b45309", []);
+            strokeRibbon(0, totalW, asphaltCol, []);
+            strokeRibbon(-(totalW / 2 - 5), 2.5, yellowCol, []);
+            strokeRibbon(+(totalW / 2 - 5), 2.5, "#ffffff", []);
+            strokeRibbon(-(totalW / 6), 2.2, "#ffffff", [16, 12]);
+            strokeRibbon(+(totalW / 6), 2.2, "#ffffff", [16, 12]);
+        } else if (flexRoadStyle === "jersey_guardrail") {
+            strokeRibbon(0, flexRoadWidth + 20, "#cbd5e1", []);
+            strokeRibbon(0, flexRoadWidth, asphaltCol, []);
+            strokeRibbon(-(halfW + 6), 7, "#94a3b8", []);
+            strokeRibbon(+(halfW + 6), 7, "#94a3b8", []);
+            strokeRibbon(-(halfW + 6), 3, "#ef4444", [10, 14]);
+            strokeRibbon(+(halfW + 6), 3, "#ef4444", [10, 14]);
+            strokeRibbon(-2.6, 2.3, yellowCol, []);
+            strokeRibbon(+2.6, 2.3, yellowCol, []);
+        } else {
+            strokeRibbon(0, flexRoadWidth + 16, "#e2e8f0", []);
+            strokeRibbon(0, flexRoadWidth, asphaltCol, []);
+            strokeRibbon(halfW - 4, 2.6, whiteCol, []);
+            strokeRibbon(-(halfW - 4), 2.6, whiteCol, []);
+            if (flexRoadCenterLine === "double_yellow") {
+                strokeRibbon(4.2, 3.2, yellowCol, []);
+                strokeRibbon(-4.2, 3.2, yellowCol, []);
+            } else if (flexRoadCenterLine === "dashed_white") {
+                strokeRibbon(0, 2.4, whiteCol, [16, 12]);
+            }
         }
         if (flexRoadTerrain === "mountain") {
-            const rocks = offsetPolyline(center, half + 48);
+            const rocks = offsetPolyline(center, halfW + 48);
             [8, 24, 40, 56, 72, 88].forEach((idx, n) => {
                 const rock = rocks[Math.min(rocks.length - 1, idx)];
                 if (rock && rock.x > 8 && rock.y > 8 && rock.y < 490) drawStaticMountainRock(rock.x, rock.y, 0.7 + (n % 3) * 0.12, false, true, -8);
@@ -1125,7 +1451,7 @@
     }
     function drawFlexRoadHandlesOverlay(hideHandles) {
         if (hideHandles || !flexEditActive) return;
-        if (currentRoad !== "custom_flex_road" && currentRoad !== "mountain_cliff_curve") return;
+        if (!isSplineRoad(currentRoad)) return;
         if (!flexRoadNodes || flexRoadNodes.length < 2) return;
         ctx.save();
         ctx.strokeStyle = "#38bdf8";
@@ -1158,12 +1484,6 @@
     window.addFlexRoadNode = addFlexRoadNode;
     window.removeFlexRoadNode = removeFlexRoadNode;
     function drawAsphaltRoad(type) {
-        ctx.fillStyle = (type === "dirt_shoulder" || type.startsWith("mountain") || (type === "custom_flex_road" && flexRoadTerrain === "mountain")) ? "#d6c7a9" : "#cbd5e1";
-        ctx.fillRect(0, 0, 960, 500);
-        ctx.strokeStyle = "rgba(15,23,42,0.08)";
-        ctx.lineWidth = 1;
-        for (let gx = 0; gx < 960; gx += 30) { ctx.beginPath(); ctx.moveTo(gx,0); ctx.lineTo(gx,500); ctx.stroke(); }
-        for (let gy = 0; gy < 500; gy += 30) { ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(960,gy); ctx.stroke(); }
         const asphalt = "#334155";
         const curb = "#94a3b8";
         const yellow = "#fbbf24";
@@ -1279,7 +1599,8 @@
             ctx.strokeStyle = yellow; ctx.lineWidth = 3;
             ctx.beginPath(); ctx.moveTo(110, 145); ctx.quadraticCurveTo(790, 135, 720, 265); ctx.quadraticCurveTo(660, 385, 130, 375); ctx.stroke();
         }
-        else if (type === "custom_flex_road" || type === "mountain_cliff_curve") {
+        else if (type === "custom_flex_road" || type === "mountain_cliff_curve" || type === "curved_dual_island") {
+            if (type === "curved_dual_island") flexRoadStyle = "dual_island";
             drawFlexibleSplineRoad();
         }
         else if (type === "service_exit") {
@@ -1345,6 +1666,143 @@
                 ctx.fillRect(x, 120, 9, 22);
                 ctx.fillRect(x, 358, 9, 22);
             }
+        }
+        else if (type === "wadi_flood_crossing") {
+            ctx.fillStyle = curb; ctx.fillRect(0, 168, 960, 164);
+            ctx.fillStyle = asphalt; ctx.fillRect(0, 174, 960, 152);
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3; ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(0, 242); ctx.lineTo(960, 242); ctx.moveTo(0, 258); ctx.lineTo(960, 258); ctx.stroke();
+            ctx.fillStyle = "#b49a78";
+            ctx.beginPath();
+            ctx.moveTo(360, 0); ctx.quadraticCurveTo(430, 180, 390, 250); ctx.quadraticCurveTo(350, 330, 420, 500);
+            ctx.lineTo(560, 500); ctx.quadraticCurveTo(500, 330, 545, 250); ctx.quadraticCurveTo(585, 150, 540, 0);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = "rgba(147,197,253,0.72)";
+            ctx.beginPath();
+            ctx.moveTo(400, 0); ctx.quadraticCurveTo(455, 190, 420, 250); ctx.quadraticCurveTo(385, 340, 450, 500);
+            ctx.lineTo(520, 500); ctx.quadraticCurveTo(470, 330, 510, 250); ctx.quadraticCurveTo(545, 140, 500, 0);
+            ctx.closePath(); ctx.fill();
+            ctx.strokeStyle = "#1d4ed8"; ctx.lineWidth = 2.2; ctx.setLineDash([8, 6]);
+            for (let i = 0; i < 4; i++) {
+                const y = 70 + i * 100;
+                ctx.beginPath(); ctx.moveTo(430, y); ctx.lineTo(490, y + 35); ctx.stroke();
+                ctx.beginPath();
+                ctx.moveTo(490, y + 35); ctx.lineTo(478, y + 24); ctx.moveTo(490, y + 35); ctx.lineTo(476, y + 36);
+                ctx.stroke();
+            }
+            ctx.setLineDash([]);
+            [[390, 150], [520, 190], [405, 360], [530, 390]].forEach((p, n) => drawStaticMountainRock(p[0], p[1], 0.45 + (n % 2) * 0.1, false, true, 20));
+            ctx.save();
+            ctx.font = "900 13px Tahoma, Arial"; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+            const warn = "معبر وادي / مزلقان سيول";
+            const ww = ctx.measureText(warn).width + 16;
+            [[{x:220,y:200},{x:740,y:300}]].forEach(pair => {
+                pair.forEach(pt => {
+                    ctx.fillStyle = "rgba(255,255,255,0.96)"; ctx.strokeStyle = "#b45309"; ctx.lineWidth = 1.5;
+                    ctx.beginPath(); ctx.roundRect(pt.x - ww/2, pt.y - 10, ww, 20, 4); ctx.fill(); ctx.stroke();
+                    ctx.fillStyle = "#9a3412"; ctx.fillText(warn, pt.x, pt.y);
+                });
+            });
+            ctx.restore();
+        }
+        else if (type === "bridge_jersey_barrier") {
+            ctx.fillStyle = "rgba(15,23,42,0.18)";
+            ctx.fillRect(0, 320, 960, 90);
+            ctx.fillStyle = "#64748b";
+            ctx.beginPath(); ctx.moveTo(40, 320); ctx.lineTo(140, 175); ctx.lineTo(820, 175); ctx.lineTo(920, 320); ctx.closePath(); ctx.fill();
+            ctx.fillStyle = asphalt; ctx.fillRect(120, 185, 720, 120);
+            ctx.fillStyle = "#94a3b8";
+            ctx.fillRect(115, 178, 18, 134); ctx.fillRect(827, 178, 18, 134);
+            for (let y = 182; y < 310; y += 16) {
+                ctx.fillStyle = (Math.floor(y / 16) % 2) ? "#fbbf24" : "#0f172a";
+                ctx.fillRect(117, y, 14, 8); ctx.fillRect(829, y, 14, 8);
+            }
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3; ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(140, 240); ctx.lineTo(820, 240); ctx.moveTo(140, 250); ctx.lineTo(820, 250); ctx.stroke();
+            ctx.strokeStyle = white; ctx.lineWidth = 2; ctx.setLineDash([14, 10]);
+            ctx.beginPath(); ctx.moveTo(140, 210); ctx.lineTo(820, 210); ctx.moveTo(140, 280); ctx.lineTo(820, 280); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.fillStyle = "rgba(15,23,42,0.25)";
+            ctx.fillRect(120, 305, 720, 10);
+            ctx.save();
+            ctx.font = "900 13px Tahoma, Arial"; ctx.fillStyle = "#0f172a"; ctx.textAlign = "center";
+            ctx.fillText("جسر علوي — حاجز نيوجيرسي", 480, 160);
+            ctx.restore();
+        }
+        else if (type === "workzone_detour") {
+            ctx.fillStyle = curb; ctx.fillRect(0, 122, 960, 256);
+            ctx.fillStyle = asphalt; ctx.fillRect(0, 128, 960, 244);
+            ctx.fillStyle = "#cbd5e1"; ctx.fillRect(0, 238, 960, 24);
+            ctx.strokeStyle = yellow; ctx.lineWidth = 2.5; ctx.setLineDash([]);
+            ctx.strokeRect(-5, 238, 970, 24);
+            ctx.fillStyle = "rgba(249,115,22,0.28)";
+            ctx.fillRect(0, 128, 960, 110);
+            for (let x = 180; x < 760; x += 55) {
+                ctx.fillStyle = (Math.floor(x / 55) % 2) ? "#fb923c" : "#ffffff";
+                ctx.fillRect(x, 150, 26, 70);
+                ctx.beginPath(); ctx.moveTo(x + 13, 228); ctx.lineTo(x + 4, 250); ctx.lineTo(x + 22, 250); ctx.closePath();
+                ctx.fillStyle = "#ea580c"; ctx.fill();
+            }
+            ctx.strokeStyle = yellow; ctx.lineWidth = 4; ctx.setLineDash([16, 10]);
+            ctx.beginPath(); ctx.moveTo(40, 300); ctx.quadraticCurveTo(300, 360, 520, 300); ctx.quadraticCurveTo(720, 250, 920, 300); ctx.stroke();
+            ctx.setLineDash([]);
+            ctx.save();
+            ctx.font = "900 14px Tahoma, Arial"; ctx.textAlign = "center";
+            const label = "منطقة عمل - تحويلة";
+            const lw = ctx.measureText(label).width + 18;
+            ctx.fillStyle = "#fff7ed"; ctx.strokeStyle = "#c2410c"; ctx.lineWidth = 1.6;
+            ctx.beginPath(); ctx.roundRect(480 - lw/2, 100, lw, 22, 4); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#9a3412"; ctx.fillText(label, 480, 111);
+            ctx.restore();
+        }
+        else if (type === "speed_bump_school") {
+            ctx.fillStyle = curb; ctx.fillRect(0, 168, 960, 164);
+            ctx.fillStyle = asphalt; ctx.fillRect(0, 174, 960, 152);
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3; ctx.setLineDash([18, 12]);
+            ctx.beginPath(); ctx.moveTo(0, 250); ctx.lineTo(960, 250); ctx.stroke();
+            ctx.setLineDash([]);
+            for (let i = 0; i < 5; i++) {
+                ctx.strokeStyle = "#fbbf24"; ctx.lineWidth = 3;
+                ctx.beginPath(); ctx.moveTo(220 + i * 18, 190); ctx.lineTo(250 + i * 18, 310); ctx.stroke();
+            }
+            ctx.fillStyle = "#0f172a";
+            ctx.beginPath(); ctx.ellipse(480, 250, 78, 18, 0, 0, Math.PI * 2); ctx.fill();
+            for (let i = -3; i <= 3; i++) {
+                ctx.fillStyle = (i % 2 === 0) ? "#fbbf24" : "#0f172a";
+                ctx.fillRect(430 + i * 14, 236, 12, 28);
+            }
+            ctx.fillStyle = "rgba(255,255,255,0.9)";
+            for (let x = 430; x <= 520; x += 18) ctx.fillRect(x, 288, 10, 28);
+            ctx.save();
+            ctx.font = "900 13px Tahoma, Arial"; ctx.textAlign = "center";
+            ctx.fillStyle = "#0f172a";
+            ctx.fillText("مطب تهدئة + معبر مشاة", 480, 160);
+            ctx.restore();
+        }
+        else if (type === "skewed_intersection") {
+            ctx.save();
+            ctx.translate(480, 250);
+            ctx.rotate(-0.35);
+            ctx.fillStyle = curb; ctx.fillRect(-520, -80, 1040, 160);
+            ctx.fillStyle = asphalt; ctx.fillRect(-520, -70, 1040, 140);
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3; ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(-520, 0); ctx.lineTo(520, 0); ctx.stroke();
+            ctx.restore();
+            ctx.save();
+            ctx.translate(480, 250);
+            ctx.rotate(0.52);
+            ctx.fillStyle = curb; ctx.fillRect(-40, -280, 120, 560);
+            ctx.fillStyle = asphalt; ctx.fillRect(-30, -280, 100, 560);
+            ctx.strokeStyle = yellow; ctx.lineWidth = 3;
+            ctx.beginPath(); ctx.moveTo(20, -280); ctx.lineTo(20, 280); ctx.stroke();
+            ctx.strokeStyle = white; ctx.lineWidth = 5; ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(-20, -40); ctx.lineTo(60, -40); ctx.stroke();
+            ctx.restore();
+            ctx.save();
+            ctx.font = "900 13px Tahoma, Arial"; ctx.textAlign = "center";
+            ctx.fillStyle = "#0f172a";
+            ctx.fillText("تقاطع مائل ~50°", 480, 56);
+            ctx.restore();
         }
         ctx.restore();
     }
@@ -1705,7 +2163,19 @@
     }
     function renderAll(hideSelectionHandles) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
+        fillTerrainBackground();
+        ctx.save();
+        ctx.translate(480, 232);
+        if (roadGlobalAngle !== 0) {
+            const rad = (roadGlobalAngle * Math.PI) / 180;
+            const autoCover = 1 + 0.24 * Math.abs(Math.sin(2 * rad));
+            ctx.scale(autoCover, autoCover);
+            ctx.rotate(rad);
+        }
+        ctx.scale((roadFlipX ? -1 : 1), (roadFlipY ? -1 : 1) * roadWidthScale);
+        ctx.translate(-480, -232);
         drawAsphaltRoad(currentRoad);
+        ctx.restore();
         items.forEach(it => {
             if (it.tailX !== undefined && it.tailY !== undefined && !["cliff_fall", "overturned_car"].includes(it.type)) {
                 drawArrowLine(it.tailX, it.tailY, it.x, it.y, it.color || "#ef4444", Boolean(it.skid));
@@ -1759,7 +2229,7 @@
         return 32;
     }
     function flexEditArmed() {
-        return flexEditActive && (currentRoad === "custom_flex_road" || currentRoad === "mountain_cliff_curve");
+        return flexEditActive && isSplineRoad(currentRoad);
     }
     canvas.addEventListener("mousedown", e => {
         if (!flexEditArmed()) return;
@@ -2063,6 +2533,7 @@
                 if (args.saved_state.fallMeters != null) updateFallMeters(args.saved_state.fallMeters, false);
                 items = JSON.parse(JSON.stringify(args.saved_state.items));
                 if (args.saved_state.flexRoad) restoreFlexRoad(args.saved_state.flexRoad);
+                restoreRoadGeometry(args.saved_state);
                 ensureCompass();
                 selectedIdx = -1;
                 syncCloneCarDropdown();
@@ -2101,7 +2572,13 @@
                     roadName: roadNameIn.value || "",
                     fallMeters: Number(fallMetersIn && fallMetersIn.value) || 35,
                     items: items,
-                    flexRoad: flexRoadState()
+                    flexRoad: flexRoadState(),
+                    roadGlobalAngle: roadGlobalAngle,
+                    roadFlipX: roadFlipX,
+                    roadFlipY: roadFlipY,
+                    roadWidthScale: roadWidthScale,
+                    roadTerrainBg: roadTerrainBg,
+                    flexRoadStyle: flexRoadStyle
                 },
                 ts: Date.now()
             }
