@@ -3020,6 +3020,110 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         f"</div>"
     )
 
+_LIABILITY_RATIO_LOOKUP = {
+    "100% الطرف الأول | 0% الطرف الثاني": (100, 0),
+    "75% الطرف الأول | 25% الطرف الثاني": (75, 25),
+    "50% الطرف الأول | 50% الطرف الثاني": (50, 50),
+    "25% الطرف الأول | 75% الطرف الثاني": (25, 75),
+    "0% الطرف الأول | 100% الطرف الثاني": (0, 100),
+}
+
+def resolve_liability_ratios_from_session():
+    """قراءة نسب المسؤولية وصفات الأطراف من session_state فقط (آمن عبر التبويبات)."""
+    selected = str(st.session_state.get("liability_ratio_select") or "100% الطرف الأول | 0% الطرف الثاني")
+    if selected == "نسبة مخصصة":
+        try:
+            p1_ratio = int(st.session_state.get("custom_p1_ratio") or 75)
+        except (TypeError, ValueError):
+            p1_ratio = 75
+        p1_ratio = max(0, min(100, p1_ratio))
+        p2_ratio = 100 - p1_ratio
+    else:
+        p1_ratio, p2_ratio = _LIABILITY_RATIO_LOOKUP.get(selected, (100, 0))
+    p1_title = str(
+        st.session_state.get("p1_title_input")
+        or st.session_state.get("party_role_title_1")
+        or "قائد المركبة الأولى"
+    )
+    p2_role = str(st.session_state.get("p2_role_select") or "قائد المركبة الثانية")
+    if p2_role == "تحديد صفة مخصصة":
+        p2_title = str(st.session_state.get("p2_custom_title") or p2_role)
+    else:
+        p2_title = p2_role or str(st.session_state.get("party_role_title_2") or "قائد المركبة الثانية")
+    p1_reasons = str(st.session_state.get("p1_reasons") or "")
+    p2_reasons = str(st.session_state.get("p2_reasons") or "")
+    st.session_state["p1_ratio"] = int(p1_ratio)
+    st.session_state["p2_ratio"] = int(p2_ratio)
+    st.session_state["p2_title"] = p2_title
+    return p1_title, int(p1_ratio), p1_reasons, p2_title, int(p2_ratio), p2_reasons
+
+def build_liability_html_from_session() -> str:
+    p1_title, p1_ratio, p1_reasons, p2_title, p2_ratio, p2_reasons = resolve_liability_ratios_from_session()
+    html_out = build_liability_section_html(
+        p1_title=p1_title,
+        p1_ratio=p1_ratio,
+        p1_reasons=p1_reasons,
+        p2_title=p2_title,
+        p2_ratio=p2_ratio,
+        p2_reasons=p2_reasons,
+    )
+    st.session_state["liability_html"] = html_out
+    return html_out
+
+def load_a4_report_fields_from_session() -> dict:
+    """تهيئة كل حقول تقرير A4 من session_state دون الاعتماد على متغيرات محلية للتبويبات الأخرى."""
+    accident_nature = str(
+        st.session_state.get("accident_nature")
+        or st.session_state.get("acc_nature_sel")
+        or st.session_state.get("acc_nature_custom")
+        or ""
+    )
+    if accident_nature == "تحديد تصنيف مخصص":
+        accident_nature = str(st.session_state.get("acc_nature_custom") or "")
+    rights_status = str(
+        st.session_state.get("rights_status")
+        or st.session_state.get("rights_sel")
+        or st.session_state.get("rights_custom")
+        or ""
+    )
+    if rights_status == "تحديد حقوق مخصصة":
+        rights_status = str(st.session_state.get("rights_custom") or "")
+    actions_raw = str(st.session_state.get("actions_taken_editor") or "")
+    final_actions_html = "<br>".join(
+        html.escape(line.strip()) for line in actions_raw.splitlines() if line.strip()
+    )
+    fields = {
+        "acc_num": st.session_state.get("p1_acc_number", ""),
+        "acc_date": st.session_state.get("hijri_date") or st.session_state.get("p1_acc_date", ""),
+        "acc_time": st.session_state.get("p1_acc_time", ""),
+        "acc_loc": st.session_state.get("p1_acc_location", ""),
+        "acc_type": st.session_state.get("p1_acc_type_choice") or st.session_state.get("p1_acc_type", ""),
+        "acc_injuries": st.session_state.get("p1_acc_injuries", 0),
+        "acc_deaths": st.session_state.get("p1_acc_deaths", 0),
+        "acc_weather": st.session_state.get("p1_acc_weather_choice") or st.session_state.get("p1_acc_weather", ""),
+        "acc_cause": st.session_state.get("p1_acc_cause", ""),
+        "acc_results": st.session_state.get("accident_results", ""),
+        "acc_how": st.session_state.get("technical_description", ""),
+        "accident_nature": accident_nature,
+        "accident_nature_val": accident_nature,
+        "rights_status": rights_status,
+        "rights_status_val": rights_status,
+        "participating_agency": st.session_state.get("criminal_participating_agency", ""),
+        "escaped_vehicles": st.session_state.get("criminal_escaped_vehicles", ""),
+        "shots_fired": st.session_state.get("criminal_shots_fired", ""),
+        "contraband_found": st.session_state.get("criminal_contraband_found", ""),
+        "road_name_sign": st.session_state.get("sketch_road_name", ""),
+        "legend_keys": [str(st.session_state.get(f"legend_key_{index}") or "") for index in range(1, 11)],
+        "final_actions_html": final_actions_html,
+        "parties_df": pd.DataFrame(st.session_state.get("parties") or []),
+        "vehicles_df": pd.DataFrame(st.session_state.get("vehicles") or []),
+        "liability_html": build_liability_html_from_session(),
+    }
+    # مزامنة المفاتيح الأساسية في الجلسة لضمان الاتساق
+    st.session_state["accident_nature"] = accident_nature
+    st.session_state["rights_status"] = rights_status
+    return fields
+
 def _signature_box(sig_base64):
     image_html = ""
     if str(sig_base64 or "").startswith("data:image/"):
@@ -4127,6 +4231,33 @@ if "active_tab" not in st.session_state:
     st.session_state.active_tab = MAIN_TAB_OPTIONS[0]
 if st.session_state.get("active_tab") not in MAIN_TAB_OPTIONS:
     st.session_state.active_tab = MAIN_TAB_OPTIONS[0]
+# قيم افتراضية آمنة لحقول A4 قبل أي تبويب (لا تعتمد على متغيرات محلية)
+for _a4_key, _a4_default in (
+    ("accident_nature", DEFAULT_REPORT_STATE.get("accident_nature", "")),
+    ("rights_status", DEFAULT_REPORT_STATE.get("rights_status", "")),
+    ("accident_results", ""),
+    ("technical_description", ""),
+    ("p1_reasons", DEFAULT_REPORT_STATE.get("p1_reasons", "")),
+    ("p2_reasons", DEFAULT_REPORT_STATE.get("p2_reasons", "")),
+    ("p1_title_input", DEFAULT_REPORT_STATE.get("p1_title_input", "قائد المركبة الأولى")),
+    ("p2_role_select", DEFAULT_REPORT_STATE.get("p2_role_select", "قائد المركبة الثانية")),
+    ("p2_custom_title", DEFAULT_REPORT_STATE.get("p2_custom_title", "")),
+    ("p2_title", DEFAULT_REPORT_STATE.get("p2_role_select", "قائد المركبة الثانية")),
+    ("actions_taken_editor", ""),
+    ("liability_html", ""),
+    ("p1_ratio", 100),
+    ("p2_ratio", 0),
+    ("criminal_participating_agency", ""),
+    ("criminal_escaped_vehicles", ""),
+    ("criminal_shots_fired", "لا"),
+    ("criminal_contraband_found", "لم يتم العثور على ممنوعات"),
+):
+    if _a4_key not in st.session_state:
+        st.session_state[_a4_key] = _a4_default
+if "parties" not in st.session_state:
+    st.session_state.parties = _blank_parties()
+if "vehicles" not in st.session_state:
+    st.session_state.vehicles = _blank_vehicles()
 st.markdown(
     """
     <style>
@@ -4874,14 +5005,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         # لا تُقترح مادة الرخصة على راكب/مشاة
         if "art_32_1" not in (st.session_state.get("selected_articles") or []):
             st.caption("يمكن إدراج المادة (32/1) يدوياً للسائق غير المؤهل عند الحاجة.")
-    ratio_options = [
-        "100% الطرف الأول | 0% الطرف الثاني",
-        "75% الطرف الأول | 25% الطرف الثاني",
-        "50% الطرف الأول | 50% الطرف الثاني",
-        "25% الطرف الأول | 75% الطرف الثاني",
-        "0% الطرف الأول | 100% الطرف الثاني",
-        "نسبة مخصصة",
-    ]
+    ratio_options = list(_LIABILITY_RATIO_LOOKUP.keys()) + ["نسبة مخصصة"]
     if st.session_state.get("liability_ratio_select") not in ratio_options:
         st.session_state.liability_ratio_select = ratio_options[0]
     selected_ratio = st.selectbox(
@@ -4889,13 +5013,6 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         options=ratio_options,
         key="liability_ratio_select"
     )
-    ratio_lookup = {
-        "100% الطرف الأول | 0% الطرف الثاني": (100, 0),
-        "75% الطرف الأول | 25% الطرف الثاني": (75, 25),
-        "50% الطرف الأول | 50% الطرف الثاني": (50, 50),
-        "25% الطرف الأول | 75% الطرف الثاني": (25, 75),
-        "0% الطرف الأول | 100% الطرف الثاني": (0, 100),
-    }
     if selected_ratio == "نسبة مخصصة":
         c_r1, c_r2 = st.columns(2)
         with c_r1:
@@ -4910,9 +5027,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
             p2_ratio = 100 - int(p1_ratio)
             st.info(f"نسبة إدانة الطرف الثاني التلقائية: **{p2_ratio}%**")
     else:
-        p1_ratio, p2_ratio = ratio_lookup[selected_ratio]
+        p1_ratio, p2_ratio = _LIABILITY_RATIO_LOOKUP[selected_ratio]
     p1_ratio = int(p1_ratio)
     p2_ratio = int(p2_ratio)
+    st.session_state["p1_ratio"] = p1_ratio
+    st.session_state["p2_ratio"] = p2_ratio
     _p2_driver_title = (
         (_role_titles or {}).get(2)
         or st.session_state.get("party_role_title_2")
@@ -4950,6 +5069,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
             )
         else:
             p2_title = p2_role_type
+        st.session_state["p2_title"] = p2_title
     if p1_ratio > 0:
         p1_reasons = st.text_area(
             f"المواد النظامية وأسباب إدانة {p1_title} ({p1_ratio}%) — (كل سبب في سطر جديد):",
@@ -4974,6 +5094,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         p2_ratio=p2_ratio,
         p2_reasons=p2_reasons,
     )
+    st.session_state["liability_html"] = liability_html
 ACTIONS_SCENARIOS = {
     "1. صلح وتنازل ميداني نهائي": (
         "تم إفهام الأطراف بحقوقهم النظامية، وانتهى الحادث بالصلح والتنازل الخطي التام بين الطرفين في الموقع دون أي مطالبات مالية أو حقوقية، وأُخلي سبيل الأطراف والمركبات."
@@ -5175,8 +5296,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
             )
         else:
             rights_status_val = selected_rights
-    st.session_state.accident_nature = accident_nature_val
-    st.session_state.rights_status = rights_status_val
+    st.session_state["accident_nature"] = str(accident_nature_val or "")
+    st.session_state["rights_status"] = str(rights_status_val or "")
     # إعادة توليد صياغات بنود الوفيات 20–26 عند تغيّر عدد الوفيات
     _deaths_for_actions = _accident_deaths_count()
     if st.session_state.get("_actions_plural_deaths_sig") != _deaths_for_actions:
@@ -5195,30 +5316,38 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     final_actions_html = "<br>".join(
         html.escape(line.strip()) for line in str(actions_taken_raw or "").splitlines() if line.strip()
     )
-    accident_nature = accident_nature_val
-    rights_status = rights_status_val
-    participating_agency = ""
-    escaped_vehicles = ""
-    shots_fired = ""
-    contraband_found = ""
-    if "جنائي" in (accident_nature_val or ""):
+    st.session_state["final_actions_html"] = final_actions_html
+    accident_nature = str(st.session_state.get("accident_nature") or accident_nature_val or "")
+    rights_status = str(st.session_state.get("rights_status") or rights_status_val or "")
+    if "جنائي" in accident_nature:
         st.markdown("#### 🚨 تفاصيل الشق الجنائي والأمني")
         col1, col2 = st.columns(2)
         with col1:
             participating_agency = st.text_input(
                 "الجهة الأمنية المباشرة (مثل: الأفواج الأمنية / الدوريات):",
                 placeholder="مثال: سرية المهام - الفوج الأول",
+                key="criminal_participating_agency",
             )
-            escaped_vehicles = st.text_input("بيانات المركبات الهاربة أو المعترضة (إن وجدت):")
+            escaped_vehicles = st.text_input(
+                "بيانات المركبات الهاربة أو المعترضة (إن وجدت):",
+                key="criminal_escaped_vehicles",
+            )
         with col2:
             shots_fired = st.selectbox(
                 "هل تم إطلاق نار أثناء المطاردة؟",
                 ["لا", "نعم - طلقات تحذيرية فقط", "نعم - طلقات تحذيرية ومباشرة لإعطاب المركبة"],
+                key="criminal_shots_fired",
             )
             contraband_found = st.selectbox(
                 "نتيجة تفتيش المركبة:",
                 ["لم يتم العثور على ممنوعات", "تم العثور على ممنوعات (يرفق بمحضر الضبط)"],
+                key="criminal_contraband_found",
             )
+    else:
+        participating_agency = str(st.session_state.get("criminal_participating_agency") or "")
+        escaped_vehicles = str(st.session_state.get("criminal_escaped_vehicles") or "")
+        shots_fired = str(st.session_state.get("criminal_shots_fired") or "")
+        contraband_found = str(st.session_state.get("criminal_contraband_found") or "")
 _SKETCH_ATTACH_LABEL = "✅ إرفاق صفحة الكروكي"
 _SKETCH_OMIT_LABEL = "❌ حذف صفحة الكروكي - حادث قديم"
 
@@ -5960,104 +6089,35 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             </div>
         </div>
         """
-    # قيم آمنة عند عدم رسم التبويب النشط في هذا التشغيل
-    try:
-        _party_columns
-    except NameError:
-        _party_columns = list(_PARTY_TABLE_COLUMNS)
-    try:
-        _vehicle_columns
-    except NameError:
-        _vehicle_columns = list(_VEHICLE_TABLE_COLUMNS)
-    try:
-        parties_df
-    except NameError:
-        parties_df = pd.DataFrame(st.session_state.get("parties") or [])
-    try:
-        vehicles_df
-    except NameError:
-        vehicles_df = pd.DataFrame(st.session_state.get("vehicles") or [])
-    try:
-        acc_num
-    except NameError:
-        acc_num = st.session_state.get("p1_acc_number", "")
-    try:
-        acc_date
-    except NameError:
-        acc_date = st.session_state.get("hijri_date") or st.session_state.get("p1_acc_date", "")
-    try:
-        acc_time
-    except NameError:
-        acc_time = st.session_state.get("p1_acc_time", "")
-    try:
-        acc_loc
-    except NameError:
-        acc_loc = st.session_state.get("p1_acc_location", "")
-    try:
-        acc_type
-    except NameError:
-        acc_type = st.session_state.get("p1_acc_type_choice") or st.session_state.get("p1_acc_type", "")
-    try:
-        acc_injuries
-    except NameError:
-        acc_injuries = st.session_state.get("p1_acc_injuries", 0)
-    try:
-        acc_deaths
-    except NameError:
-        acc_deaths = st.session_state.get("p1_acc_deaths", 0)
-    try:
-        acc_weather
-    except NameError:
-        acc_weather = st.session_state.get("p1_acc_weather_choice") or st.session_state.get("p1_acc_weather", "")
-    try:
-        acc_cause
-    except NameError:
-        acc_cause = st.session_state.get("p1_acc_cause", "")
-    try:
-        acc_results
-    except NameError:
-        acc_results = st.session_state.get("accident_results", "")
-    try:
-        acc_how
-    except NameError:
-        acc_how = st.session_state.get("technical_description", "")
-    try:
-        accident_nature_val
-    except NameError:
-        accident_nature_val = st.session_state.get("accident_nature") or st.session_state.get("acc_nature_sel", "")
-    try:
-        rights_status_val
-    except NameError:
-        rights_status_val = st.session_state.get("rights_status") or st.session_state.get("rights_sel", "")
-    try:
-        participating_agency
-    except NameError:
-        participating_agency = ""
-    try:
-        escaped_vehicles
-    except NameError:
-        escaped_vehicles = ""
-    try:
-        shots_fired
-    except NameError:
-        shots_fired = ""
-    try:
-        contraband_found
-    except NameError:
-        contraband_found = ""
-    try:
-        road_name_sign
-    except NameError:
-        road_name_sign = st.session_state.get("sketch_road_name", "")
-    try:
-        legend_keys
-    except NameError:
-        legend_keys = [str(st.session_state.get(f"legend_key_{index}") or "") for index in range(1, 11)]
-    try:
-        final_actions_html
-    except NameError:
-        _actions_raw = str(st.session_state.get("actions_taken_editor") or "")
-        final_actions_html = "<br>".join(html.escape(line.strip()) for line in _actions_raw.splitlines() if line.strip())
+    # قراءة كل حقول A4 من session_state فقط — لا تعتمد على متغيرات محلية عبر التبويبات
+    _a4 = load_a4_report_fields_from_session()
+    _party_columns = list(_PARTY_TABLE_COLUMNS)
+    _vehicle_columns = list(_VEHICLE_TABLE_COLUMNS)
+    parties_df = _a4["parties_df"]
+    vehicles_df = _a4["vehicles_df"]
+    acc_num = _a4["acc_num"]
+    acc_date = _a4["acc_date"]
+    acc_time = _a4["acc_time"]
+    acc_loc = _a4["acc_loc"]
+    acc_type = _a4["acc_type"]
+    acc_injuries = _a4["acc_injuries"]
+    acc_deaths = _a4["acc_deaths"]
+    acc_weather = _a4["acc_weather"]
+    acc_cause = _a4["acc_cause"]
+    acc_results = _a4["acc_results"]
+    acc_how = _a4["acc_how"]
+    accident_nature = str(_a4["accident_nature"] or "")
+    accident_nature_val = str(_a4["accident_nature_val"] or accident_nature)
+    rights_status = str(_a4["rights_status"] or "")
+    rights_status_val = str(_a4["rights_status_val"] or rights_status)
+    participating_agency = _a4["participating_agency"]
+    escaped_vehicles = _a4["escaped_vehicles"]
+    shots_fired = _a4["shots_fired"]
+    contraband_found = _a4["contraband_found"]
+    road_name_sign = _a4["road_name_sign"]
+    legend_keys = _a4["legend_keys"]
+    final_actions_html = _a4["final_actions_html"]
+    liability_html = _a4["liability_html"]
     
     parties_head = "".join(f"<th>{label}</th>" for _key, label in _party_columns)
     vehicles_head = "".join(f"<th>{label}</th>" for _key, label in _vehicle_columns)
@@ -6130,17 +6190,23 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     shots_fired = _page1_cell(shots_fired)
     contraband_found = _page1_cell(contraband_found)
     road_name_sign = _page1_cell(road_name_sign)
-    results_html = "<br>".join(html.escape(line) for line in acc_results.split("\n") if line.strip())
-    acc_how_html = html.escape(acc_how).replace("\n", "<br>")
+    results_html = "<br>".join(html.escape(line) for line in str(acc_results or "").split("\n") if line.strip())
+    acc_how_html = html.escape(str(acc_how or "")).replace("\n", "<br>")
     criminal_details_html = ""
-    if "جنائي" in (accident_nature or ""):
+    accident_nature = str(
+        st.session_state.get("accident_nature")
+        or accident_nature_val
+        or accident_nature
+        or ""
+    )
+    if "جنائي" in accident_nature:
         criminal_details_html = f"""
             <div class="table-scroll"><table>
                 <tr><th>تفاصيل الشق الجنائي والأمني</th></tr>
-                <tr><td style="text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
-                <tr><td style="text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
-                <tr><td style="text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
-                <tr><td style="text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
+                <tr><td style="text-align:right;">الجهة الأمنية المباشرة: {html.escape(str(participating_agency or ""))}</td></tr>
+                <tr><td style="text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(str(escaped_vehicles or ""))}</td></tr>
+                <tr><td style="text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(str(shots_fired or ""))}</td></tr>
+                <tr><td style="text-align:right;">نتيجة تفتيش المركبة: {html.escape(str(contraband_found or ""))}</td></tr>
             </table></div>
         """
     official_footer_html = build_official_page_footer_html(
