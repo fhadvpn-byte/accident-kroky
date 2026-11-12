@@ -5358,11 +5358,16 @@ def _on_sketch_choice_tab5():
     st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab5") == _SKETCH_ATTACH_LABEL
 
 def _sketch_availability_control(widget_key, on_change):
+    """مفتاح الواجهة مستقل عن include_sketch؛ تُحدَّث القيمة الدائمة عبر on_change فقط."""
     if not isinstance(st.session_state.get("include_sketch"), bool):
         st.session_state.include_sketch = True
     selected = _SKETCH_ATTACH_LABEL if st.session_state.include_sketch else _SKETCH_OMIT_LABEL
-    if st.session_state.get(widget_key) != selected:
+    # مزامنة مفتاح الواجهة قبل الرسم فقط (لا بعده)
+    if st.session_state.get(widget_key) not in (_SKETCH_ATTACH_LABEL, _SKETCH_OMIT_LABEL):
         st.session_state[widget_key] = selected
+    elif st.session_state.get(widget_key) != selected and st.session_state.get("_force_sketch_choice_sync"):
+        st.session_state[widget_key] = selected
+        st.session_state.pop("_force_sketch_choice_sync", None)
     st.radio(
         "حالة الرسم الكروكي في التقرير",
         (_SKETCH_ATTACH_LABEL, _SKETCH_OMIT_LABEL),
@@ -5370,6 +5375,7 @@ def _sketch_availability_control(widget_key, on_change):
         on_change=on_change,
         horizontal=True,
     )
+    # لا تسند إلى session_state[widget_key] بعد الرسم — حدّث البيانات فقط
     st.session_state.include_sketch = st.session_state.get(widget_key) == _SKETCH_ATTACH_LABEL
 
 SKETCH_DATA_URL_KEY = "sketch_data_url"
@@ -5377,6 +5383,10 @@ SKETCH_URI_PATH = SAVED_IMAGES_DIR / "adopted_sketch_uri.txt"
 AERIAL_DATA_URL_KEY = "aerial_sketch_data_url"
 AERIAL_URI_PATH = SAVED_IMAGES_DIR / "adopted_aerial_uri.txt"
 AERIAL_STATE_PATH = SAVED_IMAGES_DIR / "adopted_aerial_state.json"
+REPORT_MEDIA_MODE_PATH = SAVED_IMAGES_DIR / "report_media_mode.txt"
+REPORT_MEDIA_OPTIONS = ("كلاهما", "كروكي فقط", "جوي فقط")
+REPORT_MEDIA_MODE_KEY = "report_media_mode"
+REPORT_MEDIA_MODE_UI_KEY = "report_media_mode_ui"
 
 def _remember_sketch_data_url(data_uri: str, state_key: str = SKETCH_DATA_URL_KEY):
     st.session_state[state_key] = data_uri
@@ -5468,10 +5478,21 @@ def _load_remembered_aerial():
                 mode = str(meta.get("report_media_mode") or "").strip()
                 if mode in ("كلاهما", "كروكي فقط", "جوي فقط"):
                     st.session_state["report_media_mode"] = mode
+                    st.session_state.pop("report_media_mode_ui", None)
             if restored_image and "include_aerial" in meta:
                 st.session_state["include_aerial"] = bool(meta.get("include_aerial"))
     if current.startswith("data:image/") and st.session_state.get("include_aerial") is None:
         st.session_state["include_aerial"] = True
+    # استرجاع وضع العرض من الملف الدائم إن لزم
+    if st.session_state.get("report_media_mode") not in ("كلاهما", "كروكي فقط", "جوي فقط"):
+        try:
+            if REPORT_MEDIA_MODE_PATH.is_file():
+                disk_mode = REPORT_MEDIA_MODE_PATH.read_text(encoding="utf-8").strip()
+                if disk_mode in ("كلاهما", "كروكي فقط", "جوي فقط"):
+                    st.session_state["report_media_mode"] = disk_mode
+                    st.session_state.pop("report_media_mode_ui", None)
+        except OSError:
+            pass
 
 def _clear_remembered_aerial():
     for key in (
@@ -5570,21 +5591,31 @@ def _normalize_satellite_state(raw_state):
     state["labelsVisible"] = bool(state.get("labelsVisible", True))
     return state
 
-def _sync_report_media_mode_from_flags():
-    include_sketch = bool(st.session_state.get("include_sketch", True))
-    include_aerial = bool(st.session_state.get("include_aerial", True))
-    mode = st.session_state.get("report_media_mode")
-    if mode not in ("كلاهما", "كروكي فقط", "جوي فقط"):
-        if include_sketch and include_aerial:
-            mode = "كلاهما"
-        elif include_aerial and not include_sketch:
-            mode = "جوي فقط"
-        else:
-            mode = "كروكي فقط"
-        st.session_state["report_media_mode"] = mode
-    return mode
+def _normalize_report_media_mode(mode) -> str:
+    text = str(mode or "").strip()
+    return text if text in REPORT_MEDIA_OPTIONS else "كلاهما"
 
-def _apply_report_media_mode(mode: str):
+def _persist_report_media_mode_disk(mode: str):
+    mode = _normalize_report_media_mode(mode)
+    try:
+        SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        REPORT_MEDIA_MODE_PATH.write_text(mode, encoding="utf-8")
+        if AERIAL_STATE_PATH.is_file():
+            try:
+                meta = json.loads(AERIAL_STATE_PATH.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError, TypeError):
+                meta = {}
+            if isinstance(meta, dict):
+                meta["report_media_mode"] = mode
+                AERIAL_STATE_PATH.write_text(
+                    json.dumps(meta, ensure_ascii=False, indent=2),
+                    encoding="utf-8",
+                )
+    except OSError:
+        pass
+
+def _sync_include_flags_from_media_mode(mode: str):
+    mode = _normalize_report_media_mode(mode)
     if mode == "كروكي فقط":
         st.session_state["include_sketch"] = True
         st.session_state["include_aerial"] = False
@@ -5592,10 +5623,54 @@ def _apply_report_media_mode(mode: str):
         st.session_state["include_sketch"] = False
         st.session_state["include_aerial"] = True
     else:
-        mode = "كلاهما"
         st.session_state["include_sketch"] = True
         st.session_state["include_aerial"] = True
-    st.session_state["report_media_mode"] = mode
+    return mode
+
+def _sync_report_media_mode_from_flags():
+    include_sketch = bool(st.session_state.get("include_sketch", True))
+    include_aerial = bool(st.session_state.get("include_aerial", True))
+    mode = st.session_state.get(REPORT_MEDIA_MODE_KEY)
+    if mode not in REPORT_MEDIA_OPTIONS:
+        if include_sketch and include_aerial:
+            mode = "كلاهما"
+        elif include_aerial and not include_sketch:
+            mode = "جوي فقط"
+        else:
+            mode = "كروكي فقط"
+        st.session_state[REPORT_MEDIA_MODE_KEY] = mode
+        _persist_report_media_mode_disk(mode)
+    return mode
+
+def _apply_report_media_mode(mode: str, *, refresh_ui: bool = False):
+    """تحديث قيمة البيانات فقط (ليس مفتاح الواجهة). عند التغيير البرمجي: pop للـ UI ثم rerun."""
+    mode = _sync_include_flags_from_media_mode(mode)
+    st.session_state[REPORT_MEDIA_MODE_KEY] = mode
+    _persist_report_media_mode_disk(mode)
+    if refresh_ui:
+        st.session_state.pop(REPORT_MEDIA_MODE_UI_KEY, None)
+
+def _on_report_media_mode_ui_change():
+    choice = st.session_state.get(REPORT_MEDIA_MODE_UI_KEY)
+    _apply_report_media_mode(choice, refresh_ui=False)
+
+def _render_report_media_mode_control():
+    """راديو بواجهة مستقلة عن مفتاح الحفظ الدائم لتفادي StreamlitWidgetAlreadyInstantiatedError."""
+    _sync_report_media_mode_from_flags()
+    current = _normalize_report_media_mode(st.session_state.get(REPORT_MEDIA_MODE_KEY))
+    st.session_state[REPORT_MEDIA_MODE_KEY] = current
+    # تهيئة مفتاح الواجهة قبل الرسم فقط إن كان غائباً/غير صالح (لا تعدّله بعد الرسم)
+    if st.session_state.get(REPORT_MEDIA_MODE_UI_KEY) not in REPORT_MEDIA_OPTIONS:
+        st.session_state[REPORT_MEDIA_MODE_UI_KEY] = current
+    st.radio(
+        "محتوى التقرير المعتمد",
+        options=list(REPORT_MEDIA_OPTIONS),
+        horizontal=True,
+        key=REPORT_MEDIA_MODE_UI_KEY,
+        on_change=_on_report_media_mode_ui_change,
+    )
+    # مزامنة الأعلام من القيمة المحفوظة دون الكتابة على مفتاح الواجهة
+    _sync_include_flags_from_media_mode(st.session_state.get(REPORT_MEDIA_MODE_KEY))
 
 def _render_aerial_reference():
     saved_state = _normalize_satellite_state(
@@ -5613,10 +5688,11 @@ def _render_aerial_reference():
             map_state = _normalize_satellite_state(sat_result.get("state"))
             # حفظ فوري دائم عند الاعتماد (نفس أسلوب الكروكي)
             _remember_aerial_data_url(sat_result["image"], map_state)
-            if st.session_state.get("report_media_mode") == "كروكي فقط":
-                _apply_report_media_mode("كلاهما")
-            else:
-                st.session_state["include_aerial"] = True
+            if st.session_state.get(REPORT_MEDIA_MODE_KEY) == "كروكي فقط":
+                _apply_report_media_mode("كلاهما", refresh_ui=True)
+                st.toast("✅ تم اعتماد التصوير الجوي في تقرير A4 بنجاح!")
+                st.rerun()
+            st.session_state["include_aerial"] = True
             st.toast("✅ تم اعتماد التصوير الجوي في تقرير A4 بنجاح!")
     aerial_preview = str(st.session_state.get("aerial_sketch_data_url") or "").strip()
     if aerial_preview.startswith("data:image/"):
@@ -5627,6 +5703,9 @@ def _render_aerial_reference():
             pass
         if st.button("🗑️ حذف التصوير الجوي المعتمد", key="_remove_aerial_sketch"):
             _clear_remembered_aerial()
+            # بعد حذف الجوي: إن كان الوضع «جوي فقط» ارجع لـ «كروكي فقط»
+            if st.session_state.get(REPORT_MEDIA_MODE_KEY) == "جوي فقط":
+                _apply_report_media_mode("كروكي فقط", refresh_ui=True)
             st.rerun()
 
 def render_interactive_asphalt_studio(
@@ -5661,14 +5740,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[1]:
     with col_sketch_state:
         _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
     with col_media:
-        _sync_report_media_mode_from_flags()
-        media_choice = st.radio(
-            "محتوى التقرير المعتمد",
-            options=["كلاهما", "كروكي فقط", "جوي فقط"],
-            horizontal=True,
-            key="report_media_mode",
-        )
-        _apply_report_media_mode(media_choice)
+        _render_report_media_mode_control()
     with col_layout:
         st.radio(
             "نمط عرض التخطيط",
@@ -5676,6 +5748,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[1]:
             horizontal=True,
             key="_studio_layout_mode",
         )
+        # مفتاح مختلف عن مفتاح الواجهة — آمن بعد الرسم
         st.session_state["studio_layout_mode"] = st.session_state.get("_studio_layout_mode")
     with col_place:
         aerial_place_choice = st.radio(
@@ -5684,6 +5757,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[1]:
             horizontal=True,
             key="aerial_place_choice",
         )
+        # مفتاح مختلف عن مفتاح الواجهة — آمن بعد الرسم
         st.session_state["aerial_place"] = "beside" if str(aerial_place_choice).startswith("بجانب") else "below"
     render_interactive_asphalt_studio(
         sketch_image_state_key="sketch_data_url",
