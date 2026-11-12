@@ -46,32 +46,44 @@
         position: relative; width: 100%; aspect-ratio: 960 / 500;
         border-radius: 10px; overflow: hidden; border: 2px solid #38bdf8; background: #0f172a;
     }
-    #satMap { width: 100%; height: 100%; }
-    #drawCanvas { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 500; pointer-events: none; }
+    #satMap { width: 100%; height: 100%; background: transparent; }
+    #drawCanvas {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        z-index: 450; pointer-events: none; background: transparent;
+    }
+    .leaflet-container { background: #0f172a; }
     .status-bar {
         display: flex; justify-content: space-between; align-items: center;
-        margin-top: 7px; font-size: 11.5px; color: #bae6fd;
+        margin-top: 7px; font-size: 11.5px; color: #bae6fd; gap: 8px; flex-wrap: wrap;
     }
+    #coordFeedback {
+        width: 100%; min-height: 18px; font-size: 12px; font-weight: 800;
+        color: #7dd3fc; margin: -2px 0 6px;
+    }
+    #coordFeedback.error { color: #fca5a5; }
+    #coordFeedback.ok { color: #86efac; }
 </style>
 </head>
 <body>
 <div class="sat-shell" id="satShell">
     <div class="toolbar">
         <div style="display:flex; gap:5px; flex-wrap:wrap;">
-            <button class="tool-btn active" id="btnPan" onclick="setMode('pan')">🖐️ تحريك وتكبير</button>
-            <button class="tool-btn" id="btnV1" onclick="setMode('v1')">🔴 مسار (1)</button>
-            <button class="tool-btn" id="btnV2" onclick="setMode('v2')">🔵 مسار (2)</button>
-            <button class="tool-btn" id="btnImp" onclick="setMode('impact')">💥 نقطة الاصطدام</button>
-            <button class="tool-btn" onclick="clearDrawings()">🗑️ مسح الرسم</button>
+            <button class="tool-btn active" id="btnPan" type="button">🖐️ تحريك وتكبير</button>
+            <button class="tool-btn" id="btnV1" type="button">🔴 مسار (1)</button>
+            <button class="tool-btn" id="btnV2" type="button">🔵 مسار (2)</button>
+            <button class="tool-btn" id="btnImp" type="button">💥 نقطة الاصطدام</button>
+            <button class="tool-btn" id="btnClear" type="button">🗑️ مسح الرسم</button>
         </div>
-        <button class="tool-btn commit" onclick="commitSatelliteToStreamlit()">✅ اعتماد التصوير الجوي في التقرير</button>
+        <button class="tool-btn commit" id="btnCommit" type="button">✅ اعتماد التصوير الجوي في التقرير</button>
     </div>
     <div class="coord-row">
-        <input class="coord-in" id="coordBox" value="17.0369, 43.0983" placeholder="17.0369, 43.0983"/>
-        <button class="tool-btn" onclick="jumpToCoords()">📍 انتقال للإحداثيات</button>
-        <button class="tool-btn" id="btnProvider" onclick="switchSatelliteProvider()">🛰️ القمر: Google HD</button>
-        <button class="tool-btn" id="btnLabels" onclick="toggleLabels()">🏷️ إظهار/إخفاء المسميات</button>
+        <input class="coord-in" id="coordBox" value="" placeholder="17.0369, 43.0983"/>
+        <button class="tool-btn" id="btnJumpCoords" type="button">📍 انتقال للإحداثيات</button>
+        <button class="tool-btn" id="btnClearPin" type="button">📌 إزالة الدبوس</button>
+        <button class="tool-btn" id="btnProvider" type="button">🛰️ القمر: Google HD</button>
+        <button class="tool-btn" id="btnLabels" type="button">🏷️ إظهار/إخفاء المسميات</button>
     </div>
+    <div id="coordFeedback"></div>
     <div id="mapWrap">
         <div id="satMap"></div>
         <canvas id="drawCanvas"></canvas>
@@ -97,19 +109,31 @@ if (!CanvasRenderingContext2D.prototype.roundRect) {
         return this;
     };
 }
+
+const DEFAULT_COORDS = [17.0369, 43.0983];
 const map = L.map("satMap", {
     zoomControl: true,
     maxZoom: 22,
     minZoom: 5,
     preferCanvas: true
-}).setView([17.03693, 43.08947], 18);
+}).setView(DEFAULT_COORDS, 18);
+
+const googleTileOpts = {
+    subdomains: ["mt0", "mt1", "mt2", "mt3"],
+    maxNativeZoom: 20,
+    maxZoom: 22,
+    crossOrigin: "anonymous",
+    updateWhenIdle: false,
+    updateWhenZooming: true,
+    keepBuffer: 2
+};
 const googleSatLayer = L.tileLayer(
-    "https://mt1.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
-    { maxNativeZoom: 19, maxZoom: 22, crossOrigin: "anonymous" }
+    "https://{s}.google.com/vt/lyrs=s&x={x}&y={y}&z={z}",
+    Object.assign({}, googleTileOpts)
 );
 const googleHybridArLayer = L.tileLayer(
-    "https://mt1.google.com/vt/lyrs=y&hl=ar&x={x}&y={y}&z={z}",
-    { maxNativeZoom: 19, maxZoom: 22, crossOrigin: "anonymous" }
+    "https://{s}.google.com/vt/lyrs=y&hl=ar&x={x}&y={y}&z={z}",
+    Object.assign({}, googleTileOpts)
 );
 const esriSatLayer = L.tileLayer(
     "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
@@ -119,16 +143,11 @@ const esriLabelsLayer = L.tileLayer(
     "https://server.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer/tile/{z}/{y}/{x}",
     { maxNativeZoom: 17, maxZoom: 22, crossOrigin: "anonymous" }
 );
-[googleSatLayer, googleHybridArLayer].forEach(layer => {
-    layer.on("tileerror", function(e) {
-        if (e.coords && e.coords.z >= 18 && layer.options.maxNativeZoom >= e.coords.z) {
-            layer.options.maxNativeZoom = e.coords.z - 1;
-            layer.redraw();
-        }
-    });
-});
+
 let currentProvider = "google";
-let labelsVisible = false;
+let labelsVisible = true;
+let jumpMarker = null;
+
 function refreshMapLayers() {
     [googleSatLayer, googleHybridArLayer, esriSatLayer, esriLabelsLayer].forEach(l => {
         if (map.hasLayer(l)) map.removeLayer(l);
@@ -144,43 +163,62 @@ function refreshMapLayers() {
     if (srcBtn) {
         srcBtn.textContent = currentProvider === "google" ? "🛰️ القمر: Google HD" : "🌍 القمر: Esri";
     }
+    setTimeout(() => map.invalidateSize(), 50);
 }
-window.toggleLabels = function() {
+
+function toggleLabels() {
     labelsVisible = !labelsVisible;
     refreshMapLayers();
-};
-window.switchSatelliteProvider = function() {
+}
+function switchSatelliteProvider() {
     currentProvider = (currentProvider === "google") ? "esri" : "google";
     refreshMapLayers();
-};
+}
+
 refreshMapLayers();
-map.on("moveend", () => {
-    const c = map.getCenter();
-    document.getElementById("coordBox").value = c.lat.toFixed(5) + ", " + c.lng.toFixed(5);
-});
+
 const canvas = document.getElementById("drawCanvas");
-const ctx = canvas.getContext("2d");
+const ctx = canvas.getContext("2d", { alpha: true });
 let mode = "pan";
 let shapes = [];
 let startPt = null;
 let initialized = false;
+let suppressCoordOverwrite = false;
+
+function setCoordFeedback(msg, kind) {
+    const el = document.getElementById("coordFeedback");
+    if (!el) return;
+    el.textContent = msg || "";
+    el.className = kind || "";
+}
+
 function resizeCanvas() {
-    const rect = document.getElementById("mapWrap").getBoundingClientRect();
+    const wrap = document.getElementById("mapWrap");
+    if (!wrap) return;
+    const rect = wrap.getBoundingClientRect();
     if (rect.width > 0 && rect.height > 0) {
-        canvas.width = rect.width;
-        canvas.height = rect.height;
+        canvas.width = Math.max(1, Math.round(rect.width));
+        canvas.height = Math.max(1, Math.round(rect.height));
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         map.invalidateSize();
         redraw();
     }
 }
 function syncHeight() {
     const sh = document.getElementById("satShell");
-    if (sh) sendToStreamlit("streamlit:setFrameHeight", { height: Math.ceil(sh.getBoundingClientRect().height) + 20 });
+    if (sh) sendToStreamlit("streamlit:setFrameHeight", { height: Math.ceil(sh.getBoundingClientRect().height) + 24 });
 }
 if (typeof ResizeObserver !== "undefined") {
     new ResizeObserver(() => { resizeCanvas(); syncHeight(); }).observe(document.body);
 }
-window.addEventListener("load", () => setTimeout(() => { resizeCanvas(); syncHeight(); }, 150));
+window.addEventListener("load", () => {
+    setTimeout(() => {
+        map.invalidateSize();
+        resizeCanvas();
+        syncHeight();
+    }, 300);
+});
+
 function setMode(m) {
     mode = m;
     document.querySelectorAll(".tool-btn").forEach(b => b.classList.remove("active"));
@@ -188,11 +226,146 @@ function setMode(m) {
     if (ids[m]) document.getElementById(ids[m]).classList.add("active");
     canvas.style.pointerEvents = (m === "pan") ? "none" : "auto";
 }
-function jumpToCoords() {
-    const parts = document.getElementById("coordBox").value.trim().split(/[ ,]+/).map(Number).filter(n => !isNaN(n));
-    if (parts.length >= 2) map.setView([parts[0], parts[1]], 19);
+
+function arabicDigitsToLatin(str) {
+    const mapDigits = {
+        "٠":"0","١":"1","٢":"2","٣":"3","٤":"4","٥":"5","٦":"6","٧":"7","٨":"8","٩":"9",
+        "۰":"0","۱":"1","۲":"2","۳":"3","۴":"4","۵":"5","۶":"6","۷":"7","۸":"8","۹":"9"
+    };
+    return String(str || "").replace(/[٠-٩۰-۹]/g, ch => mapDigits[ch] || ch);
 }
+
+function normalizeCoordText(raw) {
+    let s = arabicDigitsToLatin(raw || "");
+    s = s.replace(/[\u200e\u200f\u202a-\u202e\u2066-\u2069]/g, "");
+    s = s.replace(/،/g, ",").replace(/؛/g, ";");
+    s = s.replace(/\u00a0/g, " ").trim();
+    return s;
+}
+
+function dmsToDecimal(deg, minutes, seconds, hemi) {
+    let val = Math.abs(Number(deg) || 0) + (Number(minutes) || 0) / 60 + (Number(seconds) || 0) / 3600;
+    const h = String(hemi || "").toUpperCase();
+    if (h === "S" || h === "W" || h === "ج" || h === "ق") val = -val;
+    return val;
+}
+
+function parseDmsPair(text) {
+    const re = /(-?\d+(?:\.\d+)?)\s*[°º]?\s*(\d+(?:\.\d+)?)?\s*['′]?\s*(\d+(?:\.\d+)?)?\s*["″]?\s*([NSnsEWewشمالجق])?/g;
+    const found = [];
+    let m;
+    while ((m = re.exec(text)) !== null) {
+        if (m[1] == null) continue;
+        found.push(dmsToDecimal(m[1], m[2], m[3], m[4]));
+        if (found.length >= 2) break;
+    }
+    return found.length >= 2 ? found : null;
+}
+
+function extractFromGoogleUrl(text) {
+    const at = text.match(/@(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/);
+    if (at) return [Number(at[1]), Number(at[2])];
+    const q = text.match(/[?&]q=(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/i);
+    if (q) return [Number(q[1]), Number(q[2])];
+    const ll = text.match(/[?&]ll=(-?\d+(?:\.\d+)?)\s*,\s*(-?\d+(?:\.\d+)?)/i);
+    if (ll) return [Number(ll[1]), Number(ll[2])];
+    const dest = text.match(/destination=(-?\d+(?:\.\d+)?)%2C(-?\d+(?:\.\d+)?)/i)
+        || text.match(/destination=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/i);
+    if (dest) return [Number(dest[1]), Number(dest[2])];
+    return null;
+}
+
+function maybeSwapSaudiOrder(a, b) {
+    let lat = a, lng = b;
+    const looksLngFirst = (a >= 34 && a <= 56) && (b >= 15 && b <= 33);
+    const looksLatFirst = (a >= 15 && a <= 33) && (b >= 34 && b <= 56);
+    if (looksLngFirst && !looksLatFirst) {
+        lat = b;
+        lng = a;
+    }
+    return [lat, lng];
+}
+
+function parseSmartCoordinates(rawInput) {
+    const normalized = normalizeCoordText(rawInput);
+    if (!normalized) return null;
+
+    const fromUrl = extractFromGoogleUrl(normalized);
+    if (fromUrl) {
+        const swapped = maybeSwapSaudiOrder(fromUrl[0], fromUrl[1]);
+        if (Math.abs(swapped[0]) <= 90 && Math.abs(swapped[1]) <= 180) return swapped;
+    }
+
+    if (/[°º'′"″]/.test(normalized) || /[NSnsEWewشمالجق]/.test(normalized)) {
+        const dms = parseDmsPair(normalized);
+        if (dms) {
+            const swapped = maybeSwapSaudiOrder(dms[0], dms[1]);
+            if (Math.abs(swapped[0]) <= 90 && Math.abs(swapped[1]) <= 180) return swapped;
+        }
+    }
+
+    const nums = normalized
+        .replace(/[^\d\.\-\s,;/]/g, " ")
+        .split(/[\s,;/]+/)
+        .map(Number)
+        .filter(n => Number.isFinite(n));
+    if (nums.length >= 2) {
+        const swapped = maybeSwapSaudiOrder(nums[0], nums[1]);
+        if (Math.abs(swapped[0]) <= 90 && Math.abs(swapped[1]) <= 180) return swapped;
+    }
+    return null;
+}
+
+function placeJumpMarker(lat, lng) {
+    if (jumpMarker) {
+        map.removeLayer(jumpMarker);
+        jumpMarker = null;
+    }
+    jumpMarker = L.marker([lat, lng], { title: "موقع الإحداثيات" }).addTo(map);
+    jumpMarker.bindPopup("📍 " + lat.toFixed(5) + ", " + lng.toFixed(5)).openPopup();
+}
+
+function clearJumpMarker() {
+    if (jumpMarker) {
+        map.removeLayer(jumpMarker);
+        jumpMarker = null;
+    }
+    setCoordFeedback("تمت إزالة دبوس الإحداثيات.", "ok");
+}
+
+function jumpToCoords() {
+    const box = document.getElementById("coordBox");
+    if (!box) return;
+    let raw = (box.value || "").trim();
+    if (!raw) raw = (box.placeholder || "").trim() || (DEFAULT_COORDS[0] + ", " + DEFAULT_COORDS[1]);
+    const parsed = parseSmartCoordinates(raw);
+    if (!parsed) {
+        setCoordFeedback("⚠️ تعذّر قراءة الإحداثيات. جرّب صيغة مثل 17.0369, 43.0983 أو رابط خرائط Google أو DMS.", "error");
+        return;
+    }
+    const [lat, lng] = parsed;
+    suppressCoordOverwrite = true;
+    map.invalidateSize();
+    map.setView([lat, lng], 19);
+    map.invalidateSize();
+    placeJumpMarker(lat, lng);
+    box.value = lat.toFixed(5) + ", " + lng.toFixed(5);
+    setCoordFeedback("✅ تم الانتقال إلى: " + lat.toFixed(5) + ", " + lng.toFixed(5), "ok");
+    setTimeout(() => {
+        map.invalidateSize();
+        suppressCoordOverwrite = false;
+    }, 350);
+}
+
+map.on("moveend", () => {
+    if (suppressCoordOverwrite) return;
+    const c = map.getCenter();
+    const box = document.getElementById("coordBox");
+    if (box) box.value = c.lat.toFixed(5) + ", " + c.lng.toFixed(5);
+});
+
 function clearDrawings() { shapes = []; redraw(); }
+
 function drawArrowOnCtx(targetCtx, x1, y1, x2, y2, color, label, scale) {
     const head = 15 * scale;
     const angle = Math.atan2(y2 - y1, x2 - x1);
@@ -247,10 +420,12 @@ canvas.addEventListener("mouseup", e => {
     }
     startPt = null; redraw();
 });
-window.commitSatelliteToStreamlit = function() {
+
+function commitSatelliteToStreamlit() {
     const stEl = document.getElementById("satSaveStatus");
     stEl.textContent = "⏳ جارٍ التقاط واعتماد الموقع الجوي...";
     stEl.style.color = "#fbbf24";
+    map.invalidateSize();
     const expCanvas = document.createElement("canvas");
     expCanvas.width = 960;
     expCanvas.height = 520;
@@ -269,7 +444,7 @@ window.commitSatelliteToStreamlit = function() {
             const dy = (tr.top - wrapRect.top) * sy;
             const dw = tr.width * sx;
             const dh = tr.height * sy;
-            try { expCtx.drawImage(img, dx, dy, dw, dh); } catch (e) {}
+            try { expCtx.drawImage(img, dx, dy, dw, dh); } catch (err) {}
         }
     });
     renderShapesToCtx(expCtx, sx, sy);
@@ -306,21 +481,60 @@ window.commitSatelliteToStreamlit = function() {
             ts: Date.now()
         }
     });
-};
+}
+
 window.addEventListener("message", function(event) {
     if (!event.data || event.data.type !== "streamlit:render") return;
     const args = event.data.args || {};
     if (!initialized) {
         initialized = true;
         if (args.saved_sat_state && args.saved_sat_state.center) {
+            map.invalidateSize();
             map.setView(args.saved_sat_state.center, args.saved_sat_state.zoom || 18);
+            map.invalidateSize();
             shapes = args.saved_sat_state.shapes || [];
             setTimeout(redraw, 200);
         }
+        setTimeout(() => {
+            map.invalidateSize();
+            resizeCanvas();
+            syncHeight();
+        }, 300);
         syncHeight();
     }
 });
+
+document.getElementById("btnPan").addEventListener("click", () => setMode("pan"));
+document.getElementById("btnV1").addEventListener("click", () => setMode("v1"));
+document.getElementById("btnV2").addEventListener("click", () => setMode("v2"));
+document.getElementById("btnImp").addEventListener("click", () => setMode("impact"));
+document.getElementById("btnClear").addEventListener("click", clearDrawings);
+document.getElementById("btnCommit").addEventListener("click", commitSatelliteToStreamlit);
+document.getElementById("btnJumpCoords").addEventListener("click", jumpToCoords);
+document.getElementById("btnClearPin").addEventListener("click", clearJumpMarker);
+document.getElementById("btnProvider").addEventListener("click", switchSatelliteProvider);
+document.getElementById("btnLabels").addEventListener("click", toggleLabels);
+document.getElementById("coordBox").addEventListener("keydown", function(e) {
+    if (e.key === "Enter") {
+        e.preventDefault();
+        jumpToCoords();
+    }
+});
+
+window.setMode = setMode;
+window.jumpToCoords = jumpToCoords;
+window.clearDrawings = clearDrawings;
+window.clearJumpMarker = clearJumpMarker;
+window.toggleLabels = toggleLabels;
+window.switchSatelliteProvider = switchSatelliteProvider;
+window.commitSatelliteToStreamlit = commitSatelliteToStreamlit;
+
 sendToStreamlit("streamlit:componentReady", { apiVersion: 1 });
+setTimeout(() => {
+    map.invalidateSize();
+    resizeCanvas();
+    syncHeight();
+}, 300);
 syncHeight();
 </script>
 </body>
