@@ -1257,15 +1257,14 @@ def _estimate_a4_autofit_base_font_px(
     actions_n = _plain_text_len_for_autofit(actions_html)
     rights_n = _plain_text_len_for_autofit(rights_text)
     score = results_n + how_n + (liability_n * 1.35) + (actions_n * 1.25) + rights_n
-    if liability_n >= 3200 or actions_n >= 1600 or score >= 7000:
-        return 9.5
+    # أرضية موحدة مع Auto-Fit: لا أقل من 11px ولا أعلى من 13px للصناديق المشتركة
     if liability_n >= 2200 or actions_n >= 1100 or score >= 5000:
-        return 10.5
+        return 11.0
     if liability_n >= 1400 or actions_n >= 700 or score >= 3200:
         return 11.5
     if liability_n >= 900 or score >= 2000:
         return 12.5
-    return 13.5
+    return 13.0
 
 def _page1_cell(value):
     if value is None:
@@ -2999,7 +2998,24 @@ def _signature_data_url(*names):
             return found
     return ""
 
+def _is_liability_preamble_line(raw: str) -> bool:
+    """السطر التمهيدي الأول لا يُدرج تحته نص المواد النظامية."""
+    text = str(raw or "").strip().lstrip("-•*⚠️ ").strip()
+    if not text:
+        return True
+    if text.startswith("بناءً على المعاينة الفنية"):
+        return True
+    if text.startswith("تنبيه نظامي"):
+        return True
+    if text.startswith("استناداً إلى") and "القرائن الفنية" in text:
+        return True
+    if text.startswith("وعليه يوصى"):
+        return True
+    return False
+
 def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ratio, p2_reasons):
+    printed_articles = set()
+
     def format_bullets(text):
         if not text:
             return ""
@@ -3009,22 +3025,18 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
             if not raw:
                 continue
             body = html.escape(raw)
-            statutes = _statutory_lines_for_reason(raw)
-            if statutes:
-                statute_html = "".join(
-                    f"<div class='statute-line' style='margin: 4px 14px 6px 0; font-weight: 600; line-height: 1.55;'>"
-                    f"{html.escape(statute)}</div>"
-                    for statute in statutes
-                )
-                body = f"{body}{statute_html}"
-            items.append(f"<li style='margin-bottom: 8px;'>{body}</li>")
+            if not _is_liability_preamble_line(raw):
+                statutes = _statutory_lines_for_reason(raw, printed_articles)
+                if statutes:
+                    statute_html = "".join(
+                        f"<div class='statute-line'>{html.escape(statute)}</div>"
+                        for statute in statutes
+                    )
+                    body = f"{body}{statute_html}"
+            items.append(f"<li class='liability-reason'>{body}</li>")
         if not items:
             return ""
-        return (
-            "<ul style='margin: 6px 22px 10px 0; padding: 0; list-style-type: disc;'>"
-            + "".join(items)
-            + "</ul>"
-        )
+        return f"<ul class='liability-reasons'>{''.join(items)}</ul>"
 
     p1_ratio = int(p1_ratio or 0)
     p2_ratio = int(p2_ratio or 0)
@@ -3035,20 +3047,20 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
     if p1_ratio > 0:
         header_prefix = "أولاً: " if is_shared else ""
         blocks.append(
-            f"<div style='margin-bottom: 10px;'>"
-            f"<div style='font-weight: bold; font-size: 15px; margin-bottom: 4px;'>"
+            f"<div class='liability-block'>"
+            f"<div class='liability-heading'>"
             f"{header_prefix}إدانة ({safe_p1_title}) بنسبة ({p1_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
             f"</div>"
             f"{format_bullets(p1_reasons)}"
             f"</div>"
         )
     if is_shared:
-        blocks.append("<hr style='border: 0; border-top: 1px dashed #666; margin: 10px 0;'>")
+        blocks.append("<hr class='liability-divider'>")
     if p2_ratio > 0:
         header_prefix = "ثانياً: " if is_shared else ""
         blocks.append(
-            f"<div style='margin-bottom: 8px;'>"
-            f"<div style='font-weight: bold; font-size: 15px; margin-bottom: 4px;'>"
+            f"<div class='liability-block'>"
+            f"<div class='liability-heading'>"
             f"{header_prefix}إدانة ({safe_p2_title}) بنسبة ({p2_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
             f"</div>"
             f"{format_bullets(p2_reasons)}"
@@ -3056,13 +3068,13 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         )
     if p1_ratio == 100 and p2_ratio == 0:
         blocks.append(
-            f"<div style='font-weight: bold; font-size: 14.5px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #eee;'>"
+            f"<div class='liability-nonresp'>"
             f"• عدم مسؤولية ({safe_p2_title}) عن الحادث (نسبة المسؤولية 0%)."
             f"</div>"
         )
     elif p2_ratio == 100 and p1_ratio == 0:
         blocks.append(
-            f"<div style='font-weight: bold; font-size: 14.5px; margin-top: 8px; padding-top: 6px; border-top: 1px solid #eee;'>"
+            f"<div class='liability-nonresp'>"
             f"• عدم مسؤولية ({safe_p1_title}) عن الحادث (نسبة المسؤولية 0%)."
             f"</div>"
         )
@@ -5011,36 +5023,58 @@ def _display_article_code(raw_code: str) -> str:
     cleaned = _official_article_cite(f"المادة ({raw_code})" if "المادة" not in str(raw_code) else str(raw_code))
     return _normalize_statute_key(cleaned) or str(raw_code or "").strip()
 
-def _statutory_lines_for_reason(reason_line: str) -> list:
+def _statutory_lines_for_reason(reason_line: str, printed_articles=None) -> list:
+    """يُرجع نصوص المواد مع طباعة كل مادة مرة واحدة فقط عبر printed_articles."""
+    printed = printed_articles if isinstance(printed_articles, set) else set()
     line = str(reason_line or "")
     codes = []
     seen = set()
     for match in _ARTICLE_CODE_IN_TEXT_RE.finditer(line):
         raw = (match.group(1) or "").strip()
         display = _display_article_code(raw)
-        if not display or display in seen:
+        if not display or display in seen or display in printed:
             continue
         text = _lookup_statutory_text(raw)
         if not text:
             continue
         seen.add(display)
+        printed.add(display)
         codes.append(f"▪ نص المادة ({display}) في نظام المرور: «{text}»")
     return codes
 
 def _join_technical_drafts(drafts) -> str:
+    sep = " كما تبين من المعاينة الفنية أنه "
     parts = []
     for draft in drafts or []:
         text = str(draft or "").strip()
         if not text:
             continue
+        # اضغط تكرار البادئة داخل المسودة الواحدة إلى مرة واحدة
+        text = re.sub(
+            r"^(?:كما تبين من المعاينة الفنية(?:\s+أنه)?\s*)+",
+            "كما تبين من المعاينة الفنية ",
+            text,
+        ).strip()
         if not parts:
             parts.append(text)
             continue
         if _TECHNICAL_DRAFT_PREFIX_RE.match(text):
             parts.append(" " + text)
         else:
-            parts.append(" كما تبين من المعاينة الفنية أنه " + text)
-    return "".join(parts)
+            parts.append(sep + text)
+    joined = "".join(parts)
+    # أزل التكرار المتلاصق: «...أنه كما تبين من المعاينة الفنية...» أو تكرار البادئة
+    joined = re.sub(
+        r"كما تبين من المعاينة الفنية(?:\s+أنه)?\s+كما تبين من المعاينة الفنية(?:\s+أنه)?",
+        "كما تبين من المعاينة الفنية",
+        joined,
+    )
+    joined = re.sub(
+        r"(?:كما تبين من المعاينة الفنية(?:\s+أنه)?\s*){2,}",
+        "كما تبين من المعاينة الفنية ",
+        joined,
+    )
+    return joined.strip()
 
 def generate_accident_report_fields(selected_article_ids):
     selected_ids = set(selected_article_ids or [])
@@ -6569,10 +6603,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             transform: none;
         }}
         :root {{
-            --a4-content-font: {a4_autofit_base_font_px}px;
-            --a4-content-lh: 1.65;
+            --shared-box-font: {a4_autofit_base_font_px}px;
+            --shared-line-height: 1.55;
             --a4-box-pad: 14px;
-            --a4-box-margin: 16px;
+            --a4-box-margin: 12px;
+            --a4-badge-margin: 4px;
+            --a4-badge-pad-y: 5px;
         }}
         .report-sheet .header-Title,
         .report-sheet .section-badge {{
@@ -6580,17 +6616,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         }}
         .report-sheet .box-content:not(.autofit-box),
         .report-sheet .header-box,
-        .report-sheet .photo-meta,
-        .report-sheet p,
-        .report-sheet li {{
+        .report-sheet .photo-meta {{
             font-size: 15px !important; font-weight: 600;
-        }}
-        .report-sheet .autofit-box,
-        .report-sheet td.actions-body.autofit-box,
-        .report-sheet .sign-table.autofit-box td {{
-            font-size: var(--a4-content-font, 13.5px) !important;
-            line-height: var(--a4-content-lh, 1.65) !important;
-            font-weight: 600;
         }}
         .report-sheet th,
         .report-sheet td {{
@@ -6598,6 +6625,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         }}
         .report-sheet th {{ font-weight: 700; }}
         .page, .report-page, .a4-page {{
+            --shared-box-font: {a4_autofit_base_font_px}px;
+            --shared-line-height: 1.55;
             background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
             min-height: 297mm; height: 297mm; max-height: 297mm;
             margin: 0 auto 20px auto;
@@ -6606,6 +6635,61 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             overflow: hidden;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
             transform: none; flex-shrink: 0;
+        }}
+        .page .box-content.autofit-box,
+        .a4-page .box-content.autofit-box,
+        .page .box-content.autofit-box *:not(.statute-line),
+        .a4-page .box-content.autofit-box *:not(.statute-line) {{
+            font-size: var(--shared-box-font, 13px) !important;
+            line-height: var(--shared-line-height, 1.55) !important;
+        }}
+        .page .box-content.autofit-box .statute-line,
+        .a4-page .box-content.autofit-box .statute-line,
+        .page .box-content.autofit-box .statute-line *,
+        .a4-page .box-content.autofit-box .statute-line * {{
+            font-size: 0.93em !important;
+            line-height: var(--shared-line-height, 1.55) !important;
+            color: #475569 !important;
+            font-weight: 600 !important;
+        }}
+        .page .autofit-box .statute-line,
+        .a4-page .autofit-box .statute-line {{
+            margin: 4px 14px 6px 0;
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }}
+        .page .liability-heading,
+        .a4-page .liability-heading,
+        .page .liability-nonresp,
+        .a4-page .liability-nonresp {{
+            font-weight: 700 !important;
+            margin-bottom: 4px;
+        }}
+        .page .liability-reasons,
+        .a4-page .liability-reasons {{
+            margin: 6px 22px 10px 0;
+            padding: 0;
+            list-style-type: disc;
+        }}
+        .page .liability-reason,
+        .a4-page .liability-reason {{
+            margin-bottom: 8px;
+        }}
+        .page .liability-block,
+        .a4-page .liability-block {{
+            margin-bottom: 10px;
+        }}
+        .page .liability-divider,
+        .a4-page .liability-divider {{
+            border: 0;
+            border-top: 1px dashed #666;
+            margin: 10px 0;
+        }}
+        .page .liability-nonresp,
+        .a4-page .liability-nonresp {{
+            margin-top: 8px;
+            padding-top: 6px;
+            border-top: 1px solid #eee;
         }}
         .report-sheet table,
         .report-sheet .table-scroll,
@@ -6619,9 +6703,6 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .page-flow {{
             display: flex; flex-direction: column; justify-content: space-between;
             box-sizing: border-box;
-        }}
-        .page-flow .section-badge {{
-            margin: 4px auto;
         }}
         .page-flow th, .page-flow td {{
             padding: 4px 7px;
@@ -6655,10 +6736,6 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             margin-bottom: var(--a4-box-margin, 16px);
             page-break-inside: avoid;
             break-inside: avoid;
-        }}
-        .liability-box .statute-line {{
-            white-space: normal;
-            overflow-wrap: anywhere;
         }}
         .autofit-box {{
             overflow: hidden;
@@ -6724,9 +6801,15 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             line-height: 1.9; text-align: right; margin-bottom: var(--a4-box-margin, 16px); min-height: 72px;
         }}
         .box-content.autofit-box {{
-            font-size: var(--a4-content-font, 13.5px);
-            line-height: var(--a4-content-lh, 1.65);
+            font-size: var(--shared-box-font, 13px) !important;
+            line-height: var(--shared-line-height, 1.55) !important;
             min-height: 0;
+            padding: var(--a4-box-pad, 14px);
+            margin-bottom: var(--a4-box-margin, 12px);
+        }}
+        .page-flow .section-badge {{
+            margin: var(--a4-badge-margin, 4px) auto;
+            padding: var(--a4-badge-pad-y, 5px) 25px;
         }}
         .box-content.liability-box {{
             overflow: hidden;
@@ -6824,8 +6907,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             vertical-align: top !important;
         }}
         .page-p3 td.actions-body.autofit-box {{
-            font-size: var(--a4-content-font, 13.5px) !important;
-            line-height: var(--a4-content-lh, 1.65) !important;
+            font-size: var(--shared-box-font, 13px) !important;
+            line-height: var(--shared-line-height, 1.55) !important;
             overflow: hidden;
         }}
         .page-p3 tr.sig-row td {{
@@ -6985,12 +7068,18 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             .report-sheet li {{
                 font-size: 15px !important; font-weight: 600;
             }}
-            .report-sheet .autofit-box,
-            .report-sheet td.actions-body.autofit-box,
-            .report-sheet .sign-table.autofit-box td {{
-                font-size: var(--a4-content-font, 13.5px) !important;
-                line-height: var(--a4-content-lh, 1.65) !important;
+            .page .box-content.autofit-box,
+            .a4-page .box-content.autofit-box,
+            .page .box-content.autofit-box *:not(.statute-line),
+            .a4-page .box-content.autofit-box *:not(.statute-line) {{
+                font-size: var(--shared-box-font, 13px) !important;
+                line-height: var(--shared-line-height, 1.55) !important;
                 font-weight: 600;
+            }}
+            .page .box-content.autofit-box .statute-line,
+            .a4-page .box-content.autofit-box .statute-line {{
+                font-size: 0.93em !important;
+                color: #475569 !important;
             }}
             .report-sheet th,
             .report-sheet td {{ font-size: 14px !important; font-weight: 600; }}
@@ -7079,8 +7168,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 vertical-align: top !important;
             }}
             .page-p3 td.actions-body.autofit-box {{
-                font-size: var(--a4-content-font, 13.5px) !important;
-                line-height: var(--a4-content-lh, 1.65) !important;
+                font-size: var(--shared-box-font, 13px) !important;
+                line-height: var(--shared-line-height, 1.55) !important;
                 overflow: hidden !important;
             }}
             .page-p3 tr.sig-row td {{
@@ -7119,11 +7208,6 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         window.frameElement.style.overflow = "visible";
       }}
     }}
-    function _a4CssPx(name, fallback) {{
-      var raw = getComputedStyle(document.documentElement).getPropertyValue(name);
-      var n = parseFloat(raw);
-      return isFinite(n) ? n : fallback;
-    }}
     function _a4PageOverflow(page, footer, safetyPx) {{
       if (!page) return 0;
       var pageBox = page.getBoundingClientRect();
@@ -7150,69 +7234,40 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
       overflow = Math.max(overflow, page.scrollHeight - page.clientHeight);
       return overflow;
     }}
-    function _a4CollectTargets(page) {{
-      if (!page) return [];
-      var nodes = page.querySelectorAll(
-        ".autofit-box, [data-autofit], td.actions-body, table.sign-table.autofit-box"
-      );
-      var out = [];
-      for (var i = 0; i < nodes.length; i++) {{
-        var n = nodes[i];
-        if (!n || out.indexOf(n) >= 0) continue;
-        if (n.classList && n.classList.contains("section-badge")) continue;
-        out.push(n);
+    function _a4ApplySharedSpacing(page, padPx, marginPx, badgeMargin, badgePadY) {{
+      page.style.setProperty("--a4-box-pad", padPx.toFixed(2) + "px");
+      page.style.setProperty("--a4-box-margin", marginPx.toFixed(2) + "px");
+      page.style.setProperty("--a4-badge-margin", badgeMargin.toFixed(2) + "px");
+      page.style.setProperty("--a4-badge-pad-y", badgePadY.toFixed(2) + "px");
+      var boxes = page.querySelectorAll(".box-content.autofit-box");
+      for (var i = 0; i < boxes.length; i++) {{
+        boxes[i].style.setProperty("padding", padPx.toFixed(2) + "px", "important");
+        boxes[i].style.setProperty("margin-bottom", marginPx.toFixed(2) + "px", "important");
       }}
-      return out;
-    }}
-    function _a4ApplyFit(targets, fontPx, lineHeight, padPx, marginPx) {{
-      for (var i = 0; i < targets.length; i++) {{
-        var el = targets[i];
-        el.style.setProperty("font-size", fontPx.toFixed(2) + "px", "important");
-        el.style.setProperty("line-height", String(lineHeight), "important");
-        if (el.classList && el.classList.contains("box-content")) {{
-          el.style.setProperty("padding", padPx.toFixed(2) + "px", "important");
-          el.style.setProperty("margin-bottom", marginPx.toFixed(2) + "px", "important");
-        }}
-        if (el.tagName === "TD" && el.classList && el.classList.contains("actions-body")) {{
-          el.style.setProperty("padding", Math.max(4, padPx * 0.75).toFixed(2) + "px", "important");
-        }}
-        if (el.classList && el.classList.contains("sign-table")) {{
-          var cells = el.querySelectorAll("td");
-          for (var c = 0; c < cells.length; c++) {{
-            cells[c].style.setProperty("font-size", Math.max(8.5, fontPx).toFixed(2) + "px", "important");
-            cells[c].style.setProperty("line-height", String(lineHeight), "important");
-          }}
-        }}
-      }}
-    }}
-    function _a4ShrinkChromeMinimal(page, fontPx, baseFont) {{
-      if (!page || fontPx >= baseFont - 0.01) return;
       var badges = page.querySelectorAll(".section-badge");
-      var shrink = Math.min(1.2, (baseFont - fontPx) * 0.15);
-      for (var i = 0; i < badges.length; i++) {{
-        var b = badges[i];
-        var cur = parseFloat(getComputedStyle(b).fontSize) || 15;
-        var next = Math.max(12.5, cur - shrink);
-        b.style.setProperty("font-size", next.toFixed(2) + "px", "important");
-        b.style.setProperty(
+      for (var b = 0; b < badges.length; b++) {{
+        badges[b].style.setProperty("margin", badgeMargin.toFixed(2) + "px auto", "important");
+        badges[b].style.setProperty(
           "padding",
-          Math.max(3, 5 - shrink).toFixed(2) + "px " + Math.max(14, 25 - shrink * 2).toFixed(2) + "px",
+          badgePadY.toFixed(2) + "px 25px",
           "important"
         );
-        b.style.setProperty("margin", Math.max(2, 4 - shrink * 0.4).toFixed(2) + "px auto", "important");
       }}
     }}
+    function _a4ApplySharedFont(page, fontPx, lineHeight) {{
+      /* خط موحّد لكامل الصفحة — لا يُصغَّر مربع دون الآخر */
+      page.style.setProperty("--shared-box-font", fontPx.toFixed(2) + "px");
+      page.style.setProperty("--shared-line-height", String(lineHeight));
+    }}
     function autoFitReportPages() {{
-      /* يستهدف الأوراق المفردة فقط — لا يلمس الحاوية الأم ولا يغيّر ارتفاع الصفحات */
+      /* يستهدف .page / .a4-page فقط — لا يلمس الحاوية الأم ولا يغيّر ارتفاع الصفحات */
       var pages = document.querySelectorAll(".page, .a4-page");
-      var initialBase = {a4_autofit_base_font_px};
-      var basePad = 14;
-      var baseMargin = 16;
-      var minFont = 8.5;
+      var initialBase = Math.max(11, Math.min(13, {a4_autofit_base_font_px}));
+      var minFont = 11;
       var step = 0.25;
       var safety = 8;
-      document.documentElement.style.setProperty("--a4-content-font", initialBase.toFixed(2) + "px");
-      document.documentElement.style.setProperty("--a4-content-lh", "1.65");
+      document.documentElement.style.setProperty("--shared-box-font", initialBase.toFixed(2) + "px");
+      document.documentElement.style.setProperty("--shared-line-height", "1.55");
       for (var p = 0; p < pages.length; p++) {{
         var page = pages[p];
         if (!page || page.classList.contains("photo-annex")) continue;
@@ -7229,30 +7284,51 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             footer.style.setProperty("flex-shrink", "0", "important");
           }}
         }}
-        var targets = _a4CollectTargets(page);
-        if (!targets.length) continue;
-        var baseFont = initialBase;
-        var fontPx = baseFont;
-        var lineHeight = 1.65;
-        var padPx = basePad;
-        var marginPx = baseMargin;
-        _a4ApplyFit(targets, fontPx, lineHeight, padPx, marginPx);
+        var sharedBoxes = page.querySelectorAll(
+          ".box-content.autofit-box[data-autofit='results']," +
+          ".box-content.autofit-box[data-autofit='how']," +
+          ".box-content.autofit-box[data-autofit='liability']"
+        );
+        var hasSharedTrio = sharedBoxes.length > 0;
+        var anyAutofit = page.querySelector(".autofit-box, [data-autofit]");
+        if (!anyAutofit) continue;
+
+        var padPx = 14;
+        var marginPx = 12;
+        var badgeMargin = 4;
+        var badgePadY = 5;
+        var fontPx = initialBase;
+        var lineHeight = 1.55;
+        _a4ApplySharedFont(page, fontPx, lineHeight);
+        _a4ApplySharedSpacing(page, padPx, marginPx, badgeMargin, badgePadY);
+
+        /* المرحلة 1: تقليص الحشو والمسافات بين العناوين أولاً */
         var guard = 0;
-        while (guard < 40) {{
+        while (guard < 24) {{
           guard += 1;
-          var overflow = _a4PageOverflow(page, footer, safety);
-          if (overflow <= 0.5) break;
-          if (fontPx <= minFont + 0.001) {{
-            _a4ShrinkChromeMinimal(page, fontPx, baseFont);
-            break;
-          }}
+          if (_a4PageOverflow(page, footer, safety) <= 0.5) break;
+          if (padPx <= 6 && marginPx <= 6 && badgeMargin <= 2 && badgePadY <= 3) break;
+          padPx = Math.max(6, padPx - 1);
+          marginPx = Math.max(6, marginPx - 1);
+          badgeMargin = Math.max(2, badgeMargin - 0.5);
+          badgePadY = Math.max(3, badgePadY - 0.35);
+          _a4ApplySharedSpacing(page, padPx, marginPx, badgeMargin, badgePadY);
+        }}
+
+        /* المرحلة 2: تخفيض --shared-box-font لكامل الصفحة (الثلاثة معاً) */
+        guard = 0;
+        while (guard < 24) {{
+          guard += 1;
+          if (_a4PageOverflow(page, footer, safety) <= 0.5) break;
+          if (fontPx <= minFont + 0.001) break;
           fontPx = Math.max(minFont, fontPx - step);
-          var dropped = baseFont - fontPx;
-          lineHeight = Math.max(1.28, 1.65 - dropped * 0.045);
-          padPx = Math.max(6, basePad - dropped * 0.55);
-          marginPx = Math.max(6, baseMargin - dropped * 0.65);
-          _a4ApplyFit(targets, fontPx, lineHeight, padPx, marginPx);
-          if (fontPx <= 10.5) _a4ShrinkChromeMinimal(page, fontPx, baseFont);
+          var dropped = initialBase - fontPx;
+          lineHeight = Math.max(1.38, 1.55 - dropped * 0.03);
+          _a4ApplySharedFont(page, fontPx, lineHeight);
+          if (!hasSharedTrio) {{
+            /* صفحات أخرى: طبّق نفس المتغير دون تصغير عنصر بمفرده */
+            _a4ApplySharedFont(page, fontPx, lineHeight);
+          }}
         }}
       }}
       fitReportFrame();
