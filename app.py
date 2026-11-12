@@ -1264,7 +1264,7 @@ def _estimate_a4_autofit_base_font_px(
         return 11.5
     if liability_n >= 900 or score >= 2000:
         return 12.5
-    return 13.0
+    return 13.5
 
 def _page1_cell(value):
     if value is None:
@@ -3029,7 +3029,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
                 statutes = _statutory_lines_for_reason(raw, printed_articles)
                 if statutes:
                     statute_html = "".join(
-                        f"<div class='statute-line'>{html.escape(statute)}</div>"
+                        f"<div class='statute-line statute-quote'>{html.escape(statute)}</div>"
                         for statute in statutes
                     )
                     body = f"{body}{statute_html}"
@@ -3081,7 +3081,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
     inner_content = "".join(blocks)
     return (
         f'<div class="section-badge">الرأي والمسؤولية</div>'
-        f'<div class="box-content liability-box autofit-box" data-autofit="liability">{inner_content}</div>'
+        f'<div class="box-content liability-box autofit-box section-box content-box report-box" data-autofit="liability">{inner_content}</div>'
     )
 
 _LIABILITY_RATIO_LOOKUP = {
@@ -6604,7 +6604,9 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         }}
         :root {{
             --shared-box-font: {a4_autofit_base_font_px}px;
-            --shared-line-height: 1.55;
+            --shared-line-height: 1.60;
+            --shared-box-pad: 14px;
+            --section-gap: 10px;
             --a4-box-pad: 14px;
             --a4-box-margin: 12px;
             --a4-badge-margin: 4px;
@@ -6614,7 +6616,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .report-sheet .section-badge {{
             font-size: 15px !important; font-weight: 700;
         }}
-        .report-sheet .box-content:not(.autofit-box),
+        .report-sheet .box-content:not(.autofit-box):not(.section-box):not(.content-box):not(.report-box),
         .report-sheet .header-box,
         .report-sheet .photo-meta {{
             font-size: 15px !important; font-weight: 600;
@@ -6626,7 +6628,9 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .report-sheet th {{ font-weight: 700; }}
         .page, .report-page, .a4-page {{
             --shared-box-font: {a4_autofit_base_font_px}px;
-            --shared-line-height: 1.55;
+            --shared-line-height: 1.60;
+            --shared-box-pad: 14px;
+            --section-gap: 10px;
             background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
             min-height: 297mm; height: 297mm; max-height: 297mm;
             margin: 0 auto 20px auto;
@@ -6636,24 +6640,52 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
             transform: none; flex-shrink: 0;
         }}
+        /* توحيد صناديق المحتوى (أسماء فهد + الأسماء الفعلية الحالية) */
+        .page .section-box,
+        .page .content-box,
+        .page .report-box,
         .page .box-content.autofit-box,
+        .page .liability-box.autofit-box,
+        .a4-page .section-box,
+        .a4-page .content-box,
+        .a4-page .report-box,
         .a4-page .box-content.autofit-box,
-        .page .box-content.autofit-box *:not(.statute-line),
-        .a4-page .box-content.autofit-box *:not(.statute-line) {{
-            font-size: var(--shared-box-font, 13px) !important;
-            line-height: var(--shared-line-height, 1.55) !important;
+        .a4-page .liability-box.autofit-box {{
+            font-size: var(--shared-box-font, 13.5px) !important;
+            line-height: var(--shared-line-height, 1.60) !important;
+            padding: var(--shared-box-pad, 14px) !important;
+            margin-bottom: var(--section-gap, 10px) !important;
+            box-sizing: border-box;
+            overflow: hidden;
         }}
-        .page .box-content.autofit-box .statute-line,
-        .a4-page .box-content.autofit-box .statute-line,
-        .page .box-content.autofit-box .statute-line *,
-        .a4-page .box-content.autofit-box .statute-line * {{
-            font-size: 0.93em !important;
-            line-height: var(--shared-line-height, 1.55) !important;
+        .page .section-box *:not(.statute-quote):not(.statute-line),
+        .page .content-box *:not(.statute-quote):not(.statute-line),
+        .page .report-box *:not(.statute-quote):not(.statute-line),
+        .page .box-content.autofit-box *:not(.statute-quote):not(.statute-line),
+        .a4-page .section-box *:not(.statute-quote):not(.statute-line),
+        .a4-page .content-box *:not(.statute-quote):not(.statute-line),
+        .a4-page .report-box *:not(.statute-quote):not(.statute-line),
+        .a4-page .box-content.autofit-box *:not(.statute-quote):not(.statute-line) {{
+            font-size: inherit !important;
+            line-height: inherit !important;
+        }}
+        .page .statute-quote,
+        .page .statute-line,
+        .a4-page .statute-quote,
+        .a4-page .statute-line,
+        .page .statute-quote *,
+        .page .statute-line *,
+        .a4-page .statute-quote *,
+        .a4-page .statute-line * {{
+            font-size: calc(var(--shared-box-font, 13.5px) * 0.93) !important;
+            line-height: var(--shared-line-height, 1.60) !important;
             color: #475569 !important;
             font-weight: 600 !important;
         }}
-        .page .autofit-box .statute-line,
-        .a4-page .autofit-box .statute-line {{
+        .page .statute-quote,
+        .page .statute-line,
+        .a4-page .statute-quote,
+        .a4-page .statute-line {{
             margin: 4px 14px 6px 0;
             white-space: normal;
             overflow-wrap: anywhere;
@@ -6707,22 +6739,38 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .page-flow th, .page-flow td {{
             padding: 4px 7px;
         }}
-        .page-body-flex {{
+        .page-body,
+        .page-body-flex,
+        .autofit-page-body {{
             flex: 1 1 auto;
             min-height: 0;
             display: flex;
             flex-direction: column;
-            justify-content: flex-start;
+            justify-content: space-between;
+            gap: var(--section-gap, 10px);
             overflow: hidden;
             width: 100%;
             box-sizing: border-box;
         }}
         .page-flow > .table-scroll,
         .page-flow > .box-content,
+        .page-body > .table-scroll,
+        .page-body > .box-content,
         .page-body-flex > .table-scroll,
         .page-body-flex > .box-content {{
             flex: 0 1 auto;
             min-height: 0;
+        }}
+        .page-body > .section-box:last-of-type,
+        .page-body > .content-box:last-of-type,
+        .page-body > .report-box:last-of-type,
+        .page-body > .box-content.autofit-box:last-of-type,
+        .page-body-flex > .section-box:last-of-type,
+        .page-body-flex > .content-box:last-of-type,
+        .page-body-flex > .report-box:last-of-type,
+        .page-body-flex > .box-content.autofit-box:last-of-type,
+        .autofit-page-body > .box-content.autofit-box:last-of-type {{
+            flex-grow: var(--a4-last-box-grow, 0);
         }}
         .page.has-absolute-footer {{
             padding-bottom: calc(18mm + 12mm);
@@ -6732,8 +6780,6 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             max-height: none;
             min-height: 0;
             height: auto;
-            padding-bottom: 12px;
-            margin-bottom: var(--a4-box-margin, 16px);
             page-break-inside: avoid;
             break-inside: avoid;
         }}
@@ -6800,12 +6846,15 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             border: 1.5px solid #444; padding: var(--a4-box-pad, 14px); font-size: 15px; font-weight: bold;
             line-height: 1.9; text-align: right; margin-bottom: var(--a4-box-margin, 16px); min-height: 72px;
         }}
-        .box-content.autofit-box {{
-            font-size: var(--shared-box-font, 13px) !important;
-            line-height: var(--shared-line-height, 1.55) !important;
+        .box-content.autofit-box,
+        .box-content.section-box,
+        .box-content.content-box,
+        .box-content.report-box {{
+            font-size: var(--shared-box-font, 13.5px) !important;
+            line-height: var(--shared-line-height, 1.60) !important;
             min-height: 0;
-            padding: var(--a4-box-pad, 14px);
-            margin-bottom: var(--a4-box-margin, 12px);
+            padding: var(--shared-box-pad, 14px) !important;
+            margin-bottom: var(--section-gap, 10px) !important;
         }}
         .page-flow .section-badge {{
             margin: var(--a4-badge-margin, 4px) auto;
@@ -6816,8 +6865,6 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             max-height: none;
             min-height: 0;
             height: auto;
-            padding-bottom: 12px;
-            margin-bottom: var(--a4-box-margin, 16px);
         }}
         .page-num {{ display: none !important; }}
         .header-Title, .header-box {{
@@ -6907,8 +6954,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             vertical-align: top !important;
         }}
         .page-p3 td.actions-body.autofit-box {{
-            font-size: var(--shared-box-font, 13px) !important;
-            line-height: var(--shared-line-height, 1.55) !important;
+            font-size: var(--shared-box-font, 13.5px) !important;
+            line-height: var(--shared-line-height, 1.60) !important;
             overflow: hidden;
         }}
         .page-p3 tr.sig-row td {{
@@ -7068,17 +7115,23 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             .report-sheet li {{
                 font-size: 15px !important; font-weight: 600;
             }}
+            .page .section-box,
+            .page .content-box,
+            .page .report-box,
             .page .box-content.autofit-box,
-            .a4-page .box-content.autofit-box,
-            .page .box-content.autofit-box *:not(.statute-line),
-            .a4-page .box-content.autofit-box *:not(.statute-line) {{
-                font-size: var(--shared-box-font, 13px) !important;
-                line-height: var(--shared-line-height, 1.55) !important;
+            .a4-page .section-box,
+            .a4-page .content-box,
+            .a4-page .report-box,
+            .a4-page .box-content.autofit-box {{
+                font-size: var(--shared-box-font, 13.5px) !important;
+                line-height: var(--shared-line-height, 1.60) !important;
                 font-weight: 600;
             }}
-            .page .box-content.autofit-box .statute-line,
-            .a4-page .box-content.autofit-box .statute-line {{
-                font-size: 0.93em !important;
+            .page .statute-quote,
+            .page .statute-line,
+            .a4-page .statute-quote,
+            .a4-page .statute-line {{
+                font-size: calc(var(--shared-box-font, 13.5px) * 0.93) !important;
                 color: #475569 !important;
             }}
             .report-sheet th,
@@ -7168,8 +7221,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 vertical-align: top !important;
             }}
             .page-p3 td.actions-body.autofit-box {{
-                font-size: var(--shared-box-font, 13px) !important;
-                line-height: var(--shared-line-height, 1.55) !important;
+                font-size: var(--shared-box-font, 13.5px) !important;
+                line-height: var(--shared-line-height, 1.60) !important;
                 overflow: hidden !important;
             }}
             .page-p3 tr.sig-row td {{
@@ -7234,40 +7287,59 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
       overflow = Math.max(overflow, page.scrollHeight - page.clientHeight);
       return overflow;
     }}
-    function _a4ApplySharedSpacing(page, padPx, marginPx, badgeMargin, badgePadY) {{
+    function _a4CollectBalanceBoxes(page) {{
+      return page.querySelectorAll(
+        ".section-box, .content-box, .report-box, .box-content.autofit-box, .liability-box.autofit-box, [data-autofit]"
+      );
+    }}
+    function _a4ApplySharedSpacing(page, padPx, sectionGap, badgeMargin, badgePadY) {{
+      page.style.setProperty("--shared-box-pad", padPx.toFixed(2) + "px");
+      page.style.setProperty("--section-gap", sectionGap.toFixed(2) + "px");
       page.style.setProperty("--a4-box-pad", padPx.toFixed(2) + "px");
-      page.style.setProperty("--a4-box-margin", marginPx.toFixed(2) + "px");
+      page.style.setProperty("--a4-box-margin", sectionGap.toFixed(2) + "px");
       page.style.setProperty("--a4-badge-margin", badgeMargin.toFixed(2) + "px");
       page.style.setProperty("--a4-badge-pad-y", badgePadY.toFixed(2) + "px");
-      var boxes = page.querySelectorAll(".box-content.autofit-box");
+      var body = page.querySelector(".page-body, .page-body-flex, .autofit-page-body");
+      if (body) body.style.setProperty("gap", sectionGap.toFixed(2) + "px", "important");
+      var boxes = _a4CollectBalanceBoxes(page);
       for (var i = 0; i < boxes.length; i++) {{
-        boxes[i].style.setProperty("padding", padPx.toFixed(2) + "px", "important");
-        boxes[i].style.setProperty("margin-bottom", marginPx.toFixed(2) + "px", "important");
+        if (boxes[i].classList && boxes[i].classList.contains("box-content")) {{
+          boxes[i].style.setProperty("padding", padPx.toFixed(2) + "px", "important");
+          boxes[i].style.setProperty("margin-bottom", sectionGap.toFixed(2) + "px", "important");
+        }}
       }}
       var badges = page.querySelectorAll(".section-badge");
       for (var b = 0; b < badges.length; b++) {{
         badges[b].style.setProperty("margin", badgeMargin.toFixed(2) + "px auto", "important");
-        badges[b].style.setProperty(
-          "padding",
-          badgePadY.toFixed(2) + "px 25px",
-          "important"
-        );
+        badges[b].style.setProperty("padding", badgePadY.toFixed(2) + "px 25px", "important");
       }}
     }}
     function _a4ApplySharedFont(page, fontPx, lineHeight) {{
-      /* خط موحّد لكامل الصفحة — لا يُصغَّر مربع دون الآخر */
       page.style.setProperty("--shared-box-font", fontPx.toFixed(2) + "px");
       page.style.setProperty("--shared-line-height", String(lineHeight));
     }}
-    function autoFitReportPages() {{
-      /* يستهدف .page / .a4-page فقط — لا يلمس الحاوية الأم ولا يغيّر ارتفاع الصفحات */
-      var pages = document.querySelectorAll(".page, .a4-page");
-      var initialBase = Math.max(11, Math.min(13, {a4_autofit_base_font_px}));
+    function _a4SetLastBoxGrow(page, grow) {{
+      page.style.setProperty("--a4-last-box-grow", String(grow));
+      var boxes = page.querySelectorAll(
+        ".page-body > .box-content.autofit-box, .page-body-flex > .box-content.autofit-box, .autofit-page-body > .box-content.autofit-box, .page-body > .section-box, .page-body-flex > .section-box"
+      );
+      for (var i = 0; i < boxes.length; i++) {{
+        boxes[i].style.flexGrow = "0";
+      }}
+      if (boxes.length) {{
+        boxes[boxes.length - 1].style.flexGrow = String(grow);
+      }}
+    }}
+    function autoBalanceReportPages() {{
+      /* يستهدف .a4-page / .page فقط — shrink pad/gap ثم font≥11 ثم grow حتى 15.25 ثم flexGrow لآخر صندوق */
+      var pages = document.querySelectorAll(".a4-page, .page");
+      var initialBase = Math.max(11, Math.min(13.5, {a4_autofit_base_font_px}));
       var minFont = 11;
+      var maxFont = 15.25;
       var step = 0.25;
       var safety = 8;
       document.documentElement.style.setProperty("--shared-box-font", initialBase.toFixed(2) + "px");
-      document.documentElement.style.setProperty("--shared-line-height", "1.55");
+      document.documentElement.style.setProperty("--shared-line-height", "1.60");
       for (var p = 0; p < pages.length; p++) {{
         var page = pages[p];
         if (!page || page.classList.contains("photo-annex")) continue;
@@ -7284,38 +7356,33 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             footer.style.setProperty("flex-shrink", "0", "important");
           }}
         }}
-        var sharedBoxes = page.querySelectorAll(
-          ".box-content.autofit-box[data-autofit='results']," +
-          ".box-content.autofit-box[data-autofit='how']," +
-          ".box-content.autofit-box[data-autofit='liability']"
-        );
-        var hasSharedTrio = sharedBoxes.length > 0;
-        var anyAutofit = page.querySelector(".autofit-box, [data-autofit]");
-        if (!anyAutofit) continue;
+        var boxes = _a4CollectBalanceBoxes(page);
+        if (!boxes.length) continue;
 
         var padPx = 14;
-        var marginPx = 12;
+        var sectionGap = 10;
         var badgeMargin = 4;
         var badgePadY = 5;
         var fontPx = initialBase;
-        var lineHeight = 1.55;
+        var lineHeight = 1.60;
+        _a4SetLastBoxGrow(page, 0);
         _a4ApplySharedFont(page, fontPx, lineHeight);
-        _a4ApplySharedSpacing(page, padPx, marginPx, badgeMargin, badgePadY);
+        _a4ApplySharedSpacing(page, padPx, sectionGap, badgeMargin, badgePadY);
 
-        /* المرحلة 1: تقليص الحشو والمسافات بين العناوين أولاً */
+        /* 1) تقليص الحشو والمسافات أولاً */
         var guard = 0;
         while (guard < 24) {{
           guard += 1;
           if (_a4PageOverflow(page, footer, safety) <= 0.5) break;
-          if (padPx <= 6 && marginPx <= 6 && badgeMargin <= 2 && badgePadY <= 3) break;
+          if (padPx <= 6 && sectionGap <= 4 && badgeMargin <= 2 && badgePadY <= 3) break;
           padPx = Math.max(6, padPx - 1);
-          marginPx = Math.max(6, marginPx - 1);
+          sectionGap = Math.max(4, sectionGap - 0.75);
           badgeMargin = Math.max(2, badgeMargin - 0.5);
           badgePadY = Math.max(3, badgePadY - 0.35);
-          _a4ApplySharedSpacing(page, padPx, marginPx, badgeMargin, badgePadY);
+          _a4ApplySharedSpacing(page, padPx, sectionGap, badgeMargin, badgePadY);
         }}
 
-        /* المرحلة 2: تخفيض --shared-box-font لكامل الصفحة (الثلاثة معاً) */
+        /* 2) تخفيض الخط الموحّد حتى ≥11px */
         guard = 0;
         while (guard < 24) {{
           guard += 1;
@@ -7323,35 +7390,55 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
           if (fontPx <= minFont + 0.001) break;
           fontPx = Math.max(minFont, fontPx - step);
           var dropped = initialBase - fontPx;
-          lineHeight = Math.max(1.38, 1.55 - dropped * 0.03);
+          lineHeight = Math.max(1.40, 1.60 - dropped * 0.03);
           _a4ApplySharedFont(page, fontPx, lineHeight);
-          if (!hasSharedTrio) {{
-            /* صفحات أخرى: طبّق نفس المتغير دون تصغير عنصر بمفرده */
+        }}
+
+        /* 3) إن بقي فراغ: كبّر الخط حتى 15.25px دون تجاوز */
+        guard = 0;
+        while (guard < 24) {{
+          guard += 1;
+          if (fontPx >= maxFont - 0.001) break;
+          var nextFont = Math.min(maxFont, fontPx + step);
+          var nextLh = Math.min(1.70, lineHeight + 0.01);
+          _a4ApplySharedFont(page, nextFont, nextLh);
+          if (_a4PageOverflow(page, footer, safety) > 0.5) {{
             _a4ApplySharedFont(page, fontPx, lineHeight);
+            break;
           }}
+          fontPx = nextFont;
+          lineHeight = nextLh;
+        }}
+
+        /* 4) flexGrow على آخر صندوق لملء الفراغ المتبقي بأناقة */
+        _a4SetLastBoxGrow(page, 1);
+        if (_a4PageOverflow(page, footer, safety) > 0.5) {{
+          _a4SetLastBoxGrow(page, 0);
         }}
       }}
       fitReportFrame();
     }}
-    function _scheduleAutoFit() {{
-      autoFitReportPages();
-      setTimeout(autoFitReportPages, 60);
-      setTimeout(autoFitReportPages, 250);
+    /* أوقف autoFit القديم — التوجيه الوحيد عبر autoBalanceReportPages */
+    function autoFitReportPages() {{ autoBalanceReportPages(); }}
+    function _scheduleAutoBalance() {{
+      autoBalanceReportPages();
+      setTimeout(autoBalanceReportPages, 60);
+      setTimeout(autoBalanceReportPages, 250);
       setTimeout(fitReportFrame, 320);
     }}
-    document.addEventListener("DOMContentLoaded", _scheduleAutoFit);
-    window.addEventListener("load", _scheduleAutoFit);
-    window.addEventListener("beforeprint", autoFitReportPages);
+    document.addEventListener("DOMContentLoaded", _scheduleAutoBalance);
+    window.addEventListener("load", _scheduleAutoBalance);
+    window.addEventListener("beforeprint", autoBalanceReportPages);
     window.addEventListener("resize", function() {{
-      autoFitReportPages();
+      autoBalanceReportPages();
       fitReportFrame();
     }});
     if (document.fonts && document.fonts.ready) {{
-      document.fonts.ready.then(function() {{ _scheduleAutoFit(); }}).catch(function() {{}});
+      document.fonts.ready.then(function() {{ _scheduleAutoBalance(); }}).catch(function() {{}});
     }}
-    document.addEventListener("load", function() {{ autoFitReportPages(); fitReportFrame(); }}, true);
-    setTimeout(_scheduleAutoFit, 40);
-    setTimeout(_scheduleAutoFit, 400);
+    document.addEventListener("load", function() {{ autoBalanceReportPages(); fitReportFrame(); }}, true);
+    setTimeout(_scheduleAutoBalance, 40);
+    setTimeout(_scheduleAutoBalance, 400);
     </script>
     </head>
     <body class="{body_class}">
@@ -7393,18 +7480,18 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         </div>
         <div class="page report-page page-flow page-p2">
             {build_header()}
-            <div class="page-body-flex autofit-page-body">
+            <div class="page-body page-body-flex autofit-page-body">
             <div class="section-badge">نتائج الحادث</div>
-            <div class="box-content autofit-box" data-autofit="results">نتج عن الحادث :<br>{results_html}</div>
+            <div class="box-content autofit-box section-box content-box report-box results-box" data-autofit="results">نتج عن الحادث :<br>{results_html}</div>
             <div class="section-badge">كيفية وقوع الحادث</div>
-            <div class="box-content autofit-box" data-autofit="how">{acc_how_html}</div>
+            <div class="box-content autofit-box section-box content-box report-box how-happened-box" data-autofit="how">{acc_how_html}</div>
             {liability_html}
             </div>
             {official_footer_html}
         </div>
         <div class="page report-page page-three page-flow page-p3">
             {build_header()}
-            <div class="p3-body-flex page-body-flex">
+            <div class="p3-body-flex page-body page-body-flex">
                 <div class="table-scroll"><table>
                     <tr><th>طبيعة وتصنيف الحادث</th></tr>
                     <tr><td>{html.escape(accident_nature_val or "")}</td></tr>
