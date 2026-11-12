@@ -2962,11 +2962,28 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
     def format_bullets(text):
         if not text:
             return ""
-        lines = [html.escape(line.strip().lstrip("-•* ")) for line in str(text).splitlines() if line.strip()]
-        if not lines:
+        items = []
+        for line in str(text).splitlines():
+            raw = line.strip().lstrip("-•* ")
+            if not raw:
+                continue
+            body = html.escape(raw)
+            statutes = _statutory_lines_for_reason(raw)
+            if statutes:
+                statute_html = "".join(
+                    f"<div class='statute-line' style='margin: 4px 14px 6px 0; font-weight: 600; line-height: 1.55;'>"
+                    f"{html.escape(statute)}</div>"
+                    for statute in statutes
+                )
+                body = f"{body}{statute_html}"
+            items.append(f"<li style='margin-bottom: 8px;'>{body}</li>")
+        if not items:
             return ""
-        items = "".join([f"<li style='margin-bottom: 5px;'>{line}</li>" for line in lines])
-        return f"<ul style='margin: 6px 22px 10px 0; padding: 0; list-style-type: disc;'>{items}</ul>"
+        return (
+            "<ul style='margin: 6px 22px 10px 0; padding: 0; list-style-type: disc;'>"
+            + "".join(items)
+            + "</ul>"
+        )
 
     p1_ratio = int(p1_ratio or 0)
     p2_ratio = int(p2_ratio or 0)
@@ -3010,14 +3027,8 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         )
     inner_content = "".join(blocks)
     return (
-        f"<div style='text-align: center; margin-top: 14px; margin-bottom: 8px;'>"
-        f"<span style='display: inline-block; border: 1.5px solid #000; border-radius: 6px; padding: 4px 28px; font-weight: bold; font-size: 16px; background-color: #f4f4f4;'>"
-        f"الرأي والمسؤولية"
-        f"</span>"
-        f"</div>"
-        f"<div style='border: 1.5px solid #000; padding: 12px 16px; direction: rtl; text-align: right; font-size: 14.5px; line-height: 1.65; background-color: #fff;'>"
-        f"{inner_content}"
-        f"</div>"
+        f'<div class="section-badge">الرأي والمسؤولية</div>'
+        f'<div class="box-content liability-box">{inner_content}</div>'
     )
 
 _LIABILITY_RATIO_LOOKUP = {
@@ -4874,6 +4885,122 @@ TRAFFIC_LAW_ARTICLES = [
 ]
 TRAFFIC_LAW_BY_ID = {article["id"]: article for article in TRAFFIC_LAW_ARTICLES}
 
+# نصوص المواد النظامية الرسمية (نظام المرور ولائحته) لإدراجها تحت أسباب الإدانة في A4.
+TRAFFIC_STATUTORY_TEXTS = {
+    "8/ج": "يلزم كل قائد مركبة - يحمل رخصة قيادة سارية المفعول، ويقود سيارته داخل المملكة - بالتأمين، وفق ما تحدده اللائحة.",
+    "28": "يعد السائق مسئولاً عن جميع الأضرار التي تصيب الأرواح أو الممتلكات العامة أو الخاصة؛ نتيجة لنقل أحمال مخالفة للأوزان والأبعاد المقررة نظاماً، أو لعدم مراعاة قواعد السلامة في التحميل، ما لم تثبت مسئولية غيره.",
+    "32/1": "يحظر على أي شخص قيادة أي مركبة قبل الحصول على رخصة القيادة اللازمة وفقاً لأحكام هذا النظام ولائحته، أو برخصة غير مناسبة لفئة المركبة أو مسحوبة.",
+    "32": "يحظر على أي شخص قيادة أي مركبة قبل الحصول على رخصة القيادة اللازمة وفقاً لأحكام هذا النظام ولائحته.",
+    "50/1/1": "يجب على قائد المركبة التزام أقصى الجانب الأيمن من نهر الطريق والسير في المسارات المحددة نظاماً وعدم مخالفة تنظيمات السير.",
+    "50/1/2": "يجب التقيد بحدود المسارات المحددة على الطريق وعدم التعدي على المسار المجاور بما يعرّض مستخدمي الطريق للخطر.",
+    "50/1/4": "يحظر الانحراف المفاجئ أو تغيير المسار دون إعطاء الإشارة الضوئية المسبقة ودون التأكد من خلو المسار المراد الانتقال إليه.",
+    "50/2/1": "يجب عند الانعطاف أو الدوران للخلف (اليوتيرن) مراعاة المسارات المخصصة وتأمين الطريق وإعطاء الأفضلية لمن له حق المرور.",
+    "50/3/1": "يحظر التجاوز الخاطئ، ولا يجوز التجاوز في المنعطفات والمرتفعات وعند انعدام أو ضعف الرؤية أو في المواضع التي يُمنع فيها التجاوز.",
+    "50/4/1": "يجب ترك مسافة أمان كافية بين المركبات أثناء السير تمكّن السائق من التوقف الآمن دون الاصطدام بالمركبة الأمامية.",
+    "50/5/1": "يجب إعطاء أولوية المرور في التقاطعات غير المنظمة وللقادم من الطريق الرئيسي وفق قواعد الأفضلية المقررة نظاماً.",
+    "50/5/5": "يجب عند الدخول إلى الدوار إعطاء الأولوية للمركبات الموجودة داخله وعدم قطع مسارها.",
+    "50/7/1": "يحظر الوقوف أو التوقف في الأماكن المحظورة أو بما يعيق حركة السير، ويجب تأمين المركبة بوسائل التنبيه اللازمة عند الاضطرار.",
+    "50/8/1": "يجب عند الرجوع إلى الخلف التأكد من خلو المسار الخلفي ومراعاة سلامة مستخدمي الطريق، ويحظر الدخول إلى طريق عام بالرجوع للخلف على نحو يعرّض الغير للخطر.",
+    "50/9/1": "يجب الالتزام بالسرعة النظامية المحددة على الطريق ومراعاة الظروف الجوية وحالة الطريق وكثافة السير.",
+    "50/9/5/أ": "يجب التهدئة والالتزام بحدود السرعة الآمنة داخل الأحياء السكنية وعند الاقتراب من المعابر والمدارس.",
+    "50/10/1": "يجب أثناء السير ليلاً أو في الضباب أو الغبار أو عند تدني الرؤية استخدام الأنوار النظامية الأمامية والخلفية بما يكفل بيان موضع المركبة.",
+    "50": "الطريق للجميع، وتجب مراعاة حقوق الآخرين من مستخدميه، والالتزام بتنظيمات السير المقررة في النظام ولائحته.",
+    "51/1": "تعد علامات الطريق والعاكسات والشاخصات جزءاً من النظام، ويجب على السائق التقيد بها وبالإشارات الضوئية والتعليمات الصادرة من الجهات المختصة.",
+    "51": "تعد علامات الطريق والعاكسات والشاخصات الملحقة بهذا النظام جزءاً منه، ويجب على السائق التقيد بها وبالتعليمات الصادرة من الجهات المختصة، وفقاً لأحكام هذا النظام ولائحته.",
+    "52 و 53": "يحظر إتلاف علامات الطريق أو العبث بها أو ترك عوائق في حرم الطريق، ويجب عند إجراء الحفريات وأعمال الطرق وضع اللوحات والتحذيرات ووسائل السلامة اللازمة؛ وجهة السير على الطرق هي الجهة اليمنى.",
+    "52": "يحظر إتلاف علامات الطريق والعاكسات والشاخصات، أو العبث بها، أو نقلها، أو القيام بأي تصرف يجعلها أقل أهمية ووضوحاً.",
+    "53": "جهة السير على الطرق هي الجهة اليمنى.",
+    "54": "أفضلية المرور لمركبات الطوارئ أثناء مباشرة مهماتها، والمواكب الرسمية، ولا يعفى سائقوها من القيادة بما يضمن سلامة الغير.",
+    "55/1": "على قائدي المركبات مراعاة سلامة المشاة وإعطاؤهم الأولوية في المسارات والأماكن المخصصة لعبورهم وفق ما تحدده اللائحة.",
+    "55": "على المشاة السير في الأماكن المخصصة لهم، وفق ما تحدده اللائحة، وعلى قائدي المركبات مراعاة سلامتهم وأولويتهم عند العبور.",
+    "57/1": "يجب على قائدي المركبات التقيد بالخطوط الأرضية والعلامات المرورية المنظمة للمسارات، وعدم الانشغال بغير الطريق، وتجنب الوقوف المباغت في نهر الطريق دون مبرر مروري.",
+    "57": "يجب على قائدي المركبات وركابها استخدام أحزمة الأمان، والمقاعد المخصصة للأطفال، أثناء السير على الطرق، والتقيد بالعلامات والتعليمات المنظمة للسير.",
+    "58/1": "يحظر قيادة مركبة تفتقر إلى تجهيزات السلامة اللازمة أو بها خلل يؤثر على السلامة كخلل المكابح أو تلف الإطارات على نحو يعرّض مستخدمي الطريق للخطر.",
+    "58": "يجب على قائدي الدراجات الآلية ومرافقيهم ارتداء خوذة للرأس بإحكام أثناء القيادة، وتحدد اللائحة شروط تجهيزات السلامة وصلاحية المركبة للسير.",
+    "59/1": "حوادث العمد وما يحدث على المركبة وهي واقفة يختص بالتحقيق فيها أقسام الشرطة، وتنقسم الحوادث المرورية إلى بسيط وجسيم وفق ما تحدده اللائحة.",
+    "59": "تنقسم الحوادث المرورية إلى قسمين: أ - الحادث المروري البسيط. ب - الحادث المروري الجسيم. وتحدد اللائحة تفاصيل ذلك.",
+    "60/1": "يعد الحادث المروري موجباً للمسئولية إذا نتج من الإهمال، أو قلة الاحتراز، أو عدم مراعاة الأنظمة.",
+    "60/2": "تنتفي المسئولية إذا وقع الحادث بسبب قوة قاهرة أو خطأ المتضرر الخالص دون خطأ من الجانب الآخر.",
+    "60": "يعد الحادث المروري موجباً للمسئولية إذا نتج من الإهمال، أو قلة الاحتراز، أو عدم مراعاة الأنظمة.",
+    "61/1": "تباشر الإدارة المختصة إجراءات التحقيق في الحادث فور وقوعه، وتستكمل الإجراءات بأسرع وقت ممكن، مع إشعار الجهات المختصة عند قيام الحق العام.",
+    "61": "تباشر الإدارة المختصة إجراءات التحقيق في الحادث فور وقوعه، وتستكمل الإجراءات بأسرع وقت ممكن.",
+    "62/1": "كل من أتلف نفس إنسان - كلاً أو بعضاً - في حادث سير متعدياً أو مفرطاً، يعاقب بالعقوبة المقررة نظاماً، دون إخلال بما يتقرر للحق الخاص، وذلك إذا نتج عن الحادث وفاة أو زوال عضو أو تعطيل منفعته.",
+    "62/2": "إذا نتج عن الحادث المقترن بتعدٍّ أو تفريط إصابة تزيد مدة شفائها على خمسة عشر يوماً، فيحال المتسبب للجهة المختصة لتطبيق العقوبة الجزائية المقررة نظاماً مع حفظ الحق الخاص.",
+    "62": "كل من أتلف نفس إنسان - كلاً أو بعضاً - في حادث سير متعدياً أو مفرطاً، يعاقب بالعقوبة المقررة نظاماً، دون إخلال بما يتقرر للحق الخاص.",
+    "63/1": "على كل سائق يكون طرفاً في حادث مروري أن يوقف المركبة في مكان الحادث، ويبادر بإبلاغ الإدارة المختصة، وأن يقدم المساعدة الممكنة لمصابي الحادث، ويحظر الهروب أو تغيير معالم الحادث.",
+    "63/2/أ": "يحظر استبدال سائق المركبة الذي ارتكب الحادث أو التواطؤ والمشاركة في ذلك بقصد التنصل من المسئولية أو التحايل، ويعاقب من يخالف ذلك وفق النظام.",
+    "63/2/ب": "يحظر افتعال وقوع حادث مروري أو التحايل لتصوير حادث على غير حقيقته، ويعاقب من يخالف ذلك وفق النظام.",
+    "63": "على كل سائق يكون طرفاً في حادث مروري أن يوقف المركبة في مكان الحادث، ويبادر بإبلاغ الإدارة المختصة، وأن يقدم المساعدة الممكنة لمصابي الحادث.",
+    "64": "يحظر إصلاح الجسم الخارجي للمركبة أو تعديل يخل بأبعادها أو شكلها أو إزالة أرقام الهيكل دون تصريح مسبق ساري المفعول من الإدارة المختصة.",
+    "68/6/1": "تعد قيادة المركبة تحت تأثير مسكر أو مخدر أو عقاقير محظورة من المخالفات الجسيمة الموجبة للإجراءات الجزائية والتوقيف وفق الأنظمة ذات الصلة.",
+    "68/7/1": "يحظر قيادة مركبة بدون لوحات أو بلوحات غير عائدة لها أو مطموسة المعالم عمداً، وتعد من المخالفات الجسيمة المرتبطة بالشبهة الجنائية.",
+    "68": "تحدد جداول المخالفات الملحقة بالنظام الجزاءات المقررة على المخالفات المرورية، بما فيها المخالفات الجسيمة.",
+    "69": "يحظر التفحيط والقيادة الاستعراضية المتهورة بالمركبة، ويعاقب من يخالف ذلك بالعقوبات المشددة المقررة نظاماً مع حجز المركبة عند الاقتضاء.",
+}
+
+# يلتقط «المادة (…)/للمادة (…)/مادة (…)» لأن لام الجر تدمج أل التعريف كتابةً (للمادة).
+_ARTICLE_CODE_IN_TEXT_RE = re.compile(r"مادة\s*\(([^)]+)\)")
+_TECHNICAL_DRAFT_PREFIX_RE = re.compile(
+    r"^(كما تبين من المعاينة الفنية|كما اتضح من المعاينة الفنية|بالمعاينة الفنية)"
+)
+
+def _normalize_statute_key(raw_code: str) -> str:
+    text = str(raw_code or "").strip()
+    text = re.sub(r"^المادة\s*", "", text).strip()
+    text = text.strip("() ").strip()
+    text = re.sub(r"\s*-\s*.+$", "", text).strip()
+    text = re.sub(r"\s+", " ", text)
+    return text
+
+def _lookup_statutory_text(raw_code: str) -> str:
+    if not raw_code:
+        return ""
+    cleaned_cite = _official_article_cite(f"المادة ({raw_code})" if "المادة" not in str(raw_code) else str(raw_code))
+    candidates = [
+        _normalize_statute_key(raw_code),
+        _normalize_statute_key(cleaned_cite),
+        str(raw_code or "").strip(),
+    ]
+    for key in candidates:
+        if key and key in TRAFFIC_STATUTORY_TEXTS:
+            return TRAFFIC_STATUTORY_TEXTS[key]
+    return ""
+
+def _display_article_code(raw_code: str) -> str:
+    cleaned = _official_article_cite(f"المادة ({raw_code})" if "المادة" not in str(raw_code) else str(raw_code))
+    return _normalize_statute_key(cleaned) or str(raw_code or "").strip()
+
+def _statutory_lines_for_reason(reason_line: str) -> list:
+    line = str(reason_line or "")
+    codes = []
+    seen = set()
+    for match in _ARTICLE_CODE_IN_TEXT_RE.finditer(line):
+        raw = (match.group(1) or "").strip()
+        display = _display_article_code(raw)
+        if not display or display in seen:
+            continue
+        text = _lookup_statutory_text(raw)
+        if not text:
+            continue
+        seen.add(display)
+        codes.append(f"▪ نص المادة ({display}) في نظام المرور: «{text}»")
+    return codes
+
+def _join_technical_drafts(drafts) -> str:
+    parts = []
+    for draft in drafts or []:
+        text = str(draft or "").strip()
+        if not text:
+            continue
+        if not parts:
+            parts.append(text)
+            continue
+        if _TECHNICAL_DRAFT_PREFIX_RE.match(text):
+            parts.append(" " + text)
+        else:
+            parts.append(" كما تبين من المعاينة الفنية أنه " + text)
+    return "".join(parts)
+
 def generate_accident_report_fields(selected_article_ids):
     selected_ids = set(selected_article_ids or [])
     selected_articles = [article for article in TRAFFIC_LAW_ARTICLES if article["id"] in selected_ids]
@@ -4889,7 +5016,7 @@ def generate_accident_report_fields(selected_article_ids):
         f"{index}- {article['resultPoint']} ({_official_article_cite(article['code'])})."
         for index, article in enumerate(selected_articles, start=1)
     )
-    technical_draft_text = " كما تبين من المعاينة الفنية أنه ".join(
+    technical_draft_text = _join_technical_drafts(
         article["technicalDraft"] for article in selected_articles
     )
     opinion_lines = "\n".join(f"• {article['legalOpinion']}" for article in selected_articles)
@@ -6425,6 +6552,25 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .page-flow > .box-content {{
             flex: 0 0 auto;
         }}
+        .page.page-flow:not(.page-p1):not(.page-p3):not(.photo-annex) {{
+            height: auto;
+            max-height: none;
+            overflow: visible;
+        }}
+        .liability-box {{
+            overflow: visible;
+            max-height: none;
+            min-height: 0;
+            height: auto;
+            padding-bottom: 18px;
+            margin-bottom: 18px;
+            page-break-inside: auto;
+            break-inside: auto;
+        }}
+        .liability-box .statute-line {{
+            white-space: normal;
+            overflow-wrap: anywhere;
+        }}
         .photo-annex {{ page-break-before: always; overflow: visible; }}
         .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
         .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
@@ -6483,6 +6629,14 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .box-content {{
             border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
             line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
+        }}
+        .box-content.liability-box {{
+            overflow: visible;
+            max-height: none;
+            min-height: 0;
+            height: auto;
+            padding-bottom: 18px;
+            margin-bottom: 18px;
         }}
         .page-num {{ display: none !important; }}
         .official-page-footer, .official-footer, .page-footer, .footer {{
@@ -6663,6 +6817,24 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 transform: none !important;
+            }}
+            .page.page-flow:not(.page-p1):not(.page-p3):not(.photo-annex) {{
+                height: auto !important;
+                max-height: none !important;
+                min-height: 294mm !important;
+                overflow: visible !important;
+                page-break-inside: auto !important;
+                break-inside: auto !important;
+            }}
+            .box-content.liability-box, .liability-box {{
+                overflow: visible !important;
+                max-height: none !important;
+                min-height: 0 !important;
+                height: auto !important;
+                padding-bottom: 18px !important;
+                margin-bottom: 12px !important;
+                page-break-inside: auto !important;
+                break-inside: auto !important;
             }}
             .page:last-of-type, .a4-page:last-of-type, .report-page:last-of-type,
             .report-sheet > .report-page:last-child {{
