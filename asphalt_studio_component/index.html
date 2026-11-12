@@ -1333,6 +1333,8 @@
         const whiteCol = "#f8fafc";
         const curbCol = "#94a3b8";
         function strokeRibbon(offset, width, color, dash) {
+            ctx.lineCap = "butt";
+            ctx.lineJoin = "round";
             ctx.strokeStyle = color;
             ctx.lineWidth = width;
             ctx.setLineDash(dash || []);
@@ -1373,7 +1375,7 @@
             }
             ctx.restore();
         }
-        ctx.lineCap = "round";
+        ctx.lineCap = "butt";
         ctx.lineJoin = "round";
         if (flexRoadStyle === "dual_island") {
             const totalW = flexRoadWidth * 1.65;
@@ -1489,6 +1491,8 @@
         const yellow = "#fbbf24";
         const white = "#f8fafc";
         ctx.save();
+        ctx.lineCap = "butt";
+        ctx.lineJoin = "round";
         if (type === "straight_2lane" || type === "dirt_shoulder") {
             if (type === "dirt_shoulder") {
                 ctx.fillStyle = "#c2a878"; ctx.fillRect(0, 0, 960, 175);
@@ -1582,7 +1586,8 @@
             ctx.lineWidth = 8; ctx.strokeStyle = "#cbd5e1"; ctx.stroke();
         }
         else if (type === "mountain_scurve") {
-            ctx.lineCap = "round";
+            ctx.lineCap = "butt";
+            ctx.lineJoin = "round";
             ctx.strokeStyle = "#64748b"; ctx.lineWidth = 156;
             ctx.beginPath(); ctx.moveTo(60, 410); ctx.bezierCurveTo(340, 390, 540, 95, 900, 110); ctx.stroke();
             ctx.strokeStyle = asphalt; ctx.lineWidth = 140;
@@ -1591,7 +1596,7 @@
             ctx.beginPath(); ctx.moveTo(60, 410); ctx.bezierCurveTo(340, 390, 540, 95, 900, 110); ctx.stroke();
         }
         else if (type === "mountain_hairpin") {
-            ctx.lineCap = "round"; ctx.lineJoin = "round";
+            ctx.lineCap = "butt"; ctx.lineJoin = "round";
             ctx.strokeStyle = "#94a3b8"; ctx.lineWidth = 146;
             ctx.beginPath(); ctx.moveTo(110, 145); ctx.quadraticCurveTo(790, 135, 720, 265); ctx.quadraticCurveTo(660, 385, 130, 375); ctx.stroke();
             ctx.strokeStyle = asphalt; ctx.lineWidth = 128;
