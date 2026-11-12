@@ -548,9 +548,7 @@ def render_persistent_sidebar_settings():
             if file_exists or not current:
                 st.session_state[widget_key] = stored
         st.session_state["_perm_sidebar_seeded"] = True
-    _mirror_dept_staff_local_storage(data)
-
-    def _commit():
+    def _commit_sidebar_settings():
         current = load_permanent_dept_staff()
         for storage_key, widget_key in SIDEBAR_FIELD_MAP:
             current[storage_key] = str(st.session_state.get(widget_key, "") or "")
@@ -567,11 +565,15 @@ def render_persistent_sidebar_settings():
         current["saved_officers"] = presets
         save_permanent_dept_staff(current)
         _mirror_dept_staff_local_storage(current)
+        st.toast("تم حفظ الإعدادات الثابتة", icon="💾")
+
+    def _noop_commit():
+        return None
 
     with st.container(key="glow-dept"):
         st.header("⚙️ الإعدادات الثابتة للقسم")
-        dept_region = st.text_input("إدارة مرور منطقة", key="p1_dept_region", on_change=_commit)
-        dept_branch = st.text_input("القسم / الشعبة", key="p1_dept_branch", on_change=_commit)
+        dept_region = st.text_input("إدارة مرور منطقة", key="p1_dept_region")
+        dept_branch = st.text_input("القسم / الشعبة", key="p1_dept_branch")
     with st.container(key="glow-officers"):
         st.subheader("👮‍♂️ بيانات معدي التقرير المعتمدين")
         presets = data.get("saved_officers") or []
@@ -583,7 +585,7 @@ def render_persistent_sidebar_settings():
             "officer_1_name",
             "officer_1_rank",
             presets,
-            _commit,
+            _noop_commit,
         )
         render_signatory_card(
             "officer_role_supervisor",
@@ -591,7 +593,7 @@ def render_persistent_sidebar_settings():
             "officer_2_name",
             "officer_2_rank",
             presets,
-            _commit,
+            _noop_commit,
         )
         render_signatory_card(
             "officer_role_manager",
@@ -599,7 +601,7 @@ def render_persistent_sidebar_settings():
             "manager_name",
             "manager_rank",
             presets,
-            _commit,
+            _noop_commit,
         )
         officer_1_name = str(st.session_state.get("officer_1_name") or "")
         officer_1_rank = str(st.session_state.get("officer_1_rank") or "")
@@ -607,7 +609,8 @@ def render_persistent_sidebar_settings():
         officer_2_rank = str(st.session_state.get("officer_2_rank") or "")
         manager_name = str(st.session_state.get("manager_name") or "")
         manager_rank = str(st.session_state.get("manager_rank") or "")
-    _commit()
+    if st.button("💾 حفظ الإعدادات الثابتة", key="_sidebar_save_perm_settings", use_container_width=True):
+        _commit_sidebar_settings()
     return (
         dept_region,
         dept_branch,
@@ -862,6 +865,28 @@ def get_dynamic_party_keys(max_parties: int = 10) -> dict:
     return dyn_keys
 
 ALL_PAGE1_DEFAULTS = {**PAGE1_STATIC_KEYS, **get_dynamic_party_keys(10)}
+_PARTY_TABLE_COLUMNS = [
+    ("الطرف", "الأطراف"),
+    ("الاسم", "الاسم"),
+    ("الهوية", "الهوية / الإقامة"),
+    ("المشاركة", "نوع المشاركة"),
+    ("الحالة", "الحالة الصحية"),
+    ("التأهيل", "تأهيل للقيادة"),
+]
+_VEHICLE_TABLE_COLUMNS = [
+    ("الطرف", "الأطراف"),
+    ("نوع المركبة", "نوع المركبة"),
+    ("رقم اللوحة", "رقم اللوحة"),
+    ("الرقم التسلسلي", "الرقم التسلسلي"),
+    ("نوع الترخيص", "نوع الترخيص"),
+    ("التأمين", "التأمين"),
+]
+MAIN_TAB_OPTIONS = [
+    "1️⃣ البيانات والأطراف",
+    "2️⃣ الموقع واستوديو الكروكي",
+    "3️⃣ الوصف والمسؤولية والإجراءات",
+    "4️⃣ المرفقات والطباعة النهائية (A4)",
+]
 
 def _clone_page1_value(value):
     if isinstance(value, list):
@@ -1112,13 +1137,16 @@ def init_and_restore_page1_state():
     if "vehicles" not in st.session_state:
         st.session_state.vehicles = _clone_page1_value(vehicle_records)
 
-def sync_page1_to_vault(extra_keys: list = None):
+def sync_page1_to_vault(extra_keys: list = None, write_disk: bool = False):
+    """يحدّث الخزنة في الذاكرة فقط. الكتابة للقرص تتم عند الحفظ اليدوي."""
     if "_p1_vault" not in st.session_state:
         st.session_state["_p1_vault"] = dict(ALL_PAGE1_DEFAULTS)
     keys_to_sync = list(ALL_PAGE1_DEFAULTS.keys()) + list(PAGE1_EXTRA_SYNC_KEYS) + list(extra_keys or [])
     for key in keys_to_sync:
         if key in st.session_state:
             st.session_state["_p1_vault"][key] = _clone_page1_value(st.session_state[key])
+    if not write_disk:
+        return
     try:
         P1_AUTOSAVE_PATH.write_text(
             json.dumps(st.session_state["_p1_vault"], ensure_ascii=False, indent=2),
@@ -1172,7 +1200,7 @@ def _mirror_page1_fields():
 
 def export_page1_payload(extra_keys: list = None) -> dict:
     _mirror_page1_fields()
-    sync_page1_to_vault(extra_keys=extra_keys)
+    sync_page1_to_vault(extra_keys=extra_keys, write_disk=False)
     return dict(st.session_state["_p1_vault"])
 
 def queue_load_page1_payload(saved_dict: dict):
@@ -1663,7 +1691,7 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
             unsafe_allow_html=True,
         )
     with col_save:
-        if st.button("💾 حفظ العمل", key="_top_cmd_save", use_container_width=True):
+        if st.button("💾 حفظ واعتماد البيانات", key="_top_cmd_save", use_container_width=True):
             if callable(on_save_callback):
                 on_save_callback()
     with col_print:
@@ -1934,7 +1962,6 @@ def _store_clip_fields():
             "notes": st.session_state.get(f"clip_{index}_notes", ""),
         }))
     st.session_state.video_clips = clips
-    save_current_work()
 
 def _active_video_clips():
     count = _clamp_clip_count(st.session_state.get("video_clip_count"))
@@ -2027,7 +2054,6 @@ def _apply_marked_analysis(parsed):
         st.session_state.p1_reasons = merged_reasons
         st.session_state.legal_opinion = merged_reasons
     st.session_state.video_injected_text = how_text or results_text or legal_text
-    save_current_work()
     return True
 
 def insert_manual_video_evidence():
@@ -2044,7 +2070,6 @@ def remove_manual_video_evidence():
     st.session_state.p1_reasons = _strip_marked_block(st.session_state.get("p1_reasons", st.session_state.get("legal_opinion", "")))
     st.session_state.legal_opinion = st.session_state.p1_reasons
     st.session_state.video_injected_text = ""
-    save_current_work()
 
 def _local_secrets_file():
     return Path(__file__).resolve().parent / ".streamlit" / "secrets.toml"
@@ -2285,7 +2310,6 @@ def _apply_section_analysis(how_text, results_text):
             results_text,
         )
     st.session_state.video_injected_text = how_text or results_text
-    save_current_work()
     return True
 
 def analyze_video_evidence():
@@ -2343,8 +2367,7 @@ def render_video_evidence_engine():
             "هل يتوفر توثيق مرئي للحادث؟",
             options=VIDEO_HAS_OPTIONS,
             key="has_video",
-            horizontal=True,
-            on_change=save_current_work,
+            horizontal=True
         )
         if has_video == "لا فيديو":
             st.info("ℹ️ لا يوجد تسجيل مرئي مرفق؛ يعتمد التقرير الفني والمسؤولية النظامية على الآثار المادية، والمعاينة الميدانية، وأقوال الأطراف.")
@@ -2364,14 +2387,12 @@ def render_video_evidence_engine():
             if grown != current:
                 st.session_state.video_clip_count = grown
                 _sync_video_clips(grown)
-                save_current_work()
                 current = grown
         add_col, remove_col = st.columns(2)
         with add_col:
             if st.button("➕ إضافة مقطع", width="stretch"):
                 st.session_state.video_clip_count = min(VIDEO_CLIP_MAX, current + 1)
                 _sync_video_clips(st.session_state.video_clip_count)
-                save_current_work()
                 st.rerun()
         with remove_col:
             if st.button("➖ إنقاص مقطع", width="stretch", disabled=current <= VIDEO_CLIP_MIN):
@@ -2381,7 +2402,6 @@ def render_video_evidence_engine():
                     for suffix in ("source", "clarity", "timestamp", "findings", "notes"):
                         st.session_state.pop(f"clip_{index}_{suffix}", None)
                     st.session_state.pop(f"clip_file_{index}", None)
-                save_current_work()
                 st.rerun()
         count = st.number_input(
             "عدد المقاطع",
@@ -3689,13 +3709,44 @@ with st.sidebar:
         manager_rank,
     ) = render_persistent_sidebar_settings()
 header_slot = st.container()
-tab_data, tab_sketch, tab_analysis, tab_print = st.tabs([
-    "1️⃣ البيانات والأطراف",
-    "2️⃣ الموقع واستوديو الكروكي",
-    "3️⃣ الوصف والمسؤولية والإجراءات",
-    "4️⃣ المرفقات والطباعة النهائية (A4)",
-])
-with tab_data:
+if "active_tab" not in st.session_state:
+    st.session_state.active_tab = MAIN_TAB_OPTIONS[0]
+if st.session_state.get("active_tab") not in MAIN_TAB_OPTIONS:
+    st.session_state.active_tab = MAIN_TAB_OPTIONS[0]
+st.markdown(
+    """
+    <style>
+    div[data-testid="stRadio"][aria-label="active_tab"] > div,
+    div[data-testid="stRadio"]:has(> label) {
+        gap: 0.35rem !important;
+    }
+    div[role="radiogroup"] label[data-baseweb="radio"] {
+        background: linear-gradient(135deg, rgba(8, 56, 114, 0.92), rgba(4, 38, 84, 0.95)) !important;
+        border: 1.4px solid rgba(56, 189, 248, 0.55) !important;
+        border-radius: 10px !important;
+        padding: 8px 12px !important;
+        box-shadow: 0 0 10px rgba(0, 210, 255, 0.18) !important;
+        color: #e0f2fe !important;
+        font-weight: 800 !important;
+    }
+    div[role="radiogroup"] label[data-baseweb="radio"]:has(input:checked) {
+        border-color: #38bdf8 !important;
+        box-shadow: 0 0 16px rgba(56, 189, 248, 0.45) !important;
+        background: linear-gradient(135deg, #0284c7, #0369a1) !important;
+        color: #ffffff !important;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+st.radio(
+    "أقسام التقرير",
+    options=MAIN_TAB_OPTIONS,
+    horizontal=True,
+    key="active_tab",
+    label_visibility="collapsed",
+)
+if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
     st.subheader("معلومات الحادث الأساسية")
     _acc_type_options = ["تصادم مركبتين", "دهس مشاة", "انقلاب", "تصادم متعدد", "اصطدام بجسم ثابت"]
     _acc_weather_options = ["صحو", "غائم", "ممطر", "غبار / عوالق ترابية", "ضباب"]
@@ -3722,60 +3773,19 @@ with tab_data:
             st.session_state.p1_acc_weather_choice = saved_weather
         else:
             st.session_state.pop("p1_acc_weather_choice", None)
-    r1_c1, r1_c2, r1_c3, r1_c4 = st.columns(4, gap="medium")
-    with r1_c1:
-        acc_num = st.text_input("رقم الحادث", key="p1_acc_number")
-    with r1_c2:
+    # منتقيات الوقت والتاريخ خارج النموذج (تحتوي popover/أزرار)
+    picker_c1, picker_c2 = st.columns(2, gap="medium")
+    with picker_c1:
         accident_time = render_smart_time_picker(state_key="p1_acc_time", label="الوقت")
         acc_time = accident_time
-    with r1_c3:
-        acc_type = st.selectbox(
-            "نوع الحادث",
-            _acc_type_options,
-            index=None,
-            placeholder="اختر نوع الحادث",
-            key="p1_acc_type_choice",
-        ) or ""
-    with r1_c4:
-        acc_injuries = st.number_input("عدد الإصابات", min_value=0, key="p1_acc_injuries")
-    r2_c1, r2_c2, r2_c3, r2_c4 = st.columns(4, gap="medium")
-    with r2_c1:
+    with picker_c2:
         accident_date = render_luxury_hijri_picker(state_key="hijri_date", label="تاريخ الحادث (هجري)")
         acc_date = accident_date
         st.session_state.p1_acc_date = accident_date
         st.session_state.hijri_manual_date = accident_date
-    with r2_c2:
-        acc_loc = st.text_input("موقع الحادث", key="p1_acc_location")
-    with r2_c3:
-        acc_weather = st.selectbox(
-            "الطقس",
-            _acc_weather_options,
-            index=None,
-            placeholder="اختر الطقس",
-            key="p1_acc_weather_choice",
-        ) or ""
-    with r2_c4:
-        acc_deaths = st.number_input("عدد الوفيات", min_value=0, key="p1_acc_deaths")
-    
-    acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", key="p1_acc_cause")
-    st.divider()
-    _party_columns = [
-        ("الطرف", "الأطراف"),
-        ("الاسم", "الاسم"),
-        ("الهوية", "الهوية / الإقامة"),
-        ("المشاركة", "نوع المشاركة"),
-        ("الحالة", "الحالة الصحية"),
-        ("التأهيل", "تأهيل للقيادة"),
-    ]
-    _vehicle_columns = [
-        ("الطرف", "الأطراف"),
-        ("نوع المركبة", "نوع المركبة"),
-        ("رقم اللوحة", "رقم اللوحة"),
-        ("الرقم التسلسلي", "الرقم التسلسلي"),
-        ("نوع الترخيص", "نوع الترخيص"),
-        ("التأمين", "التأمين"),
-    ]
-    st.subheader("جدول معلومات أطراف الحادث")
+
+    _party_columns = list(_PARTY_TABLE_COLUMNS)
+    _vehicle_columns = list(_VEHICLE_TABLE_COLUMNS)
     _normalized_parties, _qual_changed = _normalize_party_qualification_rows(st.session_state.get("parties"))
     st.session_state.parties = _normalized_parties
     _saved_party_records, _saved_qual_changed = _normalize_party_qualification_rows(st.session_state.get("p1_parties_records"))
@@ -3787,58 +3797,105 @@ with tab_data:
         st.session_state.p1_parties_editor["التأهيل"] = st.session_state.p1_parties_editor["التأهيل"].apply(normalize_driving_qualification)
     elif _qual_changed or _saved_qual_changed:
         st.session_state.pop("p1_parties_editor", None)
-    parties_df = fill_smart_table_defaults(pd.DataFrame(st.session_state.parties), PARTY_SMART_DEFAULTS)
-    if "التأهيل" in parties_df.columns:
-        parties_df["التأهيل"] = parties_df["التأهيل"].apply(normalize_driving_qualification)
+    parties_df_seed = fill_smart_table_defaults(pd.DataFrame(st.session_state.parties), PARTY_SMART_DEFAULTS)
+    if "التأهيل" in parties_df_seed.columns:
+        parties_df_seed["التأهيل"] = parties_df_seed["التأهيل"].apply(normalize_driving_qualification)
     if isinstance(st.session_state.get("p1_parties_editor"), pd.DataFrame):
         st.session_state.p1_parties_editor = fill_smart_table_defaults(st.session_state.p1_parties_editor, PARTY_SMART_DEFAULTS)
-    parties_df = st.data_editor(
-        parties_df,
-        key="p1_parties_editor",
-        num_rows="dynamic",
-        use_container_width=True,
-        column_order=[key for key, _label in reversed(_party_columns)],
-        column_config={
-            "الطرف": st.column_config.TextColumn("الأطراف"),
-            "الاسم": st.column_config.TextColumn("الاسم"),
-            "الهوية": st.column_config.TextColumn("الهوية / الإقامة"),
-            "المشاركة": st.column_config.SelectboxColumn("نوع المشاركة", options=["", "سائق", "راكب", "مشاة"]),
-            "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=["", "سليم", "مصاب", "متوفي"]),
-            "التأهيل": st.column_config.SelectboxColumn(
-                "تأهيل للقيادة",
-                options=QUALIFICATION_OPTIONS,
-                default="مؤهل للقيادة",
-                required=True,
-            ),
-        }
-    )
-    st.divider()
-    st.subheader("جدول معلومات المركبات")
     vehicles_source = fill_smart_table_defaults(pd.DataFrame(st.session_state.vehicles), VEHICLE_SMART_DEFAULTS)
     if isinstance(st.session_state.get("p1_vehicles_editor"), pd.DataFrame):
         st.session_state.p1_vehicles_editor = fill_smart_table_defaults(st.session_state.p1_vehicles_editor, VEHICLE_SMART_DEFAULTS)
-    vehicles_df = st.data_editor(
-        vehicles_source,
-        key="p1_vehicles_editor",
-        num_rows="dynamic",
-        use_container_width=True,
-        column_order=[key for key, _label in reversed(_vehicle_columns)],
-        column_config={
-            "الطرف": st.column_config.TextColumn("الأطراف"),
-            "نوع المركبة": st.column_config.TextColumn("نوع المركبة"),
-            "رقم اللوحة": st.column_config.TextColumn("رقم اللوحة"),
-            "الرقم التسلسلي": st.column_config.TextColumn("الرقم التسلسلي"),
-            "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=["", "خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
-            "التأمين": st.column_config.SelectboxColumn("التأمين", options=["", "ساري", "مؤمنة", "غير مؤمنة"]),
-        }
-    )
+
+    with st.form("page1_accident_data_form", border=False, clear_on_submit=False):
+        r1_c1, r1_c2, r1_c3 = st.columns(3, gap="medium")
+        with r1_c1:
+            acc_num = st.text_input("رقم الحادث", key="p1_acc_number")
+        with r1_c2:
+            acc_type = st.selectbox(
+                "نوع الحادث",
+                _acc_type_options,
+                index=None,
+                placeholder="اختر نوع الحادث",
+                key="p1_acc_type_choice",
+            ) or ""
+        with r1_c3:
+            acc_injuries = st.number_input("عدد الإصابات", min_value=0, key="p1_acc_injuries")
+        r2_c1, r2_c2, r2_c3 = st.columns(3, gap="medium")
+        with r2_c1:
+            acc_loc = st.text_input("موقع الحادث", key="p1_acc_location")
+        with r2_c2:
+            acc_weather = st.selectbox(
+                "الطقس",
+                _acc_weather_options,
+                index=None,
+                placeholder="اختر الطقس",
+                key="p1_acc_weather_choice",
+            ) or ""
+        with r2_c3:
+            acc_deaths = st.number_input("عدد الوفيات", min_value=0, key="p1_acc_deaths")
+        acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", key="p1_acc_cause")
+        st.divider()
+        st.subheader("جدول معلومات أطراف الحادث")
+        parties_df = st.data_editor(
+            parties_df_seed,
+            key="p1_parties_editor",
+            num_rows="dynamic",
+            use_container_width=True,
+            column_order=[key for key, _label in reversed(_party_columns)],
+            column_config={
+                "الطرف": st.column_config.TextColumn("الأطراف"),
+                "الاسم": st.column_config.TextColumn("الاسم"),
+                "الهوية": st.column_config.TextColumn("الهوية / الإقامة"),
+                "المشاركة": st.column_config.SelectboxColumn("نوع المشاركة", options=["", "سائق", "راكب", "مشاة"]),
+                "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=["", "سليم", "مصاب", "متوفي"]),
+                "التأهيل": st.column_config.SelectboxColumn(
+                    "تأهيل للقيادة",
+                    options=QUALIFICATION_OPTIONS,
+                    default="مؤهل للقيادة",
+                    required=True,
+                ),
+            }
+        )
+        st.divider()
+        st.subheader("جدول معلومات المركبات")
+        vehicles_df = st.data_editor(
+            vehicles_source,
+            key="p1_vehicles_editor",
+            num_rows="dynamic",
+            use_container_width=True,
+            column_order=[key for key, _label in reversed(_vehicle_columns)],
+            column_config={
+                "الطرف": st.column_config.TextColumn("الأطراف"),
+                "نوع المركبة": st.column_config.TextColumn("نوع المركبة"),
+                "رقم اللوحة": st.column_config.TextColumn("رقم اللوحة"),
+                "الرقم التسلسلي": st.column_config.TextColumn("الرقم التسلسلي"),
+                "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=["", "خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
+                "التأمين": st.column_config.SelectboxColumn("التأمين", options=["", "ساري", "مؤمنة", "غير مؤمنة"]),
+            }
+        )
+        page1_submitted = st.form_submit_button("💾 اعتماد بيانات الحادث والأطراف", use_container_width=True)
+
     inject_rtl_tab_for_data_editors()
-    st.session_state.parties = _frame_records(parties_df)
-    st.session_state.vehicles = _frame_records(vehicles_df)
-    st.session_state.p1_parties_records = _clone_page1_value(st.session_state.parties)
-    st.session_state.p1_vehicles_records = _clone_page1_value(st.session_state.vehicles)
-    _mirror_page1_fields()
-    sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS))
+    if page1_submitted:
+        st.session_state.parties = _frame_records(parties_df)
+        st.session_state.vehicles = _frame_records(vehicles_df)
+        st.session_state.p1_parties_records = _clone_page1_value(st.session_state.parties)
+        st.session_state.p1_vehicles_records = _clone_page1_value(st.session_state.vehicles)
+        _mirror_page1_fields()
+        sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=False)
+        st.toast("تم اعتماد بيانات الحادث والأطراف في الجلسة", icon="✅")
+    else:
+        # الإبقاء على آخر اعتماد في الجلسة دون إعادة كتابة مع كل حرف
+        parties_df = pd.DataFrame(st.session_state.get("parties") or [])
+        vehicles_df = pd.DataFrame(st.session_state.get("vehicles") or [])
+        acc_num = st.session_state.get("p1_acc_number", "")
+        acc_type = st.session_state.get("p1_acc_type_choice") or st.session_state.get("p1_acc_type") or ""
+        acc_injuries = st.session_state.get("p1_acc_injuries", 0)
+        acc_loc = st.session_state.get("p1_acc_location", "")
+        acc_weather = st.session_state.get("p1_acc_weather_choice") or st.session_state.get("p1_acc_weather") or ""
+        acc_deaths = st.session_state.get("p1_acc_deaths", 0)
+        acc_cause = st.session_state.get("p1_acc_cause", "")
+
     if st.session_state.pop("_p1_save_requested", False):
         if save_current_work():
             st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
@@ -3850,8 +3907,8 @@ with tab_data:
         return ""
 
     sync_cross_page_smart_links(
-        injuries_count=int(acc_injuries or 0),
-        deaths_count=int(acc_deaths or 0),
+        injuries_count=int(st.session_state.get("p1_acc_injuries") or 0),
+        deaths_count=int(st.session_state.get("p1_acc_deaths") or 0),
         veh1_type=_vehicle_type_at(0),
         veh2_type=_vehicle_type_at(1),
         p1_title_key="p1_title_input",
@@ -4264,7 +4321,7 @@ def generate_accident_report_fields(selected_article_ids):
         "hasCriminalSuspicion": has_criminal_suspicion,
     }
 
-with tab_analysis:
+if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     st.subheader("📚 محرك المواد النظامية وفروعها")
     if st.session_state.get("acc_how_override"):
         kept_override = _extract_marked_block(st.session_state.get("technical_description", ""))
@@ -4281,8 +4338,7 @@ with tab_analysis:
         "اختر المواد النظامية وفروعها المطبقة على الحادث:",
         options=valid_article_ids,
         format_func=lambda article_id: TRAFFIC_LAW_BY_ID[article_id]["label"],
-        key="selected_articles",
-        on_change=save_current_work,
+        key="selected_articles"
     )
     render_legal_articles_inserter(
         [TRAFFIC_LAW_BY_ID[article_id]["code"] for article_id in selected_law_ids if article_id in TRAFFIC_LAW_BY_ID],
@@ -4302,21 +4358,18 @@ with tab_analysis:
         merged_opinion = _upsert_marked_block(generated_fields["legalOpinionText"], kept_legal)
         st.session_state.p1_reasons = merged_opinion
         st.session_state.legal_opinion = merged_opinion
-        save_current_work()
     if generated_fields["hasCriminalSuspicion"]:
         st.warning("تشمل المواد المختارة شقاً جنائياً أو شبه جنائي، وتُحال إلى الشرطة أو النيابة.")
     render_video_evidence_engine()
     acc_results = st.text_area(
         "نتائج الحادث (نقاط مرقمة)",
         key="accident_results",
-        height=110,
-        on_change=save_current_work,
+        height=110
     )
     acc_how = st.text_area(
         "كيفية وقوع الحادث (الصياغة الفنية الدقيقة)",
         key="technical_description",
-        height=140,
-        on_change=save_current_work,
+        height=140
     )
     if "p1_title_input" not in st.session_state:
         st.session_state.p1_title_input = DEFAULT_REPORT_STATE["p1_title_input"]
@@ -4345,8 +4398,7 @@ with tab_analysis:
     selected_ratio = st.selectbox(
         "توزيع نسبة الخطأ والمسؤولية:",
         options=ratio_options,
-        key="liability_ratio_select",
-        on_change=save_current_work,
+        key="liability_ratio_select"
     )
     ratio_lookup = {
         "100% الطرف الأول | 0% الطرف الثاني": (100, 0),
@@ -4363,8 +4415,7 @@ with tab_analysis:
                 min_value=0,
                 max_value=100,
                 step=5,
-                key="custom_p1_ratio",
-                on_change=save_current_work,
+                key="custom_p1_ratio"
             )
         with c_r2:
             p2_ratio = 100 - int(p1_ratio)
@@ -4377,8 +4428,7 @@ with tab_analysis:
     with c_t1:
         p1_title = st.text_input(
             "صفة الطرف الأول في التقرير:",
-            key="p1_title_input",
-            on_change=save_current_work,
+            key="p1_title_input"
         )
     with c_t2:
         p2_role_options = [
@@ -4392,14 +4442,12 @@ with tab_analysis:
         p2_role_type = st.selectbox(
             "نوع وصفة الطرف الثاني:",
             options=p2_role_options,
-            key="p2_role_select",
-            on_change=save_current_work,
+            key="p2_role_select"
         )
         if p2_role_type == "تحديد صفة مخصصة":
             p2_title = st.text_input(
                 "اكتب صفة الطرف الثاني:",
-                key="p2_custom_title",
-                on_change=save_current_work,
+                key="p2_custom_title"
             )
         else:
             p2_title = p2_role_type
@@ -4407,8 +4455,7 @@ with tab_analysis:
         p1_reasons = st.text_area(
             f"المواد النظامية وأسباب إدانة {p1_title} ({p1_ratio}%) — (كل سبب في سطر جديد):",
             height=110,
-            key="p1_reasons",
-            on_change=save_current_work,
+            key="p1_reasons"
         )
     else:
         p1_reasons = st.session_state.get("p1_reasons", "")
@@ -4416,8 +4463,7 @@ with tab_analysis:
         p2_reasons = st.text_area(
             f"المواد النظامية وأسباب إدانة {p2_title} ({p2_ratio}%) — (كل سبب في سطر جديد):",
             height=110,
-            key="p2_reasons",
-            on_change=save_current_work,
+            key="p2_reasons"
         )
     else:
         p2_reasons = st.session_state.get("p2_reasons", "")
@@ -4490,14 +4536,12 @@ def sync_selected_actions():
     ]
     if not selected_keys:
         st.session_state["actions_taken_editor"] = ""
-        save_current_work()
         return
     lines = [f"{idx}- {ACTIONS_SCENARIOS[key]}" for idx, key in enumerate(selected_keys, start=1)]
     st.session_state["actions_taken_editor"] = "\n".join(lines)
-    save_current_work()
 
 flush_pending_casualty_actions()
-with tab_analysis:
+if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     st.markdown(
         "<hr style='border:0;height:1px;background:linear-gradient(90deg,transparent,#7dd3fc,transparent);margin:22px 0 14px 0;'>",
         unsafe_allow_html=True,
@@ -4544,14 +4588,12 @@ with tab_analysis:
         selected_nature = st.selectbox(
             "طبيعة وتصنيف الحادث:",
             options=accident_nature_options,
-            key="acc_nature_sel",
-            on_change=save_current_work,
+            key="acc_nature_sel"
         )
         if selected_nature == "تحديد تصنيف مخصص":
             accident_nature_val = st.text_input(
                 "اكتب طبيعة وتصنيف الحادث:",
-                key="acc_nature_custom",
-                on_change=save_current_work,
+                key="acc_nature_custom"
             )
         else:
             accident_nature_val = selected_nature
@@ -4559,14 +4601,12 @@ with tab_analysis:
         selected_rights = st.selectbox(
             "الحقوق الخاصة والعامة:",
             options=rights_options,
-            key="rights_sel",
-            on_change=save_current_work,
+            key="rights_sel"
         )
         if selected_rights == "تحديد حقوق مخصصة":
             rights_status_val = st.text_input(
                 "اكتب حالة الحقوق الخاصة والعامة:",
-                key="rights_custom",
-                on_change=save_current_work,
+                key="rights_custom"
             )
         else:
             rights_status_val = selected_rights
@@ -4581,8 +4621,7 @@ with tab_analysis:
     actions_taken_raw = st.text_area(
         "النص النهائي لـ (الإجراءات المتخذة) في التقرير — يمكنك التعديل أو إضافة تفاصيل (مثل نوع العهدة أو اسم المستشفى):",
         height=120,
-        key="actions_taken_editor",
-        on_change=save_current_work,
+        key="actions_taken_editor"
     )
     final_actions_html = "<br>".join(
         html.escape(line.strip()) for line in str(actions_taken_raw or "").splitlines() if line.strip()
@@ -4616,11 +4655,9 @@ _SKETCH_OMIT_LABEL = "❌ حذف صفحة الكروكي - حادث قديم"
 
 def _on_sketch_choice_tab4():
     st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab4") == _SKETCH_ATTACH_LABEL
-    save_current_work()
 
 def _on_sketch_choice_tab5():
     st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab5") == _SKETCH_ATTACH_LABEL
-    save_current_work()
 
 def _sketch_availability_control(widget_key, on_change):
     if not isinstance(st.session_state.get("include_sketch"), bool):
@@ -4746,7 +4783,7 @@ def render_interactive_asphalt_studio(
             encoded = preview.split(",", 1)[-1]
             st.image(base64.b64decode(encoded), use_container_width=True)
 
-with tab_sketch:
+if st.session_state.active_tab == MAIN_TAB_OPTIONS[1]:
     col_sketch_state, col_layout, col_place = st.columns([1.1, 1.7, 1.0])
     with col_sketch_state:
         _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
@@ -4941,7 +4978,7 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
     </html>
     """
 
-with tab_print:
+if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     st.subheader("📸 إرفاق صور موقع الحادث والمركبات للتقرير الرسمي")
     _max_accident_photos = 10
     if "gallery_photos" not in st.session_state:
@@ -5076,527 +5113,336 @@ with tab_print:
         ]
         st.rerun()
     
-sketch_src = str(st.session_state.get("sketch_data_url") or "").strip()
-if not sketch_src.startswith("data:image/"):
-    adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
-    if adopted_path.is_file():
-        try:
-            sketch_src = "data:image/png;base64," + base64.b64encode(adopted_path.read_bytes()).decode("ascii")
-        except OSError:
-            sketch_src = ""
-safe_sketch_src = html.escape(sketch_src, quote=True)
-aerial_src = str(st.session_state.get("aerial_sketch_data_url") or st.session_state.get("aerial_data_url") or "").strip()
-safe_aerial_src = html.escape(aerial_src, quote=True) if aerial_src.startswith("data:image/") else ""
-
-def _framed_shot(title, src, alt, max_height, compact=False):
-    title_style = (
-        "font-weight:800; font-size:10.5px; text-align:center; padding:2px 6px; margin-bottom:2px;"
-        if compact else
-        "font-weight:800; font-size:12.5px; text-align:center; margin-bottom:1.2mm;"
+if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
+    sketch_src = str(st.session_state.get("sketch_data_url") or "").strip()
+    if not sketch_src.startswith("data:image/"):
+        adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
+        if adopted_path.is_file():
+            try:
+                sketch_src = "data:image/png;base64," + base64.b64encode(adopted_path.read_bytes()).decode("ascii")
+            except OSError:
+                sketch_src = ""
+    safe_sketch_src = html.escape(sketch_src, quote=True)
+    aerial_src = str(st.session_state.get("aerial_sketch_data_url") or st.session_state.get("aerial_data_url") or "").strip()
+    safe_aerial_src = html.escape(aerial_src, quote=True) if aerial_src.startswith("data:image/") else ""
+    
+    def _framed_shot(title, src, alt, max_height, compact=False):
+        title_style = (
+            "font-weight:800; font-size:10.5px; text-align:center; padding:2px 6px; margin-bottom:2px;"
+            if compact else
+            "font-weight:800; font-size:12.5px; text-align:center; margin-bottom:1.2mm;"
+        )
+        frame_pad = "3px" if compact else "1.6mm"
+        return (
+            f'<div style="border:1.4px solid #000; background:#fff; padding:{frame_pad}; box-sizing:border-box;">'
+            f'<div style="{title_style}">{title}</div>'
+            f'<img src="{src}" alt="{alt}" style="width:100%; max-height:{max_height}; height:auto; object-fit:contain; display:block; margin:0 auto;">'
+            "</div>"
+        )
+    
+    _single_img = "width:100%; max-height:138mm; height:auto; object-fit:contain; display:block; margin:0 auto;"
+    if safe_sketch_src and safe_aerial_src and st.session_state.get("aerial_place") == "beside":
+        sketch_figure = (
+            '<div style="display:flex; justify-content:space-between; width:100%; align-items:stretch;">'
+            f'<div style="width:49%;">{_framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "70mm", True)}</div>'
+            f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "70mm", True)}</div>'
+            "</div>"
+        )
+    elif safe_sketch_src and safe_aerial_src:
+        sketch_figure = (
+            _framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "70mm", True)
+            + '<div style="height:2mm;"></div>'
+            + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "70mm", True)
+        )
+    elif safe_aerial_src:
+        sketch_figure = (
+            f'<img src="{safe_aerial_src}" alt="لقطة التصوير الجوي" style="{_single_img}">'
+        )
+    elif safe_sketch_src:
+        sketch_figure = (
+            f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="{_single_img}">'
+        )
+    else:
+        sketch_figure = '<div style="width:100%;height:135mm;border:1.5px solid #000;border-radius:4px;background:#fff;"></div>'
+    logo_src = get_base64_image("traffic_logo.png")
+    sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
+    stored_sig = str(st.session_state.get("sig_base64") or "").strip()
+    if not sig_officer and stored_sig.startswith("data:image/"):
+        sig_officer = stored_sig
+    elif not sig_officer and stored_sig:
+        sig_officer = get_base64_image(stored_sig)
+    sig_supervisor = _signature_data_url(
+        "signature_supervisor.png",
+        "signature_supervisor.jpg",
+        "signature_supervisor.jpeg",
     )
-    frame_pad = "3px" if compact else "1.6mm"
-    return (
-        f'<div style="border:1.4px solid #000; background:#fff; padding:{frame_pad}; box-sizing:border-box;">'
-        f'<div style="{title_style}">{title}</div>'
-        f'<img src="{src}" alt="{alt}" style="width:100%; max-height:{max_height}; height:auto; object-fit:contain; display:block; margin:0 auto;">'
-        "</div>"
+    sig_manager = _signature_data_url(
+        "signature_manager.png",
+        "signature_manager.jpg",
+        "signature_manager.jpeg",
     )
-
-_single_img = "width:100%; max-height:138mm; height:auto; object-fit:contain; display:block; margin:0 auto;"
-if safe_sketch_src and safe_aerial_src and st.session_state.get("aerial_place") == "beside":
-    sketch_figure = (
-        '<div style="display:flex; justify-content:space-between; width:100%; align-items:stretch;">'
-        f'<div style="width:49%;">{_framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "70mm", True)}</div>'
-        f'<div style="width:49%;">{_framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "70mm", True)}</div>'
-        "</div>"
-    )
-elif safe_sketch_src and safe_aerial_src:
-    sketch_figure = (
-        _framed_shot("الكروكي التوضيحي", safe_sketch_src, "كروكي الحادث", "70mm", True)
-        + '<div style="height:2mm;"></div>'
-        + _framed_shot("التصوير الجوي الفضائي", safe_aerial_src, "لقطة التصوير الجوي", "70mm", True)
-    )
-elif safe_aerial_src:
-    sketch_figure = (
-        f'<img src="{safe_aerial_src}" alt="لقطة التصوير الجوي" style="{_single_img}">'
-    )
-elif safe_sketch_src:
-    sketch_figure = (
-        f'<img src="{safe_sketch_src}" alt="كروكي الحادث" style="{_single_img}">'
-    )
-else:
-    sketch_figure = '<div style="width:100%;height:135mm;border:1.5px solid #000;border-radius:4px;background:#fff;"></div>'
-logo_src = get_base64_image("traffic_logo.png")
-sig_officer = _signature_data_url("signature.png", "signature.jpg", "signature.jpeg")
-stored_sig = str(st.session_state.get("sig_base64") or "").strip()
-if not sig_officer and stored_sig.startswith("data:image/"):
-    sig_officer = stored_sig
-elif not sig_officer and stored_sig:
-    sig_officer = get_base64_image(stored_sig)
-sig_supervisor = _signature_data_url(
-    "signature_supervisor.png",
-    "signature_supervisor.jpg",
-    "signature_supervisor.jpeg",
-)
-sig_manager = _signature_data_url(
-    "signature_manager.png",
-    "signature_manager.jpg",
-    "signature_manager.jpeg",
-)
-def build_header():
-    logo_html = f'<img src="{logo_src}" alt="شعار المرور">' if logo_src else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
-    return f"""
-    <div class="header-Title">بسم الله الرحمن الرحيم</div>
-    <div class="header-box">
-        <div class="header-right">
-            المملكة العربية السعودية<br>وزارة الداخلية<br>الأمن العام<br>الإدارة العامة للمرور<br>{dept_region}<br>{dept_branch}
+    def build_header():
+        logo_html = f'<img src="{logo_src}" alt="شعار المرور">' if logo_src else '<div class="logo-fallback">الأمن العام<br>المرور</div>'
+        return f"""
+        <div class="header-Title">بسم الله الرحمن الرحيم</div>
+        <div class="header-box">
+            <div class="header-right">
+                المملكة العربية السعودية<br>وزارة الداخلية<br>الأمن العام<br>الإدارة العامة للمرور<br>{dept_region}<br>{dept_branch}
+            </div>
+            <div class="header-logo">{logo_html}</div>
+            <div class="header-center">
+                الرقم: ...........................<br>
+                التاريخ: ..........................<br>
+                المشفوعات: ....................<br>
+                الموضوع: .......................
+            </div>
         </div>
-        <div class="header-logo">{logo_html}</div>
-        <div class="header-center">
-            الرقم: ...........................<br>
-            التاريخ: ..........................<br>
-            المشفوعات: ....................<br>
-            الموضوع: .......................
-        </div>
-    </div>
-    """
-parties_head = "".join(f"<th>{label}</th>" for _key, label in _party_columns)
-vehicles_head = "".join(f"<th>{label}</th>" for _key, label in _vehicle_columns)
-if not isinstance(parties_df, pd.DataFrame):
-    parties_df = pd.DataFrame(st.session_state.get("parties") or [])
-if not isinstance(vehicles_df, pd.DataFrame):
-    vehicles_df = pd.DataFrame(st.session_state.get("vehicles") or [])
-parties_rows = ""
-for _, row in parties_df.iterrows():
-    parties_rows += "<tr>" + "".join(
-        f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>" for key, _label in _party_columns
-    ) + "</tr>"
-vehicles_rows = ""
-for _, row in vehicles_df.iterrows():
-    vehicles_rows += "<tr>" + "".join(
-        f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>" for key, _label in _vehicle_columns
-    ) + "</tr>"
-_p1_party_count = int(parties_df.shape[0]) if isinstance(parties_df, pd.DataFrame) else 0
-p1_page_class = "page report-page page-flow page-p1"
-if _p1_party_count > 3:
-    p1_page_class += " compact-rows"
-acc_num = _page1_cell(acc_num)
-acc_date = _page1_cell(acc_date)
-acc_time = _page1_cell(acc_time)
-acc_loc = _page1_cell(acc_loc)
-acc_type = _page1_cell(acc_type)
-acc_injuries = _page1_cell(acc_injuries)
-acc_deaths = _page1_cell(acc_deaths)
-acc_weather = _page1_cell(acc_weather)
-acc_cause = _page1_cell(acc_cause)
-acc_results = _page1_cell(acc_results)
-acc_how = _page1_cell(acc_how)
-dept_region = _page1_cell(dept_region)
-dept_branch = _page1_cell(dept_branch)
-officer_1_name = _page1_cell(st.session_state.get("officer_1_name") or officer_1_name)
-officer_1_rank = _page1_cell(st.session_state.get("officer_1_rank") or officer_1_rank)
-officer_2_name = _page1_cell(st.session_state.get("officer_2_name") or officer_2_name)
-officer_2_rank = _page1_cell(st.session_state.get("officer_2_rank") or officer_2_rank)
-manager_name = _page1_cell(st.session_state.get("manager_name") or manager_name)
-manager_rank = _page1_cell(st.session_state.get("manager_rank") or manager_rank)
-accident_nature_val = _page1_cell(accident_nature_val)
-rights_status_val = _page1_cell(rights_status_val)
-participating_agency = _page1_cell(participating_agency)
-escaped_vehicles = _page1_cell(escaped_vehicles)
-shots_fired = _page1_cell(shots_fired)
-contraband_found = _page1_cell(contraband_found)
-road_name_sign = _page1_cell(road_name_sign)
-results_html = "<br>".join(html.escape(line) for line in acc_results.split("\n") if line.strip())
-acc_how_html = html.escape(acc_how).replace("\n", "<br>")
-criminal_details_html = ""
-if "جنائي" in (accident_nature or ""):
-    criminal_details_html = f"""
-        <div class="table-scroll"><table>
-            <tr><th>تفاصيل الشق الجنائي والأمني</th></tr>
-            <tr><td style="text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
-            <tr><td style="text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
-            <tr><td style="text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
-            <tr><td style="text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
-        </table></div>
-    """
-official_footer_html = build_official_page_footer_html(
-    st.session_state.get("p1_dept_region", dept_region),
-    st.session_state.get("p1_dept_branch", dept_branch),
-)
-photos_list = list(st.session_state.gallery_photos or [])
-include_sketch = st.session_state.get("include_sketch", True) is True
-photos_pages_html = ""
-photos_per_page = 6
-annex_first_page = 5 if include_sketch else 4
-for page_idx in range(0, len(photos_list), photos_per_page):
-    page_photos = photos_list[page_idx:page_idx + photos_per_page]
-    if not page_photos:
-        continue
-    photo_cards = ""
-    for offset, entry in enumerate(page_photos):
-        number = page_idx + offset + 1
-        safe_caption = html.escape(entry.get("caption") or "")
-        photo_cards += f"""
-    <div class="photo-card">
-        <img src="{entry['b64']}" alt="صورة {number}">
-        <div class="photo-meta">{number}<br>{safe_caption}</div>
-    </div>
-    """
-    page_number = annex_first_page + (page_idx // photos_per_page)
-    photos_pages_html += f"""
-    <div class="page report-page photo-annex">
-        {build_header()}
-        <div class="section-badge">ملحق الصور الفوتوغرافية لموقع الحادث</div>
-        <div class="photo-grid">{photo_cards}</div>
-        {official_footer_html}
-    </div>
-    """
-page_number_css = ""
-body_class = ""
-sketch_page_html = ""
-legend_cells = []
-for legend_index, legend_line in enumerate(legend_keys, start=1):
-    legend_text = html.escape(str(legend_line or "").strip())
-    if not legend_text:
-        continue
-    legend_cells.append(
-        f"<td style=\"font-size:10px; padding:3px 6px; text-align:right; line-height:1.2;\">({legend_index}) {legend_text}</td>"
+        """
+    # قيم آمنة عند عدم رسم التبويب النشط في هذا التشغيل
+    try:
+        _party_columns
+    except NameError:
+        _party_columns = list(_PARTY_TABLE_COLUMNS)
+    try:
+        _vehicle_columns
+    except NameError:
+        _vehicle_columns = list(_VEHICLE_TABLE_COLUMNS)
+    try:
+        parties_df
+    except NameError:
+        parties_df = pd.DataFrame(st.session_state.get("parties") or [])
+    try:
+        vehicles_df
+    except NameError:
+        vehicles_df = pd.DataFrame(st.session_state.get("vehicles") or [])
+    try:
+        acc_num
+    except NameError:
+        acc_num = st.session_state.get("p1_acc_number", "")
+    try:
+        acc_date
+    except NameError:
+        acc_date = st.session_state.get("hijri_date") or st.session_state.get("p1_acc_date", "")
+    try:
+        acc_time
+    except NameError:
+        acc_time = st.session_state.get("p1_acc_time", "")
+    try:
+        acc_loc
+    except NameError:
+        acc_loc = st.session_state.get("p1_acc_location", "")
+    try:
+        acc_type
+    except NameError:
+        acc_type = st.session_state.get("p1_acc_type_choice") or st.session_state.get("p1_acc_type", "")
+    try:
+        acc_injuries
+    except NameError:
+        acc_injuries = st.session_state.get("p1_acc_injuries", 0)
+    try:
+        acc_deaths
+    except NameError:
+        acc_deaths = st.session_state.get("p1_acc_deaths", 0)
+    try:
+        acc_weather
+    except NameError:
+        acc_weather = st.session_state.get("p1_acc_weather_choice") or st.session_state.get("p1_acc_weather", "")
+    try:
+        acc_cause
+    except NameError:
+        acc_cause = st.session_state.get("p1_acc_cause", "")
+    try:
+        acc_results
+    except NameError:
+        acc_results = st.session_state.get("accident_results", "")
+    try:
+        acc_how
+    except NameError:
+        acc_how = st.session_state.get("technical_description", "")
+    try:
+        accident_nature_val
+    except NameError:
+        accident_nature_val = st.session_state.get("accident_nature") or st.session_state.get("acc_nature_sel", "")
+    try:
+        rights_status_val
+    except NameError:
+        rights_status_val = st.session_state.get("rights_status") or st.session_state.get("rights_sel", "")
+    try:
+        participating_agency
+    except NameError:
+        participating_agency = ""
+    try:
+        escaped_vehicles
+    except NameError:
+        escaped_vehicles = ""
+    try:
+        shots_fired
+    except NameError:
+        shots_fired = ""
+    try:
+        contraband_found
+    except NameError:
+        contraband_found = ""
+    try:
+        road_name_sign
+    except NameError:
+        road_name_sign = st.session_state.get("sketch_road_name", "")
+    try:
+        legend_keys
+    except NameError:
+        legend_keys = [str(st.session_state.get(f"legend_key_{index}") or "") for index in range(1, 11)]
+    try:
+        final_actions_html
+    except NameError:
+        _actions_raw = str(st.session_state.get("actions_taken_editor") or "")
+        final_actions_html = "<br>".join(html.escape(line.strip()) for line in _actions_raw.splitlines() if line.strip())
+    
+    parties_head = "".join(f"<th>{label}</th>" for _key, label in _party_columns)
+    vehicles_head = "".join(f"<th>{label}</th>" for _key, label in _vehicle_columns)
+    if not isinstance(parties_df, pd.DataFrame):
+        parties_df = pd.DataFrame(st.session_state.get("parties") or [])
+    if not isinstance(vehicles_df, pd.DataFrame):
+        vehicles_df = pd.DataFrame(st.session_state.get("vehicles") or [])
+    parties_rows = ""
+    for _, row in parties_df.iterrows():
+        parties_rows += "<tr>" + "".join(
+            f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>" for key, _label in _party_columns
+        ) + "</tr>"
+    vehicles_rows = ""
+    for _, row in vehicles_df.iterrows():
+        vehicles_rows += "<tr>" + "".join(
+            f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>" for key, _label in _vehicle_columns
+        ) + "</tr>"
+    _p1_party_count = int(parties_df.shape[0]) if isinstance(parties_df, pd.DataFrame) else 0
+    p1_page_class = "page report-page page-flow page-p1"
+    if _p1_party_count > 3:
+        p1_page_class += " compact-rows"
+    acc_num = _page1_cell(acc_num)
+    acc_date = _page1_cell(acc_date)
+    acc_time = _page1_cell(acc_time)
+    acc_loc = _page1_cell(acc_loc)
+    acc_type = _page1_cell(acc_type)
+    acc_injuries = _page1_cell(acc_injuries)
+    acc_deaths = _page1_cell(acc_deaths)
+    acc_weather = _page1_cell(acc_weather)
+    acc_cause = _page1_cell(acc_cause)
+    acc_results = _page1_cell(acc_results)
+    acc_how = _page1_cell(acc_how)
+    dept_region = _page1_cell(dept_region)
+    dept_branch = _page1_cell(dept_branch)
+    officer_1_name = _page1_cell(st.session_state.get("officer_1_name") or officer_1_name)
+    officer_1_rank = _page1_cell(st.session_state.get("officer_1_rank") or officer_1_rank)
+    officer_2_name = _page1_cell(st.session_state.get("officer_2_name") or officer_2_name)
+    officer_2_rank = _page1_cell(st.session_state.get("officer_2_rank") or officer_2_rank)
+    manager_name = _page1_cell(st.session_state.get("manager_name") or manager_name)
+    manager_rank = _page1_cell(st.session_state.get("manager_rank") or manager_rank)
+    accident_nature_val = _page1_cell(accident_nature_val)
+    rights_status_val = _page1_cell(rights_status_val)
+    participating_agency = _page1_cell(participating_agency)
+    escaped_vehicles = _page1_cell(escaped_vehicles)
+    shots_fired = _page1_cell(shots_fired)
+    contraband_found = _page1_cell(contraband_found)
+    road_name_sign = _page1_cell(road_name_sign)
+    results_html = "<br>".join(html.escape(line) for line in acc_results.split("\n") if line.strip())
+    acc_how_html = html.escape(acc_how).replace("\n", "<br>")
+    criminal_details_html = ""
+    if "جنائي" in (accident_nature or ""):
+        criminal_details_html = f"""
+            <div class="table-scroll"><table>
+                <tr><th>تفاصيل الشق الجنائي والأمني</th></tr>
+                <tr><td style="text-align:right;">الجهة الأمنية المباشرة: {html.escape(participating_agency)}</td></tr>
+                <tr><td style="text-align:right;">بيانات المركبات الهاربة أو المعترضة: {html.escape(escaped_vehicles)}</td></tr>
+                <tr><td style="text-align:right;">هل تم إطلاق نار أثناء المطاردة؟ {html.escape(shots_fired)}</td></tr>
+                <tr><td style="text-align:right;">نتيجة تفتيش المركبة: {html.escape(contraband_found)}</td></tr>
+            </table></div>
+        """
+    official_footer_html = build_official_page_footer_html(
+        st.session_state.get("p1_dept_region", dept_region),
+        st.session_state.get("p1_dept_branch", dept_branch),
     )
-legend_rows = ""
-for pair_start in range(0, len(legend_cells), 2):
-    pair = legend_cells[pair_start:pair_start + 2]
-    if len(pair) == 1:
-        pair.append("<td></td>")
-    legend_rows += "<tr>" + "".join(pair) + "</tr>"
-legend_table_html = (
-    '<table class="sketch-legend" style="width:100%; border-collapse:collapse; margin:2mm 0 0 0; max-height:15mm; overflow:hidden;">'
-    f"{legend_rows}</table>"
-    if legend_rows else ""
-)
-if include_sketch:
-    sketch_page_html = f"""
-    <div class="page report-page">
-        {build_header()}
-        <div class="section-badge">كروكي وتوثيق موقع الحادث</div>
-        <div style="width:100%; text-align:center; margin-top:2px;">
-            {sketch_figure}
+    photos_list = list(st.session_state.gallery_photos or [])
+    include_sketch = st.session_state.get("include_sketch", True) is True
+    photos_pages_html = ""
+    photos_per_page = 6
+    annex_first_page = 5 if include_sketch else 4
+    for page_idx in range(0, len(photos_list), photos_per_page):
+        page_photos = photos_list[page_idx:page_idx + photos_per_page]
+        if not page_photos:
+            continue
+        photo_cards = ""
+        for offset, entry in enumerate(page_photos):
+            number = page_idx + offset + 1
+            safe_caption = html.escape(entry.get("caption") or "")
+            photo_cards += f"""
+        <div class="photo-card">
+            <img src="{entry['b64']}" alt="صورة {number}">
+            <div class="photo-meta">{number}<br>{safe_caption}</div>
         </div>
-        {legend_table_html}
-        {official_footer_html}
-    </div>
-    """
-full_report_html = f"""
-<!DOCTYPE html>
-<html lang="ar" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<style>
-    @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700&display=swap');
-    @page {{ size: A4 portrait; margin: 0mm; }}
-    html, body {{ height: 100%; margin: 0; }}
-    body {{
-        font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0;
-        display: flex; flex-direction: column; overflow: hidden;
-    }}
-    .report-viewport {{
-        flex: 1 1 auto; width: 100%; max-width: none;
-        overflow: auto; -webkit-overflow-scrolling: touch;
-    }}
-    .report-sheet {{
-        width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
-        transform: none;
-    }}
-    .report-sheet .header-Title,
-    .report-sheet .section-badge {{
-        font-size: 15px !important; font-weight: 700;
-    }}
-    .report-sheet .box-content,
-    .report-sheet .header-box,
-    .report-sheet .photo-meta,
-    .report-sheet p,
-    .report-sheet li {{
-        font-size: 15px !important; font-weight: 600;
-    }}
-    .report-sheet th,
-    .report-sheet td {{
-        font-size: 14px !important; font-weight: 600;
-    }}
-    .report-sheet th {{ font-weight: 700; }}
-    .page, .report-page, .a4-page {{
-        background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
-        min-height: 297mm; height: auto; margin: 0 auto 8mm auto;
-        padding: 6mm 11mm 5mm 11mm; box-sizing: border-box; position: relative;
-        display: flex; flex-direction: column; justify-content: flex-start;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
-        transform: none;
-    }}
-    .report-sheet table,
-    .report-sheet .table-scroll,
-    .report-sheet .box-content,
-    .report-sheet .header-box,
-    .report-sheet .photo-grid,
-    .report-sheet p,
-    .report-sheet li {{
-        width: 100%; max-width: 100%; box-sizing: border-box;
-    }}
-    .page-flow {{
-        display: flex; flex-direction: column; justify-content: flex-start;
-    }}
-    .page-flow .section-badge {{
-        margin: 4px auto;
-    }}
-    .page-flow th, .page-flow td {{
-        padding: 4px 7px;
-    }}
-    .page-flow > .table-scroll,
-    .page-flow > .box-content {{
-        flex: 0 0 auto;
-    }}
-    .photo-annex {{ page-break-before: always; overflow: visible; }}
-    .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
-    .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
-    .photo-annex .section-badge {{ margin: 4px auto 6px auto; padding: 3px 14px; }}
-    .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; overflow: visible; }}
-    .photo-card {{
-        width: 48%; margin-bottom: 8px; text-align: center; overflow: visible;
-        break-inside: avoid; page-break-inside: avoid;
-    }}
-    .photo-card img {{
-        width: auto; max-width: 100%; max-height: 185px; height: auto; object-fit: contain;
-        display: block; margin: 0 auto;
-        border: 2px solid #1b4332; border-radius: 6px; background: #fff;
-    }}
-    .page-three .sign-table {{ margin-top: 8px; }}
-    .photo-card .photo-meta {{
-        margin-top: 4px; font-weight: 600; font-size: 15px; line-height: 1.35;
-        overflow: visible; white-space: normal;
-    }}
-    .logo-fallback {{
-        border: 2px solid #1b4332; border-radius: 50%; width: 80px; height: 80px;
-        display: flex; align-items: center; justify-content: center; margin: auto;
-        font-weight: bold; color: #1b4332; line-height: 1.25; text-align: center;
-    }}
-    .header-logo img {{
-        height: 110px; width: auto; max-width: 120px; object-fit: contain;
-        display: block; margin: 0 auto;
-    }}
-    .header-Title {{ text-align: center; font-size: 15px; font-weight: 700; margin-bottom: 6px; }}
-    .header-box {{
-        position: relative; display: flex; justify-content: space-between; align-items: center;
-        min-height: 128px; border-bottom: 3px double #1b4332; padding-bottom: 10px;
-        margin-bottom: 18px; font-size: 15px; font-weight: 700; line-height: 1.6;
-    }}
-    .header-right {{ width: 36%; text-align: right; }}
-    .header-center {{ width: 36%; text-align: center; }}
-    .header-logo {{
-        position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
-        display: flex; justify-content: center; align-items: center; margin: 0;
-    }}
-    .section-badge {{
-        background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
-        padding: 5px 25px; font-weight: 700; font-size: 15px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
-    }}
-    table {{ width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 14px; }}
-    th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-size: 14px; font-weight: 600; }}
-    th {{ font-weight: 700; background-color: #d8f3dc; color: #1b4332; }}
-    .box-content {{
-        border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
-        line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
-    }}
-    .page-num {{ display: none !important; }}
-    .official-page-footer, .official-footer, .page-footer, .footer {{
-        position: relative; bottom: auto; left: auto; right: auto;
-        width: 100%; margin-top: auto; padding-top: 5mm; flex-shrink: 0;
-        box-sizing: border-box; direction: rtl;
-        page-break-inside: avoid; break-inside: avoid; page-break-before: avoid; break-before: avoid;
-        -webkit-print-color-adjust: exact; print-color-adjust: exact;
-    }}
-    .official-footer-line-primary {{
-        width: 100%; height: 0; border-top: 2.2px solid #1b4332 !important; margin: 0;
-    }}
-    .official-footer-line-secondary {{
-        width: 100%; height: 0; border-top: 0.9px solid #1b4332 !important;
-        margin-top: 2.5px; margin-bottom: 5px;
-    }}
-    .official-footer-meta {{
-        display: flex; justify-content: space-between; align-items: center;
-        font-size: 11.5px; font-weight: 700; color: #111827 !important;
-        line-height: 1.3; padding: 0 2px;
-    }}
-    .footer-col-right {{ text-align: right; flex: 1; }}
-    .footer-col-center {{
-        text-align: center; flex: 0 0 auto; font-size: 10.5px; font-weight: 600;
-        color: #1b4332 !important; padding: 0 12px;
-    }}
-    .footer-col-left {{ text-align: left; flex: 1; }}
-    .road-sign {{
-        background: #2d6a4f; color: white; border: 3px solid white; outline: 3px solid #2d6a4f;
-        border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 15px; display: inline-block; margin-bottom: 25px;
-    }}
-    .table-scroll {{ width: 100%; max-width: 100%; }}
-    /* === توزيع الصفحة الأولى الموزون (يملأ الورقة بدون فراغ سفلي) === */
-    .page-p1 .p1-body-flex {{
-        flex: 1 1 auto !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: space-between !important;
-        padding: 3mm 0 7mm 0 !important;
-        min-height: 0 !important;
-    }}
-    .page-p1:not(.compact-rows) .p1-section-group th {{
-        padding: 9px 8px !important;
-        font-size: 12.5px !important;
-    }}
-    .page-p1:not(.compact-rows) .p1-section-group td {{
-        padding: 12px 8px !important;
-        font-size: 12.5px !important;
-    }}
-    .page-p1:not(.compact-rows) .section-title,
-    .page-p1:not(.compact-rows) .badge-title,
-    .page-p1:not(.compact-rows) .section-badge {{
-        margin-bottom: 6px !important;
-        padding: 5px 18px !important;
-    }}
-    .page-p1.compact-rows .p1-section-group th,
-    .page-p1.compact-rows .p1-section-group td {{
-        padding: 5px 6px !important;
-        font-size: 11px !important;
-    }}
-    /* === توزيع الصفحة الثالثة ومساحة التوقيع والختم الرسمي === */
-    .page-p3 .p3-body-flex {{
-        flex: 1 1 auto !important;
-        display: flex !important;
-        flex-direction: column !important;
-        justify-content: space-between !important;
-        padding: 4mm 0 7mm 0 !important;
-        min-height: 0 !important;
-    }}
-    .page-p3 table th {{
-        padding: 8px 10px !important;
-        font-size: 13px !important;
-    }}
-    .page-p3 table td {{
-        padding: 10px 12px !important;
-        font-size: 12.5px !important;
-        line-height: 1.75 !important;
-    }}
-    .page-p3 td.actions-body {{
-        min-height: 28mm !important;
-        height: 28mm !important;
-        line-height: 1.85 !important;
-        padding: 10px 14px !important;
-        vertical-align: top !important;
-    }}
-    .page-p3 tr.sig-row td {{
-        height: 28mm !important;
-        min-height: 28mm !important;
-        vertical-align: top !important;
-        padding-top: 8px !important;
-    }}
-    .page-p1 > .official-page-footer,
-    .page-p3 > .official-page-footer {{
-        margin-top: 0 !important;
-        flex-shrink: 0 !important;
-    }}
-    @media screen {{
-        html, body, .report-viewport {{ overflow: auto; }}
-        .report-sheet, .page, .report-page, .a4-page {{
-            width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
-            min-height: 297mm !important; height: auto !important;
-            transform: none !important;
+        """
+        page_number = annex_first_page + (page_idx // photos_per_page)
+        photos_pages_html += f"""
+        <div class="page report-page photo-annex">
+            {build_header()}
+            <div class="section-badge">ملحق الصور الفوتوغرافية لموقع الحادث</div>
+            <div class="photo-grid">{photo_cards}</div>
+            {official_footer_html}
+        </div>
+        """
+    page_number_css = ""
+    body_class = ""
+    sketch_page_html = ""
+    legend_cells = []
+    for legend_index, legend_line in enumerate(legend_keys, start=1):
+        legend_text = html.escape(str(legend_line or "").strip())
+        if not legend_text:
+            continue
+        legend_cells.append(
+            f"<td style=\"font-size:10px; padding:3px 6px; text-align:right; line-height:1.2;\">({legend_index}) {legend_text}</td>"
+        )
+    legend_rows = ""
+    for pair_start in range(0, len(legend_cells), 2):
+        pair = legend_cells[pair_start:pair_start + 2]
+        if len(pair) == 1:
+            pair.append("<td></td>")
+        legend_rows += "<tr>" + "".join(pair) + "</tr>"
+    legend_table_html = (
+        '<table class="sketch-legend" style="width:100%; border-collapse:collapse; margin:2mm 0 0 0; max-height:15mm; overflow:hidden;">'
+        f"{legend_rows}</table>"
+        if legend_rows else ""
+    )
+    if include_sketch:
+        sketch_page_html = f"""
+        <div class="page report-page">
+            {build_header()}
+            <div class="section-badge">كروكي وتوثيق موقع الحادث</div>
+            <div style="width:100%; text-align:center; margin-top:2px;">
+                {sketch_figure}
+            </div>
+            {legend_table_html}
+            {official_footer_html}
+        </div>
+        """
+    full_report_html = f"""
+    <!DOCTYPE html>
+    <html lang="ar" dir="rtl">
+    <head>
+    <meta charset="UTF-8">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@500;700&display=swap');
+        @page {{ size: A4 portrait; margin: 0mm; }}
+        html, body {{ height: 100%; margin: 0; }}
+        body {{
+            font-family: 'Tajawal', sans-serif; background: #e5e7eb; margin: 0;
+            display: flex; flex-direction: column; overflow: hidden;
         }}
-        .photo-annex, .photo-annex .photo-card, .photo-annex .photo-meta {{
-            overflow: visible; max-height: none;
+        .report-viewport {{
+            flex: 1 1 auto; width: 100%; max-width: none;
+            overflow: auto; -webkit-overflow-scrolling: touch;
         }}
-        .table-scroll, table, .table-scroll table, .box-content, .header-box {{
-            width: 100% !important; max-width: 100% !important; box-sizing: border-box;
+        .report-sheet {{
+            width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
+            transform: none;
         }}
-        table, .table-scroll table {{ table-layout: fixed; }}
-        th, td {{
-            white-space: normal; overflow-wrap: anywhere; word-break: break-word;
-        }}
-        .page.page-p1, .page.page-p3 {{
-            height: 297mm !important;
-            max-height: 297mm !important;
-            overflow: hidden !important;
-        }}
-    }}
-    @media screen and (max-width: 768px) {{
-        .report-viewport {{ overflow: auto; width: 100%; max-width: none; }}
-        .report-sheet, .page, .report-page, .a4-page {{
-            width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
-            min-height: 297mm !important; height: auto !important;
-            transform: none !important;
-        }}
-        .page-flow {{ justify-content: flex-start; }}
-        .table-scroll, table, .table-scroll table {{
-            table-layout: fixed; width: 100% !important; max-width: 100% !important;
-        }}
-        th, td {{
-            white-space: normal; overflow-wrap: anywhere; word-break: break-word;
-        }}
-        .page.page-p1, .page.page-p3 {{
-            height: 297mm !important;
-            max-height: 297mm !important;
-            overflow: hidden !important;
-        }}
-    }}
-    @media print {{
-        html, body {{
-            width: 210mm !important; height: auto; display: block; overflow: visible;
-            background: #ffffff; margin: 0 !important; padding: 0 !important;
-            -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
-        }}
-        body > div:not(.bayyinah-print-bar),
-        .report-viewport, .report-sheet,
-        .report-wrapper, .pages-wrapper, .preview-container {{
-            margin: 0 !important; padding: 0 !important; gap: 0 !important;
-            border: none !important; box-shadow: none !important;
-            background: transparent !important; display: block !important;
-        }}
-        button, .no-print, .stButton, .stDownloadButton,
-        section[data-testid="stSidebar"], [data-testid="stSidebar"],
-        [data-testid="stSidebarContent"], [data-testid="stSidebarHeader"],
-        [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"],
-        [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"] {{
-            display: none !important;
-        }}
-        .report-viewport {{ overflow: visible; height: auto; width: 210mm; max-width: 210mm; }}
-        .page, .a4-page, .report-page {{
-            width: 210mm !important;
-            height: 294mm !important;
-            min-height: 294mm !important;
-            max-height: 294mm !important;
-            margin: 0 auto !important;
-            padding: 6mm 11mm 5mm 11mm !important;
-            box-sizing: border-box !important;
-            overflow: hidden !important;
-            border: none !important;
-            box-shadow: none !important;
-            position: relative !important;
-            display: flex !important;
-            flex-direction: column !important;
-            justify-content: flex-start !important;
-            page-break-after: always !important;
-            break-after: page !important;
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-            transform: none !important;
-        }}
-        .page:last-of-type, .a4-page:last-of-type, .report-page:last-of-type,
-        .report-sheet > .report-page:last-child {{
-            page-break-after: auto !important; break-after: auto !important;
-        }}
-        .page table, .report-page table, .a4-page table, .box-content {{
-            margin-bottom: 6px !important;
-        }}
-        .table-scroll {{ overflow: visible; max-width: none; }}
-        table, .table-scroll, .table-scroll table, .box-content, .header-box, .photo-grid {{
-            width: 100% !important; max-width: 100% !important; min-width: 0 !important;
-            box-sizing: border-box; border-collapse: collapse;
-        }}
-        table, .table-scroll table {{ border: 1px solid #000; }}
-        th, td {{ border: 1px solid #000 !important; }}
         .report-sheet .header-Title,
         .report-sheet .section-badge {{
             font-size: 15px !important; font-weight: 700;
@@ -5609,35 +5455,123 @@ full_report_html = f"""
             font-size: 15px !important; font-weight: 600;
         }}
         .report-sheet th,
-        .report-sheet td {{ font-size: 14px !important; font-weight: 600; }}
+        .report-sheet td {{
+            font-size: 14px !important; font-weight: 600;
+        }}
         .report-sheet th {{ font-weight: 700; }}
-        .sign-table, .sign-table tr, .sign-table td {{
-            page-break-inside: avoid !important;
-            break-inside: avoid !important;
-            page-break-after: avoid !important;
+        .page, .report-page, .a4-page {{
+            background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
+            min-height: 297mm; height: auto; margin: 0 auto 8mm auto;
+            padding: 6mm 11mm 5mm 11mm; box-sizing: border-box; position: relative;
+            display: flex; flex-direction: column; justify-content: flex-start;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
+            transform: none;
         }}
-        .page-flow {{ justify-content: flex-start !important; }}
-        .page-flow .section-badge {{ margin: 4px auto !important; }}
-        .page-flow th, .page-flow td {{ padding: 4px 7px !important; }}
-        .official-page-footer, .official-footer, .page-footer, .footer {{
-            position: relative !important;
-            bottom: auto !important;
-            left: auto !important;
-            right: auto !important;
-            width: 100% !important;
-            margin-top: auto !important;
-            padding-top: 5mm !important;
-            flex-shrink: 0 !important;
-            page-break-before: avoid !important;
-            break-before: avoid !important;
+        .report-sheet table,
+        .report-sheet .table-scroll,
+        .report-sheet .box-content,
+        .report-sheet .header-box,
+        .report-sheet .photo-grid,
+        .report-sheet p,
+        .report-sheet li {{
+            width: 100%; max-width: 100%; box-sizing: border-box;
         }}
-        .photo-annex {{
-            overflow: hidden; height: 294mm; max-height: 294mm; min-height: 294mm;
-            padding: 7mm 11mm 6mm 11mm;
+        .page-flow {{
+            display: flex; flex-direction: column; justify-content: flex-start;
         }}
-        .photo-annex .photo-card, .photo-annex .photo-meta {{ overflow: visible; max-height: none; }}
+        .page-flow .section-badge {{
+            margin: 4px auto;
+        }}
+        .page-flow th, .page-flow td {{
+            padding: 4px 7px;
+        }}
+        .page-flow > .table-scroll,
+        .page-flow > .box-content {{
+            flex: 0 0 auto;
+        }}
+        .photo-annex {{ page-break-before: always; overflow: visible; }}
+        .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
         .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
-        .header-logo img {{ height: 110px; max-width: 120px; }}
+        .photo-annex .section-badge {{ margin: 4px auto 6px auto; padding: 3px 14px; }}
+        .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; overflow: visible; }}
+        .photo-card {{
+            width: 48%; margin-bottom: 8px; text-align: center; overflow: visible;
+            break-inside: avoid; page-break-inside: avoid;
+        }}
+        .photo-card img {{
+            width: auto; max-width: 100%; max-height: 185px; height: auto; object-fit: contain;
+            display: block; margin: 0 auto;
+            border: 2px solid #1b4332; border-radius: 6px; background: #fff;
+        }}
+        .page-three .sign-table {{ margin-top: 8px; }}
+        .photo-card .photo-meta {{
+            margin-top: 4px; font-weight: 600; font-size: 15px; line-height: 1.35;
+            overflow: visible; white-space: normal;
+        }}
+        .logo-fallback {{
+            border: 2px solid #1b4332; border-radius: 50%; width: 80px; height: 80px;
+            display: flex; align-items: center; justify-content: center; margin: auto;
+            font-weight: bold; color: #1b4332; line-height: 1.25; text-align: center;
+        }}
+        .header-logo img {{
+            height: 110px; width: auto; max-width: 120px; object-fit: contain;
+            display: block; margin: 0 auto;
+        }}
+        .header-Title {{ text-align: center; font-size: 15px; font-weight: 700; margin-bottom: 6px; }}
+        .header-box {{
+            position: relative; display: flex; justify-content: space-between; align-items: center;
+            min-height: 128px; border-bottom: 3px double #1b4332; padding-bottom: 10px;
+            margin-bottom: 18px; font-size: 15px; font-weight: 700; line-height: 1.6;
+        }}
+        .header-right {{ width: 36%; text-align: right; }}
+        .header-center {{ width: 36%; text-align: center; }}
+        .header-logo {{
+            position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+            display: flex; justify-content: center; align-items: center; margin: 0;
+        }}
+        .section-badge {{
+            background: #d8f3dc; border: 1.5px solid #1b4332; border-radius: 6px;
+            padding: 5px 25px; font-weight: 700; font-size: 15px; display: table; margin: 14px auto; text-align: center; color: #1b4332;
+        }}
+        table {{ width: 100%; border-collapse: collapse; margin-bottom: 6px; font-size: 14px; }}
+        th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-size: 14px; font-weight: 600; }}
+        th {{ font-weight: 700; background-color: #d8f3dc; color: #1b4332; }}
+        .box-content {{
+            border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
+            line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
+        }}
+        .page-num {{ display: none !important; }}
+        .official-page-footer, .official-footer, .page-footer, .footer {{
+            position: relative; bottom: auto; left: auto; right: auto;
+            width: 100%; margin-top: auto; padding-top: 5mm; flex-shrink: 0;
+            box-sizing: border-box; direction: rtl;
+            page-break-inside: avoid; break-inside: avoid; page-break-before: avoid; break-before: avoid;
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }}
+        .official-footer-line-primary {{
+            width: 100%; height: 0; border-top: 2.2px solid #1b4332 !important; margin: 0;
+        }}
+        .official-footer-line-secondary {{
+            width: 100%; height: 0; border-top: 0.9px solid #1b4332 !important;
+            margin-top: 2.5px; margin-bottom: 5px;
+        }}
+        .official-footer-meta {{
+            display: flex; justify-content: space-between; align-items: center;
+            font-size: 11.5px; font-weight: 700; color: #111827 !important;
+            line-height: 1.3; padding: 0 2px;
+        }}
+        .footer-col-right {{ text-align: right; flex: 1; }}
+        .footer-col-center {{
+            text-align: center; flex: 0 0 auto; font-size: 10.5px; font-weight: 600;
+            color: #1b4332 !important; padding: 0 12px;
+        }}
+        .footer-col-left {{ text-align: left; flex: 1; }}
+        .road-sign {{
+            background: #2d6a4f; color: white; border: 3px solid white; outline: 3px solid #2d6a4f;
+            border-radius: 8px; padding: 10px 18px; font-weight: bold; font-size: 15px; display: inline-block; margin-bottom: 25px;
+        }}
+        .table-scroll {{ width: 100%; max-width: 100%; }}
+        /* === توزيع الصفحة الأولى الموزون (يملأ الورقة بدون فراغ سفلي) === */
         .page-p1 .p1-body-flex {{
             flex: 1 1 auto !important;
             display: flex !important;
@@ -5665,6 +5599,7 @@ full_report_html = f"""
             padding: 5px 6px !important;
             font-size: 11px !important;
         }}
+        /* === توزيع الصفحة الثالثة ومساحة التوقيع والختم الرسمي === */
         .page-p3 .p3-body-flex {{
             flex: 1 1 auto !important;
             display: flex !important;
@@ -5700,107 +5635,312 @@ full_report_html = f"""
             margin-top: 0 !important;
             flex-shrink: 0 !important;
         }}
+        @media screen {{
+            html, body, .report-viewport {{ overflow: auto; }}
+            .report-sheet, .page, .report-page, .a4-page {{
+                width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
+                min-height: 297mm !important; height: auto !important;
+                transform: none !important;
+            }}
+            .photo-annex, .photo-annex .photo-card, .photo-annex .photo-meta {{
+                overflow: visible; max-height: none;
+            }}
+            .table-scroll, table, .table-scroll table, .box-content, .header-box {{
+                width: 100% !important; max-width: 100% !important; box-sizing: border-box;
+            }}
+            table, .table-scroll table {{ table-layout: fixed; }}
+            th, td {{
+                white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+            }}
+            .page.page-p1, .page.page-p3 {{
+                height: 297mm !important;
+                max-height: 297mm !important;
+                overflow: hidden !important;
+            }}
+        }}
+        @media screen and (max-width: 768px) {{
+            .report-viewport {{ overflow: auto; width: 100%; max-width: none; }}
+            .report-sheet, .page, .report-page, .a4-page {{
+                width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
+                min-height: 297mm !important; height: auto !important;
+                transform: none !important;
+            }}
+            .page-flow {{ justify-content: flex-start; }}
+            .table-scroll, table, .table-scroll table {{
+                table-layout: fixed; width: 100% !important; max-width: 100% !important;
+            }}
+            th, td {{
+                white-space: normal; overflow-wrap: anywhere; word-break: break-word;
+            }}
+            .page.page-p1, .page.page-p3 {{
+                height: 297mm !important;
+                max-height: 297mm !important;
+                overflow: hidden !important;
+            }}
+        }}
+        @media print {{
+            html, body {{
+                width: 210mm !important; height: auto; display: block; overflow: visible;
+                background: #ffffff; margin: 0 !important; padding: 0 !important;
+                -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important;
+            }}
+            body > div:not(.bayyinah-print-bar),
+            .report-viewport, .report-sheet,
+            .report-wrapper, .pages-wrapper, .preview-container {{
+                margin: 0 !important; padding: 0 !important; gap: 0 !important;
+                border: none !important; box-shadow: none !important;
+                background: transparent !important; display: block !important;
+            }}
+            button, .no-print, .stButton, .stDownloadButton,
+            section[data-testid="stSidebar"], [data-testid="stSidebar"],
+            [data-testid="stSidebarContent"], [data-testid="stSidebarHeader"],
+            [data-testid="stSidebarCollapsedControl"], [data-testid="collapsedControl"],
+            [data-testid="stHeader"], [data-testid="stToolbar"], [data-testid="stDecoration"] {{
+                display: none !important;
+            }}
+            .report-viewport {{ overflow: visible; height: auto; width: 210mm; max-width: 210mm; }}
+            .page, .a4-page, .report-page {{
+                width: 210mm !important;
+                height: 294mm !important;
+                min-height: 294mm !important;
+                max-height: 294mm !important;
+                margin: 0 auto !important;
+                padding: 6mm 11mm 5mm 11mm !important;
+                box-sizing: border-box !important;
+                overflow: hidden !important;
+                border: none !important;
+                box-shadow: none !important;
+                position: relative !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: flex-start !important;
+                page-break-after: always !important;
+                break-after: page !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                transform: none !important;
+            }}
+            .page:last-of-type, .a4-page:last-of-type, .report-page:last-of-type,
+            .report-sheet > .report-page:last-child {{
+                page-break-after: auto !important; break-after: auto !important;
+            }}
+            .page table, .report-page table, .a4-page table, .box-content {{
+                margin-bottom: 6px !important;
+            }}
+            .table-scroll {{ overflow: visible; max-width: none; }}
+            table, .table-scroll, .table-scroll table, .box-content, .header-box, .photo-grid {{
+                width: 100% !important; max-width: 100% !important; min-width: 0 !important;
+                box-sizing: border-box; border-collapse: collapse;
+            }}
+            table, .table-scroll table {{ border: 1px solid #000; }}
+            th, td {{ border: 1px solid #000 !important; }}
+            .report-sheet .header-Title,
+            .report-sheet .section-badge {{
+                font-size: 15px !important; font-weight: 700;
+            }}
+            .report-sheet .box-content,
+            .report-sheet .header-box,
+            .report-sheet .photo-meta,
+            .report-sheet p,
+            .report-sheet li {{
+                font-size: 15px !important; font-weight: 600;
+            }}
+            .report-sheet th,
+            .report-sheet td {{ font-size: 14px !important; font-weight: 600; }}
+            .report-sheet th {{ font-weight: 700; }}
+            .sign-table, .sign-table tr, .sign-table td {{
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+                page-break-after: avoid !important;
+            }}
+            .page-flow {{ justify-content: flex-start !important; }}
+            .page-flow .section-badge {{ margin: 4px auto !important; }}
+            .page-flow th, .page-flow td {{ padding: 4px 7px !important; }}
+            .official-page-footer, .official-footer, .page-footer, .footer {{
+                position: relative !important;
+                bottom: auto !important;
+                left: auto !important;
+                right: auto !important;
+                width: 100% !important;
+                margin-top: auto !important;
+                padding-top: 5mm !important;
+                flex-shrink: 0 !important;
+                page-break-before: avoid !important;
+                break-before: avoid !important;
+            }}
+            .photo-annex {{
+                overflow: hidden; height: 294mm; max-height: 294mm; min-height: 294mm;
+                padding: 7mm 11mm 6mm 11mm;
+            }}
+            .photo-annex .photo-card, .photo-annex .photo-meta {{ overflow: visible; max-height: none; }}
+            .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
+            .header-logo img {{ height: 110px; max-width: 120px; }}
+            .page-p1 .p1-body-flex {{
+                flex: 1 1 auto !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
+                padding: 3mm 0 7mm 0 !important;
+                min-height: 0 !important;
+            }}
+            .page-p1:not(.compact-rows) .p1-section-group th {{
+                padding: 9px 8px !important;
+                font-size: 12.5px !important;
+            }}
+            .page-p1:not(.compact-rows) .p1-section-group td {{
+                padding: 12px 8px !important;
+                font-size: 12.5px !important;
+            }}
+            .page-p1:not(.compact-rows) .section-title,
+            .page-p1:not(.compact-rows) .badge-title,
+            .page-p1:not(.compact-rows) .section-badge {{
+                margin-bottom: 6px !important;
+                padding: 5px 18px !important;
+            }}
+            .page-p1.compact-rows .p1-section-group th,
+            .page-p1.compact-rows .p1-section-group td {{
+                padding: 5px 6px !important;
+                font-size: 11px !important;
+            }}
+            .page-p3 .p3-body-flex {{
+                flex: 1 1 auto !important;
+                display: flex !important;
+                flex-direction: column !important;
+                justify-content: space-between !important;
+                padding: 4mm 0 7mm 0 !important;
+                min-height: 0 !important;
+            }}
+            .page-p3 table th {{
+                padding: 8px 10px !important;
+                font-size: 13px !important;
+            }}
+            .page-p3 table td {{
+                padding: 10px 12px !important;
+                font-size: 12.5px !important;
+                line-height: 1.75 !important;
+            }}
+            .page-p3 td.actions-body {{
+                min-height: 28mm !important;
+                height: 28mm !important;
+                line-height: 1.85 !important;
+                padding: 10px 14px !important;
+                vertical-align: top !important;
+            }}
+            .page-p3 tr.sig-row td {{
+                height: 28mm !important;
+                min-height: 28mm !important;
+                vertical-align: top !important;
+                padding-top: 8px !important;
+            }}
+            .page-p1 > .official-page-footer,
+            .page-p3 > .official-page-footer {{
+                margin-top: 0 !important;
+                flex-shrink: 0 !important;
+            }}
+        }}
+        {page_number_css}
+        {OFFICIAL_A4_HIGH_CONTRAST_CSS}
+    </style>
+    <script>
+    function fitReportFrame() {{
+      var bar = document.querySelector(".no-print");
+      var sheet = document.querySelector(".report-sheet");
+      var height = 16;
+      if (bar) height += bar.offsetHeight;
+      if (sheet) height += sheet.scrollHeight;
+      else height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
+      if (window.frameElement) window.frameElement.style.height = Math.ceil(height) + "px";
     }}
-    {page_number_css}
-    {OFFICIAL_A4_HIGH_CONTRAST_CSS}
-</style>
-<script>
-function fitReportFrame() {{
-  var bar = document.querySelector(".no-print");
-  var sheet = document.querySelector(".report-sheet");
-  var height = 16;
-  if (bar) height += bar.offsetHeight;
-  if (sheet) height += sheet.scrollHeight;
-  else height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
-  if (window.frameElement) window.frameElement.style.height = Math.ceil(height) + "px";
-}}
-window.addEventListener("load", fitReportFrame);
-window.addEventListener("resize", fitReportFrame);
-document.addEventListener("load", fitReportFrame, true);
-setTimeout(fitReportFrame, 60);
-setTimeout(fitReportFrame, 400);
-</script>
-</head>
-<body class="{body_class}">
-    <div class="report-viewport">
-    <div class="report-sheet">
-    <div class="{p1_page_class}">
-        {build_header()}
-        <div class="p1-body-flex">
-            <div class="p1-section-group">
-                <div class="section-badge">تقرير حادث مروري</div>
-                <div class="section-badge badge-sub">معلومات الحادث</div>
-                <div class="table-scroll"><table>
-                    <tr>
-                        <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
-                        <th>نوع الحادث</th><th>عدد الإصابات</th><th>عدد الوفيات</th><th>الطقس</th><th>سبب الحادث</th>
-                    </tr>
-                    <tr>
-                        <td>{acc_num}</td><td>{acc_date}</td><td>{acc_time}</td><td>{acc_loc}</td>
-                        <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
-                    </tr>
-                </table></div>
+    window.addEventListener("load", fitReportFrame);
+    window.addEventListener("resize", fitReportFrame);
+    document.addEventListener("load", fitReportFrame, true);
+    setTimeout(fitReportFrame, 60);
+    setTimeout(fitReportFrame, 400);
+    </script>
+    </head>
+    <body class="{body_class}">
+        <div class="report-viewport">
+        <div class="report-sheet">
+        <div class="{p1_page_class}">
+            {build_header()}
+            <div class="p1-body-flex">
+                <div class="p1-section-group">
+                    <div class="section-badge">تقرير حادث مروري</div>
+                    <div class="section-badge badge-sub">معلومات الحادث</div>
+                    <div class="table-scroll"><table>
+                        <tr>
+                            <th>رقم الحادث</th><th>تاريخ الحادث</th><th>الوقت</th><th>موقع الحادث</th>
+                            <th>نوع الحادث</th><th>عدد الإصابات</th><th>عدد الوفيات</th><th>الطقس</th><th>سبب الحادث</th>
+                        </tr>
+                        <tr>
+                            <td>{acc_num}</td><td>{acc_date}</td><td>{acc_time}</td><td>{acc_loc}</td>
+                            <td>{acc_type}</td><td>{acc_injuries}</td><td>{acc_deaths}</td><td>{acc_weather}</td><td>{acc_cause}</td>
+                        </tr>
+                    </table></div>
+                </div>
+                <div class="p1-section-group">
+                    <div class="section-badge badge-sub">معلومات أطراف الحادث</div>
+                    <div class="table-scroll"><table>
+                        <tr>{parties_head}</tr>
+                        {parties_rows}
+                    </table></div>
+                </div>
+                <div class="p1-section-group">
+                    <div class="section-badge badge-sub">معلومات المركبات</div>
+                    <div class="table-scroll"><table>
+                        <tr>{vehicles_head}</tr>
+                        {vehicles_rows}
+                    </table></div>
+                </div>
             </div>
-            <div class="p1-section-group">
-                <div class="section-badge badge-sub">معلومات أطراف الحادث</div>
-                <div class="table-scroll"><table>
-                    <tr>{parties_head}</tr>
-                    {parties_rows}
-                </table></div>
-            </div>
-            <div class="p1-section-group">
-                <div class="section-badge badge-sub">معلومات المركبات</div>
-                <div class="table-scroll"><table>
-                    <tr>{vehicles_head}</tr>
-                    {vehicles_rows}
-                </table></div>
-            </div>
+            {official_footer_html}
         </div>
-        {official_footer_html}
-    </div>
-    <div class="page report-page page-flow">
-        {build_header()}
-        <div class="section-badge">نتائج الحادث</div>
-        <div class="box-content">نتج عن الحادث :<br>{results_html}</div>
-        <div class="section-badge">كيفية وقوع الحادث</div>
-        <div class="box-content">{acc_how_html}</div>
-        {liability_html}
-        {official_footer_html}
-    </div>
-    <div class="page report-page page-three page-flow page-p3">
-        {build_header()}
-        <div class="p3-body-flex">
-            <div class="table-scroll"><table>
-                <tr><th>طبيعة وتصنيف الحادث</th></tr>
-                <tr><td>{html.escape(accident_nature_val or "")}</td></tr>
-            </table></div>
-            <div class="table-scroll"><table>
-                <tr><th>الحقوق الخاصة والعامة</th></tr>
-                <tr><td>{html.escape(rights_status_val or "")}</td></tr>
-            </table></div>
-            <div class="table-scroll"><table>
-                <tr><th>الإجراءات المتخذة</th></tr>
-                <tr><td class="actions-body">{final_actions_html}</td></tr>
-            </table></div>
-            {criminal_details_html}
-            <div class="table-scroll"><table class="sign-table">
-                <tr><th colspan="3">معد التقرير</th></tr>
-                <tr><th>إجراءات الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
-                <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
-                <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
-                <tr class="sig-row"><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
-            </table></div>
+        <div class="page report-page page-flow">
+            {build_header()}
+            <div class="section-badge">نتائج الحادث</div>
+            <div class="box-content">نتج عن الحادث :<br>{results_html}</div>
+            <div class="section-badge">كيفية وقوع الحادث</div>
+            <div class="box-content">{acc_how_html}</div>
+            {liability_html}
+            {official_footer_html}
         </div>
-        {official_footer_html}
-    </div>
-    {sketch_page_html}
-    {photos_pages_html}
-    </div>
-    </div>
-</body>
-</html>
-"""
-with tab_print:
+        <div class="page report-page page-three page-flow page-p3">
+            {build_header()}
+            <div class="p3-body-flex">
+                <div class="table-scroll"><table>
+                    <tr><th>طبيعة وتصنيف الحادث</th></tr>
+                    <tr><td>{html.escape(accident_nature_val or "")}</td></tr>
+                </table></div>
+                <div class="table-scroll"><table>
+                    <tr><th>الحقوق الخاصة والعامة</th></tr>
+                    <tr><td>{html.escape(rights_status_val or "")}</td></tr>
+                </table></div>
+                <div class="table-scroll"><table>
+                    <tr><th>الإجراءات المتخذة</th></tr>
+                    <tr><td class="actions-body">{final_actions_html}</td></tr>
+                </table></div>
+                {criminal_details_html}
+                <div class="table-scroll"><table class="sign-table">
+                    <tr><th colspan="3">معد التقرير</th></tr>
+                    <tr><th>إجراءات الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
+                    <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
+                    <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
+                    <tr class="sig-row"><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
+                </table></div>
+            </div>
+            {official_footer_html}
+        </div>
+        {sketch_page_html}
+        {photos_pages_html}
+        </div>
+        </div>
+    </body>
+    </html>
+    """
+    st.session_state["_cached_full_report_html"] = full_report_html
+else:
+    full_report_html = st.session_state.get("_cached_full_report_html", "")
+if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     render_direct_print_button(
         full_report_html,
         label="🖨️ طباعة التقرير بصيغة A4 / حفظ كـ PDF",
