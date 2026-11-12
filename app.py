@@ -1234,6 +1234,39 @@ def _party_qualification_cell_html(role, qual) -> str:
         'font-size:11px; font-weight:700;">✅ مؤهل للقيادة</span>'
     )
 
+def _plain_text_len_for_autofit(value) -> int:
+    text = re.sub(r"<[^>]+>", " ", str(value or ""))
+    try:
+        text = html.unescape(text)
+    except Exception:
+        pass
+    return len(re.sub(r"\s+", " ", text).strip())
+
+def _estimate_a4_autofit_base_font_px(
+    *,
+    results_text: str = "",
+    how_text: str = "",
+    liability_html: str = "",
+    actions_html: str = "",
+    rights_text: str = "",
+) -> float:
+    """حساب أولي لحجم خط محتوى A4 قبل تشغيل JS auto-fit."""
+    results_n = _plain_text_len_for_autofit(results_text)
+    how_n = _plain_text_len_for_autofit(how_text)
+    liability_n = _plain_text_len_for_autofit(liability_html)
+    actions_n = _plain_text_len_for_autofit(actions_html)
+    rights_n = _plain_text_len_for_autofit(rights_text)
+    score = results_n + how_n + (liability_n * 1.35) + (actions_n * 1.25) + rights_n
+    if liability_n >= 3200 or actions_n >= 1600 or score >= 7000:
+        return 9.5
+    if liability_n >= 2200 or actions_n >= 1100 or score >= 5000:
+        return 10.5
+    if liability_n >= 1400 or actions_n >= 700 or score >= 3200:
+        return 11.5
+    if liability_n >= 900 or score >= 2000:
+        return 12.5
+    return 13.5
+
 def _page1_cell(value):
     if value is None:
         return ""
@@ -3028,7 +3061,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
     inner_content = "".join(blocks)
     return (
         f'<div class="section-badge">الرأي والمسؤولية</div>'
-        f'<div class="box-content liability-box">{inner_content}</div>'
+        f'<div class="box-content liability-box autofit-box" data-autofit="liability">{inner_content}</div>'
     )
 
 _LIABILITY_RATIO_LOOKUP = {
@@ -6397,6 +6430,13 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     road_name_sign = _page1_cell(road_name_sign)
     results_html = "<br>".join(html.escape(line) for line in str(acc_results or "").split("\n") if line.strip())
     acc_how_html = html.escape(str(acc_how or "")).replace("\n", "<br>")
+    a4_autofit_base_font_px = _estimate_a4_autofit_base_font_px(
+        results_text=str(acc_results or ""),
+        how_text=str(acc_how or ""),
+        liability_html=str(liability_html or ""),
+        actions_html=str(final_actions_html or ""),
+        rights_text=str(rights_status_val or ""),
+    )
     criminal_details_html = ""
     accident_nature = str(
         st.session_state.get("accident_nature")
@@ -6506,16 +6546,29 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             width: 210mm; min-width: 210mm; max-width: 210mm; margin: 0 auto;
             transform: none;
         }}
+        :root {{
+            --a4-content-font: {a4_autofit_base_font_px}px;
+            --a4-content-lh: 1.65;
+            --a4-box-pad: 14px;
+            --a4-box-margin: 16px;
+        }}
         .report-sheet .header-Title,
         .report-sheet .section-badge {{
             font-size: 15px !important; font-weight: 700;
         }}
-        .report-sheet .box-content,
+        .report-sheet .box-content:not(.autofit-box),
         .report-sheet .header-box,
         .report-sheet .photo-meta,
         .report-sheet p,
         .report-sheet li {{
             font-size: 15px !important; font-weight: 600;
+        }}
+        .report-sheet .autofit-box,
+        .report-sheet td.actions-body.autofit-box,
+        .report-sheet .sign-table.autofit-box td {{
+            font-size: var(--a4-content-font, 13.5px) !important;
+            line-height: var(--a4-content-lh, 1.65) !important;
+            font-weight: 600;
         }}
         .report-sheet th,
         .report-sheet td {{
@@ -6524,9 +6577,10 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .report-sheet th {{ font-weight: 700; }}
         .page, .report-page, .a4-page {{
             background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
-            min-height: 297mm; height: auto; margin: 0 auto 8mm auto;
+            min-height: 297mm; height: 297mm; max-height: 297mm; margin: 0 auto 8mm auto;
             padding: 6mm 11mm 5mm 11mm; box-sizing: border-box; position: relative;
-            display: flex; flex-direction: column; justify-content: flex-start;
+            display: flex; flex-direction: column; justify-content: space-between;
+            overflow: hidden;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15); page-break-after: always;
             transform: none;
         }}
@@ -6540,7 +6594,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             width: 100%; max-width: 100%; box-sizing: border-box;
         }}
         .page-flow {{
-            display: flex; flex-direction: column; justify-content: flex-start;
+            display: flex; flex-direction: column; justify-content: space-between;
+            box-sizing: border-box;
         }}
         .page-flow .section-badge {{
             margin: 4px auto;
@@ -6548,28 +6603,43 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .page-flow th, .page-flow td {{
             padding: 4px 7px;
         }}
-        .page-flow > .table-scroll,
-        .page-flow > .box-content {{
-            flex: 0 0 auto;
+        .page-body-flex {{
+            flex: 1 1 auto;
+            min-height: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-start;
+            overflow: hidden;
+            width: 100%;
+            box-sizing: border-box;
         }}
-        .page.page-flow:not(.page-p1):not(.page-p3):not(.photo-annex) {{
-            height: auto;
-            max-height: none;
-            overflow: visible;
+        .page-flow > .table-scroll,
+        .page-flow > .box-content,
+        .page-body-flex > .table-scroll,
+        .page-body-flex > .box-content {{
+            flex: 0 1 auto;
+            min-height: 0;
+        }}
+        .page.has-absolute-footer {{
+            padding-bottom: calc(18mm + 12mm);
         }}
         .liability-box {{
-            overflow: visible;
+            overflow: hidden;
             max-height: none;
             min-height: 0;
             height: auto;
-            padding-bottom: 18px;
-            margin-bottom: 18px;
-            page-break-inside: auto;
-            break-inside: auto;
+            padding-bottom: 12px;
+            margin-bottom: var(--a4-box-margin, 16px);
+            page-break-inside: avoid;
+            break-inside: avoid;
         }}
         .liability-box .statute-line {{
             white-space: normal;
             overflow-wrap: anywhere;
+        }}
+        .autofit-box {{
+            overflow: hidden;
+            box-sizing: border-box;
         }}
         .photo-annex {{ page-break-before: always; overflow: visible; }}
         .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
@@ -6627,21 +6697,29 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         th, td {{ border: 1.5px solid #444; padding: 7px 6px; text-align: center; font-size: 14px; font-weight: 600; }}
         th {{ font-weight: 700; background-color: #d8f3dc; color: #1b4332; }}
         .box-content {{
-            border: 1.5px solid #444; padding: 14px; font-size: 15px; font-weight: bold;
-            line-height: 1.9; text-align: right; margin-bottom: 16px; min-height: 110px;
+            border: 1.5px solid #444; padding: var(--a4-box-pad, 14px); font-size: 15px; font-weight: bold;
+            line-height: 1.9; text-align: right; margin-bottom: var(--a4-box-margin, 16px); min-height: 72px;
+        }}
+        .box-content.autofit-box {{
+            font-size: var(--a4-content-font, 13.5px);
+            line-height: var(--a4-content-lh, 1.65);
+            min-height: 0;
         }}
         .box-content.liability-box {{
-            overflow: visible;
+            overflow: hidden;
             max-height: none;
             min-height: 0;
             height: auto;
-            padding-bottom: 18px;
-            margin-bottom: 18px;
+            padding-bottom: 12px;
+            margin-bottom: var(--a4-box-margin, 16px);
         }}
         .page-num {{ display: none !important; }}
+        .header-Title, .header-box {{
+            flex-shrink: 0;
+        }}
         .official-page-footer, .official-footer, .page-footer, .footer {{
             position: relative; bottom: auto; left: auto; right: auto;
-            width: 100%; margin-top: auto; padding-top: 5mm; flex-shrink: 0;
+            width: 100%; margin-top: auto; padding-top: 6mm; flex-shrink: 0;
             box-sizing: border-box; direction: rtl;
             page-break-inside: avoid; break-inside: avoid; page-break-before: avoid; break-before: avoid;
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
@@ -6716,11 +6794,16 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             line-height: 1.75 !important;
         }}
         .page-p3 td.actions-body {{
-            min-height: 28mm !important;
-            height: 28mm !important;
+            min-height: 18mm !important;
+            height: auto !important;
             line-height: 1.85 !important;
             padding: 10px 14px !important;
             vertical-align: top !important;
+        }}
+        .page-p3 td.actions-body.autofit-box {{
+            font-size: var(--a4-content-font, 13.5px) !important;
+            line-height: var(--a4-content-lh, 1.65) !important;
+            overflow: hidden;
         }}
         .page-p3 tr.sig-row td {{
             height: 28mm !important;
@@ -6737,8 +6820,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             html, body, .report-viewport {{ overflow: auto; }}
             .report-sheet, .page, .report-page, .a4-page {{
                 width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
-                min-height: 297mm !important; height: auto !important;
+                min-height: 297mm !important; height: 297mm !important; max-height: 297mm !important;
+                overflow: hidden !important;
                 transform: none !important;
+                display: flex !important; flex-direction: column !important;
+                justify-content: space-between !important; box-sizing: border-box !important;
             }}
             .photo-annex, .photo-annex .photo-card, .photo-annex .photo-meta {{
                 overflow: visible; max-height: none;
@@ -6750,7 +6836,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             th, td {{
                 white-space: normal; overflow-wrap: anywhere; word-break: break-word;
             }}
-            .page.page-p1, .page.page-p3 {{
+            .page.page-p1, .page.page-p2, .page.page-p3 {{
                 height: 297mm !important;
                 max-height: 297mm !important;
                 overflow: hidden !important;
@@ -6760,17 +6846,20 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             .report-viewport {{ overflow: auto; width: 100%; max-width: none; }}
             .report-sheet, .page, .report-page, .a4-page {{
                 width: 210mm !important; min-width: 210mm !important; max-width: 210mm !important;
-                min-height: 297mm !important; height: auto !important;
+                min-height: 297mm !important; height: 297mm !important; max-height: 297mm !important;
+                overflow: hidden !important;
                 transform: none !important;
+                display: flex !important; flex-direction: column !important;
+                justify-content: space-between !important; box-sizing: border-box !important;
             }}
-            .page-flow {{ justify-content: flex-start; }}
+            .page-flow {{ justify-content: space-between; }}
             .table-scroll, table, .table-scroll table {{
                 table-layout: fixed; width: 100% !important; max-width: 100% !important;
             }}
             th, td {{
                 white-space: normal; overflow-wrap: anywhere; word-break: break-word;
             }}
-            .page.page-p1, .page.page-p3 {{
+            .page.page-p1, .page.page-p2, .page.page-p3 {{
                 height: 297mm !important;
                 max-height: 297mm !important;
                 overflow: hidden !important;
@@ -6811,30 +6900,25 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 position: relative !important;
                 display: flex !important;
                 flex-direction: column !important;
-                justify-content: flex-start !important;
+                justify-content: space-between !important;
                 page-break-after: always !important;
                 break-after: page !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 transform: none !important;
             }}
-            .page.page-flow:not(.page-p1):not(.page-p3):not(.photo-annex) {{
-                height: auto !important;
-                max-height: none !important;
-                min-height: 294mm !important;
-                overflow: visible !important;
-                page-break-inside: auto !important;
-                break-inside: auto !important;
+            .page.page-p2 {{
+                height: 294mm !important;
+                max-height: 294mm !important;
+                overflow: hidden !important;
             }}
-            .box-content.liability-box, .liability-box {{
-                overflow: visible !important;
+            .box-content.liability-box, .liability-box, .autofit-box {{
+                overflow: hidden !important;
                 max-height: none !important;
                 min-height: 0 !important;
                 height: auto !important;
-                padding-bottom: 18px !important;
-                margin-bottom: 12px !important;
-                page-break-inside: auto !important;
-                break-inside: auto !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
             }}
             .page:last-of-type, .a4-page:last-of-type, .report-page:last-of-type,
             .report-sheet > .report-page:last-child {{
@@ -6854,12 +6938,19 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             .report-sheet .section-badge {{
                 font-size: 15px !important; font-weight: 700;
             }}
-            .report-sheet .box-content,
+            .report-sheet .box-content:not(.autofit-box),
             .report-sheet .header-box,
             .report-sheet .photo-meta,
             .report-sheet p,
             .report-sheet li {{
                 font-size: 15px !important; font-weight: 600;
+            }}
+            .report-sheet .autofit-box,
+            .report-sheet td.actions-body.autofit-box,
+            .report-sheet .sign-table.autofit-box td {{
+                font-size: var(--a4-content-font, 13.5px) !important;
+                line-height: var(--a4-content-lh, 1.65) !important;
+                font-weight: 600;
             }}
             .report-sheet th,
             .report-sheet td {{ font-size: 14px !important; font-weight: 600; }}
@@ -6869,7 +6960,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 break-inside: avoid !important;
                 page-break-after: avoid !important;
             }}
-            .page-flow {{ justify-content: flex-start !important; }}
+            .page-flow {{ justify-content: space-between !important; }}
+            .page-body-flex {{
+                flex: 1 1 auto !important;
+                min-height: 0 !important;
+                overflow: hidden !important;
+            }}
             .page-flow .section-badge {{ margin: 4px auto !important; }}
             .page-flow th, .page-flow td {{ padding: 4px 7px !important; }}
             .official-page-footer, .official-footer, .page-footer, .footer {{
@@ -6879,7 +6975,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 right: auto !important;
                 width: 100% !important;
                 margin-top: auto !important;
-                padding-top: 5mm !important;
+                padding-top: 6mm !important;
                 flex-shrink: 0 !important;
                 page-break-before: avoid !important;
                 break-before: avoid !important;
@@ -6936,11 +7032,16 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 line-height: 1.75 !important;
             }}
             .page-p3 td.actions-body {{
-                min-height: 28mm !important;
-                height: 28mm !important;
+                min-height: 18mm !important;
+                height: auto !important;
                 line-height: 1.85 !important;
                 padding: 10px 14px !important;
                 vertical-align: top !important;
+            }}
+            .page-p3 td.actions-body.autofit-box {{
+                font-size: var(--a4-content-font, 13.5px) !important;
+                line-height: var(--a4-content-lh, 1.65) !important;
+                overflow: hidden !important;
             }}
             .page-p3 tr.sig-row td {{
                 height: 28mm !important;
@@ -6967,11 +7068,163 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
       else height = Math.max(document.body.scrollHeight, document.documentElement.scrollHeight);
       if (window.frameElement) window.frameElement.style.height = Math.ceil(height) + "px";
     }}
-    window.addEventListener("load", fitReportFrame);
-    window.addEventListener("resize", fitReportFrame);
-    document.addEventListener("load", fitReportFrame, true);
-    setTimeout(fitReportFrame, 60);
-    setTimeout(fitReportFrame, 400);
+    function _a4CssPx(name, fallback) {{
+      var raw = getComputedStyle(document.documentElement).getPropertyValue(name);
+      var n = parseFloat(raw);
+      return isFinite(n) ? n : fallback;
+    }}
+    function _a4PageOverflow(page, footer, safetyPx) {{
+      if (!page) return 0;
+      var pageBox = page.getBoundingClientRect();
+      var limitBottom = pageBox.bottom - Math.max(8, safetyPx || 8);
+      if (footer) {{
+        var footerTop = footer.getBoundingClientRect().top;
+        limitBottom = Math.min(limitBottom, footerTop - Math.max(8, safetyPx || 8));
+      }}
+      var overflow = 0;
+      var kids = page.children;
+      for (var i = 0; i < kids.length; i++) {{
+        var el = kids[i];
+        if (!el || el === footer) continue;
+        if (el.classList && (
+          el.classList.contains("official-page-footer") ||
+          el.classList.contains("official-footer") ||
+          el.classList.contains("page-footer") ||
+          el.classList.contains("footer")
+        )) continue;
+        var bottom = el.getBoundingClientRect().bottom;
+        overflow = Math.max(overflow, bottom - limitBottom);
+        overflow = Math.max(overflow, el.scrollHeight - el.clientHeight);
+      }}
+      overflow = Math.max(overflow, page.scrollHeight - page.clientHeight);
+      return overflow;
+    }}
+    function _a4CollectTargets(page) {{
+      if (!page) return [];
+      var nodes = page.querySelectorAll(
+        ".autofit-box, [data-autofit], td.actions-body, table.sign-table.autofit-box"
+      );
+      var out = [];
+      for (var i = 0; i < nodes.length; i++) {{
+        var n = nodes[i];
+        if (!n || out.indexOf(n) >= 0) continue;
+        if (n.classList && n.classList.contains("section-badge")) continue;
+        out.push(n);
+      }}
+      return out;
+    }}
+    function _a4ApplyFit(targets, fontPx, lineHeight, padPx, marginPx) {{
+      for (var i = 0; i < targets.length; i++) {{
+        var el = targets[i];
+        el.style.setProperty("font-size", fontPx.toFixed(2) + "px", "important");
+        el.style.setProperty("line-height", String(lineHeight), "important");
+        if (el.classList && el.classList.contains("box-content")) {{
+          el.style.setProperty("padding", padPx.toFixed(2) + "px", "important");
+          el.style.setProperty("margin-bottom", marginPx.toFixed(2) + "px", "important");
+        }}
+        if (el.tagName === "TD" && el.classList && el.classList.contains("actions-body")) {{
+          el.style.setProperty("padding", Math.max(4, padPx * 0.75).toFixed(2) + "px", "important");
+        }}
+        if (el.classList && el.classList.contains("sign-table")) {{
+          var cells = el.querySelectorAll("td");
+          for (var c = 0; c < cells.length; c++) {{
+            cells[c].style.setProperty("font-size", Math.max(8.5, fontPx).toFixed(2) + "px", "important");
+            cells[c].style.setProperty("line-height", String(lineHeight), "important");
+          }}
+        }}
+      }}
+    }}
+    function _a4ShrinkChromeMinimal(page, fontPx, baseFont) {{
+      if (!page || fontPx >= baseFont - 0.01) return;
+      var badges = page.querySelectorAll(".section-badge");
+      var shrink = Math.min(1.2, (baseFont - fontPx) * 0.15);
+      for (var i = 0; i < badges.length; i++) {{
+        var b = badges[i];
+        var cur = parseFloat(getComputedStyle(b).fontSize) || 15;
+        var next = Math.max(12.5, cur - shrink);
+        b.style.setProperty("font-size", next.toFixed(2) + "px", "important");
+        b.style.setProperty(
+          "padding",
+          Math.max(3, 5 - shrink).toFixed(2) + "px " + Math.max(14, 25 - shrink * 2).toFixed(2) + "px",
+          "important"
+        );
+        b.style.setProperty("margin", Math.max(2, 4 - shrink * 0.4).toFixed(2) + "px auto", "important");
+      }}
+    }}
+    function autoFitReportPages() {{
+      var pages = document.querySelectorAll(".page.report-page, .report-page.page, .a4-page");
+      var initialBase = {a4_autofit_base_font_px};
+      var basePad = 14;
+      var baseMargin = 16;
+      var minFont = 8.5;
+      var step = 0.25;
+      var safety = 8;
+      document.documentElement.style.setProperty("--a4-content-font", initialBase.toFixed(2) + "px");
+      document.documentElement.style.setProperty("--a4-content-lh", "1.65");
+      for (var p = 0; p < pages.length; p++) {{
+        var page = pages[p];
+        if (!page || page.classList.contains("photo-annex")) continue;
+        var footer = page.querySelector(".official-page-footer, .official-footer, .page-footer, .footer");
+        if (footer) {{
+          var fPos = getComputedStyle(footer).position;
+          if (fPos === "absolute" || fPos === "fixed") {{
+            page.classList.add("has-absolute-footer");
+            var fh = Math.max(footer.offsetHeight || 0, 18);
+            page.style.setProperty("padding-bottom", (fh + 12) + "mm", "important");
+          }} else {{
+            page.classList.remove("has-absolute-footer");
+            footer.style.setProperty("margin-top", "auto", "important");
+            footer.style.setProperty("padding-top", "6mm", "important");
+            footer.style.setProperty("flex-shrink", "0", "important");
+          }}
+        }}
+        var targets = _a4CollectTargets(page);
+        if (!targets.length) continue;
+        var baseFont = initialBase;
+        var fontPx = baseFont;
+        var lineHeight = 1.65;
+        var padPx = basePad;
+        var marginPx = baseMargin;
+        _a4ApplyFit(targets, fontPx, lineHeight, padPx, marginPx);
+        var guard = 0;
+        while (guard < 40) {{
+          guard += 1;
+          var overflow = _a4PageOverflow(page, footer, safety);
+          if (overflow <= 0.5) break;
+          if (fontPx <= minFont + 0.001) {{
+            _a4ShrinkChromeMinimal(page, fontPx, baseFont);
+            break;
+          }}
+          fontPx = Math.max(minFont, fontPx - step);
+          var dropped = baseFont - fontPx;
+          lineHeight = Math.max(1.28, 1.65 - dropped * 0.045);
+          padPx = Math.max(6, basePad - dropped * 0.55);
+          marginPx = Math.max(6, baseMargin - dropped * 0.65);
+          _a4ApplyFit(targets, fontPx, lineHeight, padPx, marginPx);
+          if (fontPx <= 10.5) _a4ShrinkChromeMinimal(page, fontPx, baseFont);
+        }}
+      }}
+      fitReportFrame();
+    }}
+    function _scheduleAutoFit() {{
+      autoFitReportPages();
+      setTimeout(autoFitReportPages, 60);
+      setTimeout(autoFitReportPages, 250);
+      setTimeout(fitReportFrame, 320);
+    }}
+    document.addEventListener("DOMContentLoaded", _scheduleAutoFit);
+    window.addEventListener("load", _scheduleAutoFit);
+    window.addEventListener("beforeprint", autoFitReportPages);
+    window.addEventListener("resize", function() {{
+      autoFitReportPages();
+      fitReportFrame();
+    }});
+    if (document.fonts && document.fonts.ready) {{
+      document.fonts.ready.then(function() {{ _scheduleAutoFit(); }}).catch(function() {{}});
+    }}
+    document.addEventListener("load", function() {{ autoFitReportPages(); fitReportFrame(); }}, true);
+    setTimeout(_scheduleAutoFit, 40);
+    setTimeout(_scheduleAutoFit, 400);
     </script>
     </head>
     <body class="{body_class}">
@@ -7011,32 +7264,34 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             </div>
             {official_footer_html}
         </div>
-        <div class="page report-page page-flow">
+        <div class="page report-page page-flow page-p2">
             {build_header()}
+            <div class="page-body-flex autofit-page-body">
             <div class="section-badge">نتائج الحادث</div>
-            <div class="box-content">نتج عن الحادث :<br>{results_html}</div>
+            <div class="box-content autofit-box" data-autofit="results">نتج عن الحادث :<br>{results_html}</div>
             <div class="section-badge">كيفية وقوع الحادث</div>
-            <div class="box-content">{acc_how_html}</div>
+            <div class="box-content autofit-box" data-autofit="how">{acc_how_html}</div>
             {liability_html}
+            </div>
             {official_footer_html}
         </div>
         <div class="page report-page page-three page-flow page-p3">
             {build_header()}
-            <div class="p3-body-flex">
+            <div class="p3-body-flex page-body-flex">
                 <div class="table-scroll"><table>
                     <tr><th>طبيعة وتصنيف الحادث</th></tr>
                     <tr><td>{html.escape(accident_nature_val or "")}</td></tr>
                 </table></div>
                 <div class="table-scroll"><table>
                     <tr><th>الحقوق الخاصة والعامة</th></tr>
-                    <tr><td>{html.escape(rights_status_val or "")}</td></tr>
+                    <tr><td class="autofit-box" data-autofit="rights">{html.escape(rights_status_val or "")}</td></tr>
                 </table></div>
                 <div class="table-scroll"><table>
                     <tr><th>الإجراءات المتخذة</th></tr>
-                    <tr><td class="actions-body">{final_actions_html}</td></tr>
+                    <tr><td class="actions-body autofit-box" data-autofit="actions">{final_actions_html}</td></tr>
                 </table></div>
                 {criminal_details_html}
-                <div class="table-scroll"><table class="sign-table">
+                <div class="table-scroll"><table class="sign-table autofit-box" data-autofit="signatures">
                     <tr><th colspan="3">معد التقرير</th></tr>
                     <tr><th>إجراءات الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
                     <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
