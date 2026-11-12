@@ -1163,6 +1163,81 @@ def _unqualified_driver_parties(rows):
         if item.get("التأهيل") == "غير مؤهل للقيادة"
     ]
 
+def _is_unqualified_driver_party(party) -> bool:
+    """سائق فعلي حالته غير مؤهل للقيادة فقط — ليس راكباً/مشاة وليس مؤهلاً."""
+    if not party:
+        return False
+    item = _sanitize_party_row(party)
+    role = item.get("المشاركة") or ""
+    qual = item.get("التأهيل") or ""
+    if _is_non_driver_role(role):
+        return False
+    if qual == QUALIFICATION_EXEMPT or "لا يُطالب" in str(qual) or "لا يطالب" in str(qual):
+        # الإعفاء خاص بغير السائق؛ لا يُعامل كمخالفة رخصة قيادة
+        return False
+    return qual == "غير مؤهل للقيادة"
+
+def _is_qualified_driver_party(party) -> bool:
+    if not party:
+        return False
+    item = _sanitize_party_row(party)
+    if _is_non_driver_role(item.get("المشاركة")):
+        return False
+    return item.get("التأهيل") == "مؤهل للقيادة"
+
+def _resolve_party_for_liability_slot(party_title: str, party_index: int = None, parties=None) -> dict:
+    """ربط صفة الطرف في التقرير بصف الطرف الفعلي (الاسم/المشاركة/التأهيل) لا برقم مجرد."""
+    parties = list(parties if parties is not None else (st.session_state.get("parties") or []))
+    title = str(party_title or "").strip()
+    # 1) مطابقة بالاسم داخل صفة التقرير
+    named_matches = []
+    for row in parties:
+        item = _sanitize_party_row(row)
+        name = (item.get("الاسم") or "").strip()
+        if name and name in title:
+            named_matches.append(item)
+    if len(named_matches) == 1:
+        return named_matches[0]
+    if len(named_matches) > 1:
+        # فضّل السائق غير المؤهل إن وُجد ضمن المطابقات، وإلا أول سائق
+        for item in named_matches:
+            if _is_unqualified_driver_party(item):
+                return item
+        for item in named_matches:
+            if not _is_non_driver_role(item.get("المشاركة")):
+                return item
+        return named_matches[0]
+    # 2) مطابقة صفة الجلسة التلقائية
+    if party_index:
+        auto = str(st.session_state.get(f"party_role_title_{party_index}") or "").strip()
+        if auto and (auto == title or title in auto or auto in title):
+            row = _party_row_for_index(parties, int(party_index))
+            if row:
+                return _sanitize_party_row(row)
+        row = _party_row_for_index(parties, int(party_index))
+        if row:
+            return _sanitize_party_row(row)
+    # 3) احتياطي عبر فهرس 1/2 من عناوين الجلسة
+    for idx in (1, 2):
+        auto = str(st.session_state.get(f"party_role_title_{idx}") or "").strip()
+        p1_in = str(st.session_state.get("p1_title_input") or "").strip()
+        p2_sel = str(st.session_state.get("p2_role_select") or "").strip()
+        p2_custom = str(st.session_state.get("p2_custom_title") or "").strip()
+        candidates = {auto, p1_in if idx == 1 else "", p2_sel if idx == 2 else "", p2_custom if idx == 2 else ""}
+        if title and title in candidates:
+            row = _party_row_for_index(parties, idx)
+            if row:
+                return _sanitize_party_row(row)
+    return {}
+
+def _reason_line_is_art32_license(raw: str) -> bool:
+    text = str(raw or "")
+    if re.search(r"المادة\s*\(\s*32\s*\)|جدول\s*المخالفات\s*\(?\s*5\s*/\s*11", text):
+        return True
+    if "قبل الحصول على رخصة" in text or "غير مؤهل للقيادة" in text:
+        return True
+    return False
+
 def _render_party_role_cards(rows):
     cards = []
     for item in rows or []:
@@ -3013,51 +3088,95 @@ def _is_liability_preamble_line(raw: str) -> bool:
         return True
     return False
 
-def _admin_violation_lines_for_zero_ratio(party_title: str, reasons_text: str, selected_ids=None) -> list:
-    """مخالفة إدارية مستقلة عند نسبة 0% دون إدانة في وقوع الاصطدام."""
-    title = html.escape(str(party_title or "الطرف"))
+def _admin_violation_lines_for_zero_ratio(
+    party_title: str,
+    reasons_text: str,
+    selected_ids=None,
+    party_index: int = None,
+    party_row: dict = None,
+) -> list:
+    """مخالفة إدارية مستقلة عند نسبة 0% — مربوطة بالسائق الفعلي وتأهيله فقط."""
+    parties = list(st.session_state.get("parties") or [])
+    party = party_row or _resolve_party_for_liability_slot(party_title, party_index=party_index, parties=parties)
+    display_name = (party.get("الاسم") if party else "") or party_title or "الطرف"
+    title = html.escape(str(display_name))
     blob = str(reasons_text or "")
     ids = set(selected_ids or [])
-    # ترحيل المعرّفات القديمة عبر aliases
-    for old_id, new_id in _TRAFFIC_ARTICLE_ID_ALIASES.items():
+    # ترحيل المعرّفات القديمة عبر aliases إن وُجدت
+    aliases = globals().get("_TRAFFIC_ARTICLE_ID_ALIASES") or {}
+    for old_id, new_id in aliases.items():
         if old_id in ids:
             ids.add(new_id)
-    lines = []
-    has_32 = (
-        "art_32" in ids
-        or re.search(r"المادة\s*\(\s*32\s*\)", blob)
-        or "غير مؤهل" in blob
+
+    role = (party.get("المشاركة") if party else "") or ""
+    is_non_driver = bool(party) and (
+        _is_non_driver_role(role)
+        or (party.get("التأهيل") == QUALIFICATION_EXEMPT)
     )
-    has_8c = "art_8_c" in ids or re.search(r"المادة\s*\(\s*8\s*/\s*ج\s*\)|8/ج", blob) or "تأمين" in blob and "8" in blob
-    has_33 = "art_33" in ids or re.search(r"المادة\s*\(\s*33\s*\)", blob)
+    is_unqualified_driver = _is_unqualified_driver_party(party)
+    is_qualified_driver = _is_qualified_driver_party(party)
+
+    lines = []
+    # المادة (32): حصرياً للسائق غير المؤهل الذي كان يقود — ممنوع على المؤهل وعلى الراكب/المشاة
+    has_32 = False
+    if is_unqualified_driver and not is_non_driver and not is_qualified_driver:
+        has_32 = True
     if has_32:
         lines.append(
             f"• ثبتت مخالفة إدارية على ({title}) بقيادة المركبة قبل الحصول على رخصة القيادة اللازمة وفق المادة (32)، "
             f"وتُحال للعقوبة النظامية دون أن تؤثر على براءته من مسؤولية وقوع الاصطدام (نسبة المسؤولية 0%)."
         )
-    if has_8c:
-        lines.append(
-            f"• ثبتت مخالفة إدارية على ({title}) بعدم وجود وثيقة تأمين سارية وفق المادة (8/ج)، "
-            f"وتُحال للعقوبة النظامية دون أن تؤثر على براءته من مسؤولية وقوع الاصطدام (نسبة المسؤولية 0%)."
+
+    # التأمين و(33) لا تُسند لراكب/مشاة أبداً
+    if not is_non_driver and party:
+        has_8c = (
+            "art_8_c" in ids
+            or re.search(r"المادة\s*\(\s*8\s*/\s*ج\s*\)|8/ج", blob) is not None
         )
-    if has_33 and not has_32:
-        lines.append(
-            f"• ثبتت مخالفة إدارية على ({title}) بعدم حمل رخصة قيادة سارية المفعول وفق المادة (33)، "
-            f"وتُحال للعقوبة النظامية دون أن تؤثر على براءته من مسؤولية وقوع الاصطدام (نسبة المسؤولية 0%)."
+        # (33) فقط إن وردت في أسباب هذا الطرف أو اختيرت، وليست بديلاً تلقائياً عن تأهيله
+        has_33 = (not has_32) and (
+            "art_33" in ids or re.search(r"المادة\s*\(\s*33\s*\)", blob) is not None
         )
+        if has_8c:
+            lines.append(
+                f"• ثبتت مخالفة إدارية على ({title}) بعدم وجود وثيقة تأمين سارية وفق المادة (8/ج)، "
+                f"وتُحال للعقوبة النظامية دون أن تؤثر على براءته من مسؤولية وقوع الاصطدام (نسبة المسؤولية 0%)."
+            )
+        if has_33:
+            lines.append(
+                f"• ثبتت مخالفة إدارية على ({title}) بعدم حمل رخصة قيادة سارية المفعول وفق المادة (33)، "
+                f"وتُحال للعقوبة النظامية دون أن تؤثر على براءته من مسؤولية وقوع الاصطدام (نسبة المسؤولية 0%)."
+            )
     return lines
 
 def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ratio, p2_reasons):
     printed_articles = set()
     selected_ids = list(st.session_state.get("selected_articles") or [])
+    parties = list(st.session_state.get("parties") or [])
+    p1_party = _resolve_party_for_liability_slot(p1_title, party_index=1, parties=parties)
+    p2_party = _resolve_party_for_liability_slot(p2_title, party_index=2, parties=parties)
 
-    def format_bullets(text):
+    def format_bullets(text, party_row=None):
         if not text:
             return ""
         items = []
+        allow_art32 = _is_unqualified_driver_party(party_row)
+        block_art32 = (not allow_art32) and (
+            _is_qualified_driver_party(party_row)
+            or (
+                party_row
+                and (
+                    _is_non_driver_role(party_row.get("المشاركة"))
+                    or party_row.get("التأهيل") == QUALIFICATION_EXEMPT
+                )
+            )
+        )
         for line in str(text).splitlines():
             raw = line.strip().lstrip("-•* ")
             if not raw:
+                continue
+            # منع إسناد المادة (32) لسائق مؤهل أو لراكب/مشاة في نص الرأي
+            if block_art32 and _reason_line_is_art32_license(raw):
                 continue
             body = html.escape(raw)
             if not _is_liability_preamble_line(raw):
@@ -3110,7 +3229,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
             f"<div class='liability-heading'>"
             f"{header_prefix}إدانة ({safe_p1_title}) بنسبة ({p1_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
             f"</div>"
-            f"{format_bullets(p1_reasons)}"
+            f"{format_bullets(p1_reasons, p1_party)}"
             f"</div>"
         )
     if is_shared:
@@ -3122,25 +3241,33 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
             f"<div class='liability-heading'>"
             f"{header_prefix}إدانة ({safe_p2_title}) بنسبة ({p2_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
             f"</div>"
-            f"{format_bullets(p2_reasons)}"
+            f"{format_bullets(p2_reasons, p2_party)}"
             f"</div>"
         )
+
+    # ملاحظات إدارية عند 0%: تُطبع للطرف ذي النسبة صفر فقط إن طابقت صفته/تأهيله المخالفة
+    def _append_zero_notes(zero_title, zero_reasons, zero_index, zero_party, zero_safe_title):
+        blocks.append(
+            f"<div class='liability-nonresp'>"
+            f"• عدم مسؤولية ({zero_safe_title}) عن الحادث (نسبة المسؤولية 0%)."
+            f"</div>"
+        )
+        for note in _admin_violation_lines_for_zero_ratio(
+            zero_title,
+            zero_reasons,
+            selected_ids,
+            party_index=zero_index,
+            party_row=zero_party,
+        ):
+            blocks.append(f"<div class='liability-admin-note'>{note}</div>")
+        # إن كان الطرف صفر مؤهلاً/راكباً والسائق غير المؤهل طرفاً آخر بنسبة >0،
+        # لا تُنقل مخالفته الإدارية إلى طرف النسبة صفر (تم ضمانه أعلاه).
+        # وإن كان غير المؤهل هو نفسه بنسبة 0% فتظهر ملاحظته هنا فقط.
+
     if p1_ratio == 100 and p2_ratio == 0:
-        blocks.append(
-            f"<div class='liability-nonresp'>"
-            f"• عدم مسؤولية ({safe_p2_title}) عن الحادث (نسبة المسؤولية 0%)."
-            f"</div>"
-        )
-        for note in _admin_violation_lines_for_zero_ratio(p2_title, p2_reasons, selected_ids):
-            blocks.append(f"<div class='liability-admin-note'>{note}</div>")
+        _append_zero_notes(p2_title, p2_reasons, 2, p2_party, safe_p2_title)
     elif p2_ratio == 100 and p1_ratio == 0:
-        blocks.append(
-            f"<div class='liability-nonresp'>"
-            f"• عدم مسؤولية ({safe_p1_title}) عن الحادث (نسبة المسؤولية 0%)."
-            f"</div>"
-        )
-        for note in _admin_violation_lines_for_zero_ratio(p1_title, p1_reasons, selected_ids):
-            blocks.append(f"<div class='liability-admin-note'>{note}</div>")
+        _append_zero_notes(p1_title, p1_reasons, 1, p1_party, safe_p1_title)
     inner_content = "".join(blocks)
     return (
         f'<div class="section-badge">الرأي والمسؤولية</div>'
