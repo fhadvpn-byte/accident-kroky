@@ -738,6 +738,147 @@ def _write_actions_editor(cur_acts):
         f"{i}- {ACTIONS_SCENARIOS[k]}" for i, k in enumerate(cur_acts, 1) if k in ACTIONS_SCENARIOS
     )
 
+_VEHICLE_ORDINALS_AR = {
+    1: "الأولى",
+    2: "الثانية",
+    3: "الثالثة",
+    4: "الرابعة",
+    5: "الخامسة",
+    6: "السادسة",
+    7: "السابعة",
+    8: "الثامنة",
+    9: "التاسعة",
+    10: "العاشرة",
+}
+
+def _clean_title_fragment(value) -> str:
+    if value is None:
+        return ""
+    try:
+        missing = pd.isna(value)
+        if bool(missing) and getattr(missing, "shape", None) is None:
+            return ""
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip()
+    if text.lower() in ("none", "nan", "<na>"):
+        return ""
+    return text
+
+def _party_row_for_index(parties, party_index: int):
+    rows = list(parties or [])
+    label = None
+    try:
+        label = _PARTY_LABELS.get(party_index)
+    except Exception:
+        label = None
+    if not label:
+        label = f"الطرف {party_index}" if party_index > 2 else ("الطرف الأول" if party_index == 1 else "الطرف الثاني")
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        if _clean_title_fragment(row.get("الطرف")) == label:
+            return row
+    if 0 <= party_index - 1 < len(rows) and isinstance(rows[party_index - 1], dict):
+        return rows[party_index - 1]
+    return {}
+
+def _driver_name_for_party_index(parties, party_index: int) -> str:
+    row = _party_row_for_index(parties, party_index)
+    role = _clean_title_fragment(row.get("المشاركة")) if row else ""
+    if row and not _is_non_driver_role(role):
+        name = _clean_title_fragment(row.get("الاسم"))
+        if name:
+            return name
+    # احتياطي: السائق رقم n من قائمة السائقين فقط
+    drivers = []
+    for item in parties or []:
+        if not isinstance(item, dict):
+            continue
+        if _is_non_driver_role(item.get("المشاركة")):
+            continue
+        drivers.append(item)
+    if 0 <= party_index - 1 < len(drivers):
+        return _clean_title_fragment(drivers[party_index - 1].get("الاسم"))
+    return ""
+
+def _vehicle_type_for_party_index(vehicles, party_index: int) -> str:
+    rows = list(vehicles or [])
+    if 0 <= party_index - 1 < len(rows) and isinstance(rows[party_index - 1], dict):
+        return _clean_title_fragment(rows[party_index - 1].get("نوع المركبة"))
+    return ""
+
+def build_driver_party_title(party_index: int, parties=None, vehicles=None) -> str:
+    """صيغة صفة الطرف: قائد المركبة الأولى (النوع) / الاسم — بدون زوائد إن نقص الاسم أو النوع."""
+    ordinal = _VEHICLE_ORDINALS_AR.get(int(party_index) or 1, str(party_index))
+    base = f"قائد المركبة {ordinal}"
+    parties = parties if parties is not None else (st.session_state.get("parties") or [])
+    vehicles = vehicles if vehicles is not None else (st.session_state.get("vehicles") or [])
+    name = _driver_name_for_party_index(parties, party_index)
+    veh_type = _vehicle_type_for_party_index(vehicles, party_index)
+    if name and veh_type:
+        return f"{base} ({veh_type}) / {name}"
+    if name:
+        return f"{base} / {name}"
+    return base
+
+def _is_auto_managed_party_title(current: str, party_index: int) -> bool:
+    text = _clean_title_fragment(current)
+    ordinal = _VEHICLE_ORDINALS_AR.get(int(party_index) or 1, str(party_index))
+    base = f"قائد المركبة {ordinal}"
+    defaults = {
+        1: {
+            "",
+            "قائد المركبة الأولى (الطرف الأول)",
+            "قائد المركبة الأولى",
+            DEFAULT_REPORT_STATE.get("p1_title_input", "قائد المركبة الأولى (الطرف الأول)"),
+        },
+        2: {
+            "",
+            "قائد المركبة الثانية (الطرف الثاني)",
+            "قائد المركبة الثانية",
+            DEFAULT_REPORT_STATE.get("p2_role_select", "قائد المركبة الثانية (الطرف الثاني)"),
+        },
+    }
+    if text in defaults.get(party_index, {""}):
+        return True
+    last_auto = _clean_title_fragment(st.session_state.get(f"_last_auto_party_title_{party_index}"))
+    if last_auto and text == last_auto:
+        return True
+    if text.startswith(base):
+        return True
+    return False
+
+def refresh_party_role_titles(parties=None, vehicles=None, force: bool = False):
+    """تحديث صفات الأطراف في الجلسة فور تعديل/اعتماد جداول الأطراف والمركبات."""
+    parties = parties if parties is not None else (st.session_state.get("parties") or [])
+    vehicles = vehicles if vehicles is not None else (st.session_state.get("vehicles") or [])
+    titles = {}
+    max_n = max(len(parties or []), len(vehicles or []), 2)
+    for idx in range(1, min(max_n, 10) + 1):
+        title = build_driver_party_title(idx, parties=parties, vehicles=vehicles)
+        titles[idx] = title
+        st.session_state[f"party_role_title_{idx}"] = title
+        st.session_state[f"_last_auto_party_title_{idx}"] = title
+    t1 = titles.get(1) or build_driver_party_title(1, parties=parties, vehicles=vehicles)
+    t2 = titles.get(2) or build_driver_party_title(2, parties=parties, vehicles=vehicles)
+    cur1 = str(st.session_state.get("p1_title_input") or "")
+    if force or _is_auto_managed_party_title(cur1, 1):
+        st.session_state["p1_title_input"] = t1
+    cur2_select = str(st.session_state.get("p2_role_select") or "")
+    pedestrian = "عابر الطريق (المشاة)"
+    bike = "قائد الدراجة النارية / الهوائية"
+    custom = "تحديد صفة مخصصة"
+    if cur2_select in (pedestrian, bike, custom):
+        pass
+    elif force or _is_auto_managed_party_title(cur2_select, 2):
+        st.session_state["p2_role_select"] = t2
+    if st.session_state.get("p2_role_select") == custom:
+        cur_custom = str(st.session_state.get("p2_custom_title") or "")
+        if force or _is_auto_managed_party_title(cur_custom, 2) or cur_custom in ("", "الطرف الثاني"):
+            st.session_state["p2_custom_title"] = t2
+    return titles
+
 def sync_cross_page_smart_links(
     injuries_count: int,
     deaths_count: int,
@@ -749,10 +890,8 @@ def sync_cross_page_smart_links(
 ):
     v1 = str(veh1_type or "").strip()
     v2 = str(veh2_type or "").strip()
+    refresh_party_role_titles(force=False)
     if v1 and v1.lower() != "none":
-        cur_p1 = str(st.session_state.get(p1_title_key, ""))
-        if cur_p1 in ("", "قائد المركبة الأولى (الطرف الأول)") or cur_p1.startswith("قائد المركبة الأولى ("):
-            st.session_state[p1_title_key] = f"قائد المركبة الأولى ({v1})"
         if sketch_leg1_key and st.session_state.get(sketch_leg1_key, "") in ("", "المركبة الأولى", "المركبة الأولى (الطرف الأول)"):
             st.session_state[sketch_leg1_key] = f"المركبة الأولى ({v1})"
     if v2 and v2.lower() != "none":
@@ -4157,6 +4296,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
                 (_p.get("الطرف") or _p.get("الاسم") or "سائق") for _p in _unqual_drivers
             )
             st.warning(f"تنبيه رخصة قيادة: {_names} غير مؤهل للقيادة (السائقون فقط).")
+        refresh_party_role_titles(
+            parties=cleaned_parties,
+            vehicles=st.session_state.vehicles,
+            force=True,
+        )
         _mirror_page1_fields()
         sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=False)
         st.toast("تم اعتماد بيانات الحادث والأطراف في الجلسة", icon="✅")
@@ -4183,6 +4327,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
             return str(_vehicle_rows[index].get("نوع المركبة") or "")
         return ""
 
+    refresh_party_role_titles(force=False)
     sync_cross_page_smart_links(
         injuries_count=int(st.session_state.get("p1_acc_injuries") or 0),
         deaths_count=int(st.session_state.get("p1_acc_deaths") or 0),
@@ -4681,15 +4826,22 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
             st.session_state.custom_p1_ratio = int(st.session_state.get("custom_p1_ratio") or 75)
         except (TypeError, ValueError):
             st.session_state.custom_p1_ratio = 75
+    _role_titles = refresh_party_role_titles(force=False)
     st.markdown("### ⚖️ الرأي وتوزيع نسب المسؤولية")
     _liability_party_rows = _party_rows_for_liability(st.session_state.get("parties") or [])
     _license_violation_parties = _unqualified_driver_parties(st.session_state.get("parties") or [])
     # استبعاد الراكب/المشاة من قوائم توزيع المسؤولية ومخالفات رخصة القيادة
     if _liability_party_rows:
-        _liab_labels = [
-            f"{(p.get('الطرف') or 'طرف')} — {(p.get('الاسم') or 'بدون اسم')} | {(p.get('التأهيل') or '')}"
-            for p in _liability_party_rows
-        ]
+        _liab_labels = []
+        for _idx, p in enumerate(_liability_party_rows, start=1):
+            _role_title = (
+                st.session_state.get(f"party_role_title_{_idx}")
+                or build_driver_party_title(_idx)
+                or (p.get("الطرف") or "طرف")
+            )
+            _liab_labels.append(
+                f"{_role_title} — {(p.get('الاسم') or 'بدون اسم')} | {(p.get('التأهيل') or '')}"
+            )
         st.caption("أطراف توزيع المسؤولية (السائقون فقط — الراكب/المشاة مستبعدون): " + " · ".join(_liab_labels))
     if _license_violation_parties:
         _lic_labels = [
@@ -4739,6 +4891,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         p1_ratio, p2_ratio = ratio_lookup[selected_ratio]
     p1_ratio = int(p1_ratio)
     p2_ratio = int(p2_ratio)
+    _p2_driver_title = (
+        (_role_titles or {}).get(2)
+        or st.session_state.get("party_role_title_2")
+        or build_driver_party_title(2)
+    )
     c_t1, c_t2 = st.columns(2)
     with c_t1:
         p1_title = st.text_input(
@@ -4747,13 +4904,18 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         )
     with c_t2:
         p2_role_options = [
-            "قائد المركبة الثانية (الطرف الثاني)",
+            _p2_driver_title,
             "عابر الطريق (المشاة)",
             "قائد الدراجة النارية / الهوائية",
             "تحديد صفة مخصصة",
         ]
-        if st.session_state.get("p2_role_select") not in p2_role_options:
-            st.session_state.p2_role_select = p2_role_options[0]
+        # ترحيل القيمة القديمة لصفة الطرف الثاني إلى الصيغة الجديدة باسم السائق
+        _cur_p2 = str(st.session_state.get("p2_role_select") or "")
+        if _cur_p2 not in p2_role_options:
+            if _is_auto_managed_party_title(_cur_p2, 2) or _cur_p2.startswith("قائد المركبة الثانية"):
+                st.session_state.p2_role_select = _p2_driver_title
+            else:
+                st.session_state.p2_role_select = p2_role_options[0]
         p2_role_type = st.selectbox(
             "نوع وصفة الطرف الثاني:",
             options=p2_role_options,
@@ -4841,6 +5003,12 @@ ACTIONS_SCENARIOS = {
     ),
     "17. تضرر بضائع أو حمولات منقولة (شاحنات)": (
         "تم إثبات حالة الحمولة المتضررة في المحضر وإشعار مالك البضاعة / الناقل لاستكمال إجراءات التقدير والتأمين، وتأمين نقل الحمولة من نهر الطريق."
+    ),
+    "18. تعذر سحب المركبة أو انتشالها لقاء سقوطها من مرتفع": (
+        "تعذر سحب المركبة أو انتشالها من موقع استقرارها وقت المعاينة لقاء سقوطها من مرتفع شديد الوعورة وصعوبة وصول آليات السحب والرفع إليها، وجرى إثبات الحالة في الموقع واتخاذ الإجراءات النظامية اللازمة."
+    ),
+    "19. عمل محضر مشترك مع الدفاع المدني": (
+        "جرى الشخوص لموقع الحادث ومباشرته بالاشتراك مع فرقة الدفاع المدني المختصة، وتم عمل محضر مشترك مع الدفاع المدني يتضمن وقائع الحالة والإجراءات المتخذة في الموقع وإرفاقه بأوراق المعاملة."
     ),
 }
 
@@ -5811,17 +5979,33 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         parties_df = pd.DataFrame(st.session_state.get("parties") or [])
     if not isinstance(vehicles_df, pd.DataFrame):
         vehicles_df = pd.DataFrame(st.session_state.get("vehicles") or [])
-    # تنظيف None/NaN قبل الطباعة
+    # تنظيف None/NaN قبل الطباعة + مزامنة صفات الأطراف بأسماء السائقين
     if not parties_df.empty:
         _a4_parties, _ = _normalize_party_qualification_rows(_frame_records(parties_df))
         parties_df = pd.DataFrame(_a4_parties)
+    _a4_vehicles_records = (
+        _frame_records(vehicles_df) if isinstance(vehicles_df, pd.DataFrame) and not vehicles_df.empty
+        else list(st.session_state.get("vehicles") or [])
+    )
+    _a4_party_records = (
+        _frame_records(parties_df) if isinstance(parties_df, pd.DataFrame) and not parties_df.empty
+        else list(st.session_state.get("parties") or [])
+    )
+    refresh_party_role_titles(parties=_a4_party_records, vehicles=_a4_vehicles_records, force=False)
     parties_rows = ""
-    for _, row in parties_df.iterrows():
+    for row_idx, (_, row) in enumerate(parties_df.iterrows(), start=1):
         cells = []
         role_val = _page1_cell(row.get("المشاركة", ""))
         for key, _label in _party_columns:
             if key == "التأهيل":
                 cells.append(f"<td style=\"text-align:center; vertical-align:middle;\">{_party_qualification_cell_html(role_val, row.get(key, ''))}</td>")
+            elif key == "الطرف" and not _is_non_driver_role(role_val):
+                role_title = (
+                    st.session_state.get(f"party_role_title_{row_idx}")
+                    or build_driver_party_title(row_idx, parties=_a4_party_records, vehicles=_a4_vehicles_records)
+                    or _page1_cell(row.get(key, ""))
+                )
+                cells.append(f"<td>{html.escape(role_title)}</td>")
             else:
                 cells.append(f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>")
         parties_rows += "<tr>" + "".join(cells) + "</tr>"
