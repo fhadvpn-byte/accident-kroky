@@ -6139,20 +6139,14 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     )
     refresh_party_role_titles(parties=_a4_party_records, vehicles=_a4_vehicles_records, force=False)
     parties_rows = ""
-    for row_idx, (_, row) in enumerate(parties_df.iterrows(), start=1):
+    for _, row in parties_df.iterrows():
         cells = []
         role_val = _page1_cell(row.get("المشاركة", ""))
         for key, _label in _party_columns:
             if key == "التأهيل":
                 cells.append(f"<td style=\"text-align:center; vertical-align:middle;\">{_party_qualification_cell_html(role_val, row.get(key, ''))}</td>")
-            elif key == "الطرف" and not _is_non_driver_role(role_val):
-                role_title = (
-                    st.session_state.get(f"party_role_title_{row_idx}")
-                    or build_driver_party_title(row_idx, parties=_a4_party_records, vehicles=_a4_vehicles_records)
-                    or _page1_cell(row.get(key, ""))
-                )
-                cells.append(f"<td>{html.escape(role_title)}</td>")
             else:
+                # عمود الأطراف: الطرف الأول/الثاني فقط كما في جدول الإدخال (بدون قائد/نوع/اسم)
                 cells.append(f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>")
         parties_rows += "<tr>" + "".join(cells) + "</tr>"
     vehicles_rows = ""
