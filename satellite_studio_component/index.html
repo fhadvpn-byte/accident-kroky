@@ -144,6 +144,20 @@ const esriLabelsLayer = L.tileLayer(
     { maxNativeZoom: 17, maxZoom: 22, crossOrigin: "anonymous" }
 );
 
+[googleSatLayer, googleHybridArLayer, esriSatLayer, esriLabelsLayer].forEach(function(layer) {
+    const originalCreateTile = layer.createTile.bind(layer);
+    layer.createTile = function(coords, done) {
+        const tile = originalCreateTile(coords, done);
+        try {
+            if (tile && tile.tagName === "IMG") {
+                tile.crossOrigin = "anonymous";
+                tile.setAttribute("crossOrigin", "anonymous");
+            }
+        } catch (errTile) {}
+        return tile;
+    };
+});
+
 let currentProvider = "google";
 let labelsVisible = true;
 let jumpMarker = null;
@@ -437,6 +451,11 @@ function commitSatelliteToStreamlit() {
     const sy = 520 / (wrapRect.height || 520);
     const tiles = document.querySelectorAll("#satMap img.leaflet-tile.leaflet-tile-loaded");
     tiles.forEach(img => {
+        try {
+            if (img.getAttribute("crossorigin") !== "anonymous") {
+                img.setAttribute("crossOrigin", "anonymous");
+            }
+        } catch (errAttr) {}
         const parentOpacity = parseFloat(window.getComputedStyle(img.parentElement).opacity || "1");
         if (img.complete && img.naturalWidth > 0 && parentOpacity > 0) {
             const tr = img.getBoundingClientRect();
@@ -470,14 +489,31 @@ function commitSatelliteToStreamlit() {
     expCtx.textAlign = "left";
     expCtx.fillText("GPS: " + coordTxt, 30, 493);
     expCtx.restore();
-    const jpgDataUrl = expCanvas.toDataURL("image/jpeg", 0.90);
+    let jpgDataUrl = "";
+    try {
+        jpgDataUrl = expCanvas.toDataURL("image/jpeg", 0.85);
+    } catch (errExport) {
+        stEl.textContent = "⚠️ تعذر تصدير اللقطة (CORS). جرّب مزوّد Esri أو أعد تحميل البلاطات.";
+        stEl.style.color = "#f87171";
+        return;
+    }
     stEl.textContent = "✅ معتمد في ورقة التقرير A4";
     stEl.style.color = "#34d399";
     sendToStreamlit("streamlit:setComponentValue", {
         value: {
             image: jpgDataUrl,
             coords: coordTxt,
-            state: { center: [c.lat, c.lng], zoom: map.getZoom(), shapes: shapes },
+            aerial_sketch_data_url: jpgDataUrl,
+            satellite_img_b64: jpgDataUrl,
+            state: {
+                center: [c.lat, c.lng],
+                lat: c.lat,
+                lng: c.lng,
+                zoom: map.getZoom(),
+                shapes: shapes,
+                provider: currentProvider,
+                labelsVisible: labelsVisible
+            },
             ts: Date.now()
         }
     });
@@ -488,11 +524,23 @@ window.addEventListener("message", function(event) {
     const args = event.data.args || {};
     if (!initialized) {
         initialized = true;
-        if (args.saved_sat_state && args.saved_sat_state.center) {
+        const saved = args.saved_sat_state || {};
+        let center = saved.center;
+        if ((!center || !center.length) && saved.lat != null && saved.lng != null) {
+            center = [saved.lat, saved.lng];
+        }
+        if (saved.provider === "esri" || saved.provider === "google") {
+            currentProvider = saved.provider;
+        }
+        if (typeof saved.labelsVisible === "boolean") {
+            labelsVisible = saved.labelsVisible;
+        }
+        refreshMapLayers();
+        if (center && center.length >= 2) {
             map.invalidateSize();
-            map.setView(args.saved_sat_state.center, args.saved_sat_state.zoom || 18);
+            map.setView(center, saved.zoom || 18);
             map.invalidateSize();
-            shapes = args.saved_sat_state.shapes || [];
+            shapes = Array.isArray(saved.shapes) ? saved.shapes : [];
             setTimeout(redraw, 200);
         }
         setTimeout(() => {

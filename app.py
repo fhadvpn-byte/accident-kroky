@@ -1286,6 +1286,11 @@ DEFAULT_REPORT_STATE = {
     "auto_analyze_video": False,
     "show_page_numbers": False,
     "include_sketch": True,
+    "include_aerial": True,
+    "aerial_place": "below",
+    "studio_layout_mode": "🖥️ عرض مزدوج: الكروكي التفاعلي وبجانبه خريطة التصوير الجوي",
+    "report_media_mode": "كلاهما",
+    "saved_satellite_state": {},
     "confirm_clear": False,
     "last_saved_time": "لم يتم الحفظ بعد",
 }
@@ -1321,12 +1326,47 @@ def init_and_load_state():
         st.session_state.auto_analyze_video = False
     if not isinstance(st.session_state.get("include_sketch"), bool):
         st.session_state.include_sketch = True
+    if not isinstance(st.session_state.get("include_aerial"), bool):
+        st.session_state.include_aerial = True
+    if st.session_state.get("report_media_mode") not in ("كلاهما", "كروكي فقط", "جوي فقط"):
+        st.session_state.report_media_mode = "كلاهما"
+    if not isinstance(st.session_state.get("saved_satellite_state"), dict):
+        st.session_state.saved_satellite_state = {}
+    if not isinstance(st.session_state.get("aerial_sketch_data_url"), str):
+        st.session_state.aerial_sketch_data_url = ""
+    if not st.session_state.get("aerial_place"):
+        st.session_state.aerial_place = "below"
+    # مواءمة مفاتيح الجلسة القديمة مع المخزن الدائم
+    if st.session_state.get("saved_satellite_state") and not st.session_state.get("_saved_satellite_state"):
+        st.session_state["_saved_satellite_state"] = dict(st.session_state.get("saved_satellite_state") or {})
+    if st.session_state.get("studio_layout_mode") and not st.session_state.get("_studio_layout_mode"):
+        st.session_state["_studio_layout_mode"] = st.session_state.get("studio_layout_mode")
     _normalize_loaded_video_state()
     st.session_state.law_selection_sig = tuple(st.session_state.get("selected_articles") or [])
     st.session_state["state_initialized"] = True
 
 def save_current_work():
     data_to_save = {}
+    # مزامنة مفاتيح العرض/الجوي قبل الحفظ اليدوي فقط
+    if st.session_state.get("_studio_layout_mode"):
+        st.session_state["studio_layout_mode"] = st.session_state.get("_studio_layout_mode")
+    if isinstance(st.session_state.get("_saved_satellite_state"), dict):
+        st.session_state["saved_satellite_state"] = dict(st.session_state.get("_saved_satellite_state") or {})
+    if st.session_state.get("aerial_place_choice"):
+        st.session_state["aerial_place"] = (
+            "beside" if str(st.session_state.get("aerial_place_choice")).startswith("بجانب") else "below"
+        )
+    media_mode = st.session_state.get("report_media_mode") or "كلاهما"
+    if media_mode == "كروكي فقط":
+        st.session_state["include_sketch"] = True
+        st.session_state["include_aerial"] = False
+    elif media_mode == "جوي فقط":
+        st.session_state["include_sketch"] = False
+        st.session_state["include_aerial"] = True
+    else:
+        st.session_state["include_sketch"] = True
+        st.session_state["include_aerial"] = True
+        st.session_state["report_media_mode"] = "كلاهما"
     for key in DEFAULT_REPORT_STATE:
         if key in st.session_state and key != "confirm_clear":
             data_to_save[key] = st.session_state[key]
@@ -1339,7 +1379,27 @@ def save_current_work():
         "analysis_api_key",
     ):
         data_to_save.pop(secret_key_name, None)
+    # الصورة الجوية تُحفظ في ملف دائم منفصل (مثل الكروكي) وليست داخل JSON الضخم
+    data_to_save.pop("aerial_sketch_data_url", None)
+    data_to_save.pop("sketch_data_url", None)
     data_to_save["page1_data"] = export_page1_payload()
+    aerial_img = str(st.session_state.get("aerial_sketch_data_url") or "")
+    sat_state = st.session_state.get("saved_satellite_state") or st.session_state.get("_saved_satellite_state") or {}
+    if aerial_img.startswith("data:image/"):
+        _remember_aerial_data_url(aerial_img, sat_state if isinstance(sat_state, dict) else {})
+        data_to_save["has_aerial_image"] = True
+        data_to_save["satellite_img_b64"] = True
+    else:
+        data_to_save["has_aerial_image"] = False
+        data_to_save["satellite_img_b64"] = False
+    sketch_img = str(st.session_state.get("sketch_data_url") or "")
+    data_to_save["has_sketch_image"] = sketch_img.startswith("data:image/")
+    data_to_save["report_media_mode"] = st.session_state.get("report_media_mode", "كلاهما")
+    data_to_save["include_aerial"] = bool(st.session_state.get("include_aerial", True))
+    data_to_save["include_sketch"] = bool(st.session_state.get("include_sketch", True))
+    data_to_save["aerial_place"] = st.session_state.get("aerial_place", "below")
+    data_to_save["studio_layout_mode"] = st.session_state.get("studio_layout_mode") or st.session_state.get("_studio_layout_mode")
+    data_to_save["saved_satellite_state"] = sat_state if isinstance(sat_state, dict) else {}
     now_str = datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d | %I:%M:%S %p")
     data_to_save["last_saved_time"] = now_str
     st.session_state["last_saved_time"] = now_str
@@ -1364,6 +1424,7 @@ def clear_all_work():
     st.session_state["confirm_clear"] = False
     reset_page1_payload()
     st.session_state["_restore_perm_sidebar"] = True
+    _clear_remembered_aerial()
 
 def inject_bayyinah_blue_styles():
     st.markdown("""
@@ -2501,7 +2562,12 @@ def _reset_new_accident():
     reset_page1_payload()
     st.session_state["_restore_perm_sidebar"] = True
     try:
-        for adopted_name in ("adopted_sketch.png", "adopted_sketch_uri.txt"):
+        for adopted_name in (
+            "adopted_sketch.png",
+            "adopted_sketch_uri.txt",
+            "adopted_aerial_uri.txt",
+            "adopted_aerial_state.json",
+        ):
             adopted = SAVED_IMAGES_DIR / adopted_name
             if adopted.is_file():
                 adopted.unlink()
@@ -4676,6 +4742,9 @@ def _sketch_availability_control(widget_key, on_change):
 
 SKETCH_DATA_URL_KEY = "sketch_data_url"
 SKETCH_URI_PATH = SAVED_IMAGES_DIR / "adopted_sketch_uri.txt"
+AERIAL_DATA_URL_KEY = "aerial_sketch_data_url"
+AERIAL_URI_PATH = SAVED_IMAGES_DIR / "adopted_aerial_uri.txt"
+AERIAL_STATE_PATH = SAVED_IMAGES_DIR / "adopted_aerial_state.json"
 
 def _remember_sketch_data_url(data_uri: str, state_key: str = SKETCH_DATA_URL_KEY):
     st.session_state[state_key] = data_uri
@@ -4697,6 +4766,103 @@ def _load_remembered_sketch():
         return
     if stored.startswith("data:image/"):
         st.session_state[SKETCH_DATA_URL_KEY] = stored
+
+def _remember_aerial_data_url(data_uri: str, map_state=None):
+    image = str(data_uri or "").strip()
+    if not image.startswith("data:image/"):
+        return
+    st.session_state[AERIAL_DATA_URL_KEY] = image
+    st.session_state["aerial_sketch_data_url"] = image
+    st.session_state["include_aerial"] = True
+    state = map_state if isinstance(map_state, dict) else {}
+    st.session_state["_saved_satellite_state"] = dict(state)
+    st.session_state["saved_satellite_state"] = dict(state)
+    try:
+        SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+        AERIAL_URI_PATH.write_text(image, encoding="utf-8")
+        AERIAL_STATE_PATH.write_text(
+            json.dumps({
+                "state": state,
+                "aerial_place": st.session_state.get("aerial_place", "below"),
+                "studio_layout_mode": st.session_state.get("_studio_layout_mode")
+                    or st.session_state.get("studio_layout_mode")
+                    or "🖥️ عرض مزدوج: الكروكي التفاعلي وبجانبه خريطة التصوير الجوي",
+                "report_media_mode": st.session_state.get("report_media_mode", "كلاهما"),
+                "include_aerial": True,
+            }, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+
+def _load_remembered_aerial():
+    current = str(st.session_state.get(AERIAL_DATA_URL_KEY) or st.session_state.get("aerial_sketch_data_url") or "").strip()
+    restored_image = False
+    if not current.startswith("data:image/") and AERIAL_URI_PATH.is_file():
+        try:
+            stored = AERIAL_URI_PATH.read_text(encoding="utf-8").strip()
+        except OSError:
+            stored = ""
+        if stored.startswith("data:image/"):
+            st.session_state[AERIAL_DATA_URL_KEY] = stored
+            st.session_state["aerial_sketch_data_url"] = stored
+            current = stored
+            restored_image = True
+    existing_state = st.session_state.get("_saved_satellite_state") or st.session_state.get("saved_satellite_state")
+    need_meta = restored_image or not isinstance(existing_state, dict) or not existing_state
+    if need_meta and AERIAL_STATE_PATH.is_file():
+        try:
+            meta = json.loads(AERIAL_STATE_PATH.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, TypeError):
+            meta = {}
+        if isinstance(meta, dict):
+            state = meta.get("state") if isinstance(meta.get("state"), dict) else {}
+            if state and (not isinstance(existing_state, dict) or not existing_state):
+                st.session_state["_saved_satellite_state"] = dict(state)
+                st.session_state["saved_satellite_state"] = dict(state)
+            # لا ت overlapping مع ودجتات الجلسة بعد تهيئتها
+            if restored_image or "aerial_place_choice" not in st.session_state:
+                if meta.get("aerial_place") in ("below", "beside"):
+                    st.session_state["aerial_place"] = meta.get("aerial_place")
+                    st.session_state["aerial_place_choice"] = (
+                        "بجانب الكروكي" if meta.get("aerial_place") == "beside" else "أسفل الكروكي"
+                    )
+            if restored_image or "_studio_layout_mode" not in st.session_state:
+                layout = str(meta.get("studio_layout_mode") or "").strip()
+                if layout:
+                    st.session_state["studio_layout_mode"] = layout
+                    st.session_state["_studio_layout_mode"] = layout
+            if restored_image or "report_media_mode" not in st.session_state:
+                mode = str(meta.get("report_media_mode") or "").strip()
+                if mode in ("كلاهما", "كروكي فقط", "جوي فقط"):
+                    st.session_state["report_media_mode"] = mode
+            if restored_image and "include_aerial" in meta:
+                st.session_state["include_aerial"] = bool(meta.get("include_aerial"))
+    if current.startswith("data:image/") and st.session_state.get("include_aerial") is None:
+        st.session_state["include_aerial"] = True
+
+def _clear_remembered_aerial():
+    for key in (
+        AERIAL_DATA_URL_KEY,
+        "aerial_sketch_data_url",
+        "_saved_satellite_state",
+        "saved_satellite_state",
+        "_last_aerial_commit_ts",
+    ):
+        st.session_state.pop(key, None)
+    st.session_state["include_aerial"] = False
+    try:
+        for path in (AERIAL_URI_PATH, AERIAL_STATE_PATH):
+            if path.is_file():
+                path.unlink()
+    except OSError:
+        pass
+
+# استرجاع الجوي عند كل تشغيل بعد تعريف الدوال (لا autosave للحقول النصية)
+try:
+    _load_remembered_aerial()
+except Exception:
+    pass
 
 _ASPHALT_COMP_DIR = Path(__file__).resolve().parent / "asphalt_studio_component"
 _asphalt_studio_component = components.declare_component(
@@ -4740,9 +4906,71 @@ def _accept_asphalt_commit(sketch_image_state_key: str, default_loc: str):
             st.session_state["_saved_asphalt_state"] = committed_state
             st.toast("✅ تم اعتماد الكروكي في تقرير A4 بنجاح!")
 
+def _normalize_satellite_state(raw_state):
+    state = dict(raw_state) if isinstance(raw_state, dict) else {}
+    center = state.get("center")
+    lat = state.get("lat")
+    lng = state.get("lng")
+    if isinstance(center, (list, tuple)) and len(center) >= 2:
+        try:
+            lat = float(center[0]) if lat is None else float(lat)
+            lng = float(center[1]) if lng is None else float(lng)
+        except (TypeError, ValueError):
+            pass
+    elif lat is not None and lng is not None:
+        try:
+            state["center"] = [float(lat), float(lng)]
+            lat, lng = float(lat), float(lng)
+        except (TypeError, ValueError):
+            pass
+    if lat is not None and lng is not None:
+        state["lat"] = lat
+        state["lng"] = lng
+        state["center"] = [lat, lng]
+    try:
+        state["zoom"] = int(state.get("zoom") or 18)
+    except (TypeError, ValueError):
+        state["zoom"] = 18
+    if not isinstance(state.get("shapes"), list):
+        state["shapes"] = []
+    provider = str(state.get("provider") or state.get("tileProvider") or "google").strip().lower()
+    state["provider"] = "esri" if provider == "esri" else "google"
+    state["labelsVisible"] = bool(state.get("labelsVisible", True))
+    return state
+
+def _sync_report_media_mode_from_flags():
+    include_sketch = bool(st.session_state.get("include_sketch", True))
+    include_aerial = bool(st.session_state.get("include_aerial", True))
+    mode = st.session_state.get("report_media_mode")
+    if mode not in ("كلاهما", "كروكي فقط", "جوي فقط"):
+        if include_sketch and include_aerial:
+            mode = "كلاهما"
+        elif include_aerial and not include_sketch:
+            mode = "جوي فقط"
+        else:
+            mode = "كروكي فقط"
+        st.session_state["report_media_mode"] = mode
+    return mode
+
+def _apply_report_media_mode(mode: str):
+    if mode == "كروكي فقط":
+        st.session_state["include_sketch"] = True
+        st.session_state["include_aerial"] = False
+    elif mode == "جوي فقط":
+        st.session_state["include_sketch"] = False
+        st.session_state["include_aerial"] = True
+    else:
+        mode = "كلاهما"
+        st.session_state["include_sketch"] = True
+        st.session_state["include_aerial"] = True
+    st.session_state["report_media_mode"] = mode
+
 def _render_aerial_reference():
+    saved_state = _normalize_satellite_state(
+        st.session_state.get("_saved_satellite_state") or st.session_state.get("saved_satellite_state")
+    )
     sat_result = _satellite_studio_component(
-        saved_sat_state=st.session_state.get("_saved_satellite_state"),
+        saved_sat_state=saved_state or None,
         key="bayyinah_satellite_studio_v1",
         default=None,
     )
@@ -4750,12 +4978,23 @@ def _render_aerial_reference():
         last_ts = st.session_state.get("_last_aerial_commit_ts")
         if sat_result.get("ts") != last_ts:
             st.session_state["_last_aerial_commit_ts"] = sat_result.get("ts")
-            st.session_state["aerial_sketch_data_url"] = sat_result["image"]
-            st.session_state["_saved_satellite_state"] = sat_result.get("state")
+            map_state = _normalize_satellite_state(sat_result.get("state"))
+            # حفظ فوري دائم عند الاعتماد (نفس أسلوب الكروكي)
+            _remember_aerial_data_url(sat_result["image"], map_state)
+            if st.session_state.get("report_media_mode") == "كروكي فقط":
+                _apply_report_media_mode("كلاهما")
+            else:
+                st.session_state["include_aerial"] = True
             st.toast("✅ تم اعتماد التصوير الجوي في تقرير A4 بنجاح!")
-    if str(st.session_state.get("aerial_sketch_data_url") or "").startswith("data:image/"):
-        if st.button("🗑️ إزالة التصوير الجوي من التقرير", key="_remove_aerial_sketch"):
-            st.session_state["aerial_sketch_data_url"] = ""
+    aerial_preview = str(st.session_state.get("aerial_sketch_data_url") or "").strip()
+    if aerial_preview.startswith("data:image/"):
+        st.success("✅ التصوير الجوي محفوظ ومعتمد في التقرير")
+        try:
+            st.image(base64.b64decode(aerial_preview.split(",", 1)[-1]), width=280)
+        except Exception:
+            pass
+        if st.button("🗑️ حذف التصوير الجوي المعتمد", key="_remove_aerial_sketch"):
+            _clear_remembered_aerial()
             st.rerun()
 
 def render_interactive_asphalt_studio(
@@ -4784,9 +5023,20 @@ def render_interactive_asphalt_studio(
             st.image(base64.b64decode(encoded), use_container_width=True)
 
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[1]:
-    col_sketch_state, col_layout, col_place = st.columns([1.1, 1.7, 1.0])
+    _load_remembered_sketch()
+    _load_remembered_aerial()
+    col_sketch_state, col_media, col_layout, col_place = st.columns([1.0, 1.1, 1.5, 1.0])
     with col_sketch_state:
         _sketch_availability_control("include_sketch_choice_tab4", _on_sketch_choice_tab4)
+    with col_media:
+        _sync_report_media_mode_from_flags()
+        media_choice = st.radio(
+            "محتوى التقرير المعتمد",
+            options=["كلاهما", "كروكي فقط", "جوي فقط"],
+            horizontal=True,
+            key="report_media_mode",
+        )
+        _apply_report_media_mode(media_choice)
     with col_layout:
         st.radio(
             "نمط عرض التخطيط",
@@ -4794,6 +5044,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[1]:
             horizontal=True,
             key="_studio_layout_mode",
         )
+        st.session_state["studio_layout_mode"] = st.session_state.get("_studio_layout_mode")
     with col_place:
         aerial_place_choice = st.radio(
             "موضع لقطة التصوير الجوي",
@@ -4802,7 +5053,6 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[1]:
             key="aerial_place_choice",
         )
         st.session_state["aerial_place"] = "beside" if str(aerial_place_choice).startswith("بجانب") else "below"
-    _load_remembered_sketch()
     render_interactive_asphalt_studio(
         sketch_image_state_key="sketch_data_url",
         location_state_key="p1_acc_location",
@@ -5114,6 +5364,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         st.rerun()
     
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
+    _load_remembered_sketch()
+    _load_remembered_aerial()
     sketch_src = str(st.session_state.get("sketch_data_url") or "").strip()
     if not sketch_src.startswith("data:image/"):
         adopted_path = SAVED_IMAGES_DIR / "adopted_sketch.png"
@@ -5122,8 +5374,15 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 sketch_src = "data:image/png;base64," + base64.b64encode(adopted_path.read_bytes()).decode("ascii")
             except OSError:
                 sketch_src = ""
-    safe_sketch_src = html.escape(sketch_src, quote=True)
     aerial_src = str(st.session_state.get("aerial_sketch_data_url") or st.session_state.get("aerial_data_url") or "").strip()
+    media_mode = _sync_report_media_mode_from_flags()
+    show_sketch_media = media_mode in ("كلاهما", "كروكي فقط") and bool(st.session_state.get("include_sketch", True))
+    show_aerial_media = media_mode in ("كلاهما", "جوي فقط") and bool(st.session_state.get("include_aerial", True))
+    if not show_sketch_media:
+        sketch_src = ""
+    if not show_aerial_media:
+        aerial_src = ""
+    safe_sketch_src = html.escape(sketch_src, quote=True) if sketch_src.startswith("data:image/") else ""
     safe_aerial_src = html.escape(aerial_src, quote=True) if aerial_src.startswith("data:image/") else ""
     
     def _framed_shot(title, src, alt, max_height, compact=False):
@@ -5361,7 +5620,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         st.session_state.get("p1_dept_branch", dept_branch),
     )
     photos_list = list(st.session_state.gallery_photos or [])
-    include_sketch = st.session_state.get("include_sketch", True) is True
+    include_sketch = (
+        (st.session_state.get("include_sketch", True) is True and bool(safe_sketch_src))
+        or (st.session_state.get("include_aerial", True) is True and bool(safe_aerial_src))
+        or bool(safe_sketch_src or safe_aerial_src)
+    )
     photos_pages_html = ""
     photos_per_page = 6
     annex_first_page = 5 if include_sketch else 4
