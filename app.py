@@ -895,35 +895,183 @@ def _clone_page1_value(value):
         return dict(value)
     return value
 
+QUALIFICATION_EXEMPT = "➖ لا يُطالب برخصة"
 QUALIFICATION_OPTIONS = [
     "مؤهل للقيادة",
     "غير مؤهل للقيادة",
+    QUALIFICATION_EXEMPT,
 ]
+NON_DRIVER_ROLES = {"راكب", "مشاة", "غير سائق"}
 
-def normalize_driving_qualification(val):
+def _clean_party_text(value) -> str:
+    if value is None:
+        return ""
+    try:
+        missing = pd.isna(value)
+        if bool(missing) and getattr(missing, "shape", None) is None:
+            return ""
+    except (TypeError, ValueError):
+        pass
+    text = str(value).strip()
+    if text.lower() in ("none", "nan", "<na>"):
+        return ""
+    return text
+
+def _is_non_driver_role(role) -> bool:
+    text = _clean_party_text(role)
+    if not text:
+        return False
+    if text in NON_DRIVER_ROLES:
+        return True
+    lowered = text.replace("أ", "ا")
+    if "راكب" in text or "مشاة" in text or "عابر" in text:
+        return True
+    if "غير سائق" in text or "غير سائق" in lowered:
+        return True
+    if text == "سائق" or text.startswith("سائق") or "قائد" in text:
+        return False
+    return False
+
+def normalize_driving_qualification(val, role=None):
+    if _is_non_driver_role(role):
+        return QUALIFICATION_EXEMPT
     if val is None:
         return "مؤهل للقيادة"
     text = str(val).strip()
-    if not text or text.lower() == "none":
+    if not text or text.lower() in ("none", "nan", "<na>"):
         return "مؤهل للقيادة"
+    if "لا يُطالب" in text or "لا يطالب" in text or text == QUALIFICATION_EXEMPT:
+        # راكب/مشاة فقط يحتفظون بالإعفاء؛ السائق لا يبقى على هذا الخيار
+        if role is not None and not _is_non_driver_role(role):
+            return "مؤهل للقيادة"
+        return QUALIFICATION_EXEMPT
     if "غير" in text:
         return "غير مؤهل للقيادة"
     if text in QUALIFICATION_OPTIONS:
         return text
     return "مؤهل للقيادة"
 
+def _sanitize_party_row(row) -> dict:
+    item = dict(row) if isinstance(row, dict) else {}
+    item["الاسم"] = _clean_party_text(item.get("الاسم", ""))
+    item["الهوية"] = _clean_party_text(item.get("الهوية", ""))
+    item["الطرف"] = _clean_party_text(item.get("الطرف", "")) or str(item.get("الطرف") or "")
+    role = _clean_party_text(item.get("المشاركة", ""))
+    item["المشاركة"] = role
+    health = _clean_party_text(item.get("الحالة", ""))
+    item["الحالة"] = health if health else "سليم"
+    current_qual = item.get("التأهيل", "")
+    # عند الاعتماد: الراكب/المشاة/غير السائق → إعفاء حتى لو فارغ أو «مؤهل للقيادة»
+    if _is_non_driver_role(role):
+        normalized = QUALIFICATION_EXEMPT
+    else:
+        normalized = normalize_driving_qualification(current_qual, role=role)
+    item["التأهيل"] = normalized
+    return item
+
 def _normalize_party_qualification_rows(rows):
     cleaned = []
     changed = False
     for row in rows or []:
-        item = dict(row) if isinstance(row, dict) else {}
-        current = item.get("التأهيل", "")
-        normalized = normalize_driving_qualification(current)
-        if current != normalized:
+        original = dict(row) if isinstance(row, dict) else {}
+        item = _sanitize_party_row(original)
+        if (
+            _clean_party_text(original.get("التأهيل", "")) != item.get("التأهيل", "")
+            or _clean_party_text(original.get("الاسم", "")) != item.get("الاسم", "")
+            or _clean_party_text(original.get("الهوية", "")) != item.get("الهوية", "")
+            or (_clean_party_text(original.get("الحالة", "")) or "سليم") != item.get("الحالة", "")
+            or _clean_party_text(original.get("المشاركة", "")) != item.get("المشاركة", "")
+        ):
             changed = True
-        item["التأهيل"] = normalized
         cleaned.append(item)
     return cleaned, changed
+
+def _party_rows_for_liability(rows):
+    """أطراف توزيع المسؤولية ومخالفات الرخصة: السائقون فقط (استبعاد راكب/مشاة)."""
+    out = []
+    for row in rows or []:
+        item = _sanitize_party_row(row)
+        if _is_non_driver_role(item.get("المشاركة")):
+            continue
+        out.append(item)
+    return out
+
+def _unqualified_driver_parties(rows):
+    return [
+        item for item in _party_rows_for_liability(rows)
+        if item.get("التأهيل") == "غير مؤهل للقيادة"
+    ]
+
+def _render_party_role_cards(rows):
+    cards = []
+    for item in rows or []:
+        party = _sanitize_party_row(item)
+        label = html.escape(party.get("الطرف") or "طرف")
+        name = html.escape(party.get("الاسم") or "—")
+        role = party.get("المشاركة") or ""
+        qual = party.get("التأهيل") or ""
+        if _is_non_driver_role(role) or qual == QUALIFICATION_EXEMPT:
+            accent = "#64748b"
+            glow = "rgba(100,116,139,0.18)"
+            body = "💺 راكب | لا يُطالب برخصة قيادة"
+            role_label = html.escape(role or "راكب")
+        elif qual == "غير مؤهل للقيادة":
+            accent = "#dc2626"
+            glow = "rgba(245,158,11,0.28)"
+            body = "⚠️ سائق | غير مؤهل للقيادة"
+            role_label = "سائق"
+        else:
+            accent = "#0891b2"
+            glow = "rgba(14,165,233,0.22)"
+            body = "🚗 سائق | مؤهل للقيادة"
+            role_label = "سائق"
+        cards.append(
+            f'<div style="flex:1 1 210px; min-width:200px; max-width:320px; padding:12px 14px; '
+            f'border-radius:14px; border:1px solid rgba(148,163,184,0.35); '
+            f'background:linear-gradient(145deg, rgba(15,23,42,0.04), rgba(14,165,233,0.10)); '
+            f'box-shadow:0 8px 24px {glow}; backdrop-filter:blur(8px);">'
+            f'<div style="font-size:11px; color:#64748b; font-weight:700; margin-bottom:4px;">{label} · {role_label}</div>'
+            f'<div style="font-size:13px; font-weight:800; color:{accent}; line-height:1.45;">{body}</div>'
+            f'<div style="font-size:11px; color:#475569; margin-top:6px;">{name}</div>'
+            f"</div>"
+        )
+    if not cards:
+        return
+    st.markdown(
+        '<div style="display:flex; flex-wrap:wrap; gap:12px; margin:10px 0 6px 0; '
+        'padding:12px; border-radius:16px; '
+        'background:linear-gradient(120deg, rgba(14,165,233,0.08), rgba(37,99,235,0.06)); '
+        'border:1px solid rgba(59,130,246,0.18);">'
+        + "".join(cards)
+        + "</div>",
+        unsafe_allow_html=True,
+    )
+
+def _party_qualification_cell_html(role, qual) -> str:
+    normalized = normalize_driving_qualification(qual, role=role)
+    if _is_non_driver_role(role) or normalized == QUALIFICATION_EXEMPT:
+        role_txt = _clean_party_text(role)
+        # الشارة المعتمدة للراكب كما طُلبت حرفياً؛ المشاة بنفس الأسلوب
+        if "مشاة" in role_txt or "عابر" in role_txt:
+            badge_txt = "— لا يُطالب برخصة (مشاة) —"
+        else:
+            badge_txt = "— لا يُطالب برخصة (راكب) —"
+        return (
+            '<span style="display:inline-block; padding:2px 10px; border-radius:4px; '
+            'background:#f1f5f9; color:#475569; border:1px dashed #94a3b8; '
+            f'font-size:11px; font-weight:600;">{badge_txt}</span>'
+        )
+    if normalized == "غير مؤهل للقيادة":
+        return (
+            '<span style="display:inline-block; padding:2px 10px; border-radius:4px; '
+            'background:#fff7ed; color:#c2410c; border:1px solid #fdba74; '
+            'font-size:11px; font-weight:700;">⚠️ غير مؤهل للقيادة</span>'
+        )
+    return (
+        '<span style="display:inline-block; padding:2px 10px; border-radius:4px; '
+        'background:#ecfeff; color:#0e7490; border:1px solid #67e8f9; '
+        'font-size:11px; font-weight:700;">✅ مؤهل للقيادة</span>'
+    )
 
 def _page1_cell(value):
     if value is None:
@@ -1032,17 +1180,22 @@ def _records_from_dynamic_parties(vault):
             id_no.strip(),
             role.strip() and role != "سائق",
             health.strip() and health != "سليم",
-            qual.strip() and qual not in ("مؤهل (رخصة سارية)", "مؤهل للقيادة"),
+            qual.strip() and qual not in (
+                "مؤهل (رخصة سارية)",
+                "مؤهل للقيادة",
+                QUALIFICATION_EXEMPT,
+                "➖ لا يُطالب برخصة",
+            ),
         ))
         if meaningful:
-            rows.append({
+            rows.append(_sanitize_party_row({
                 "الطرف": _PARTY_LABELS.get(i, f"الطرف {i}"),
                 "الاسم": name,
                 "الهوية": id_no,
                 "المشاركة": role,
                 "الحالة": health,
                 "التأهيل": qual,
-            })
+            }))
     return rows
 
 def _records_from_dynamic_vehicles(vault):
@@ -3858,16 +4011,20 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
     if _saved_qual_changed:
         st.session_state.p1_parties_records = _saved_party_records
     _editor_parties = st.session_state.get("p1_parties_editor")
-    if isinstance(_editor_parties, pd.DataFrame) and "التأهيل" in _editor_parties.columns:
-        st.session_state.p1_parties_editor = _editor_parties.copy()
-        st.session_state.p1_parties_editor["التأهيل"] = st.session_state.p1_parties_editor["التأهيل"].apply(normalize_driving_qualification)
+    if isinstance(_editor_parties, pd.DataFrame) and not _editor_parties.empty:
+        _editor_clean, _editor_changed = _normalize_party_qualification_rows(_frame_records(_editor_parties))
+        if _editor_changed or _qual_changed or _saved_qual_changed:
+            st.session_state.p1_parties_editor = pd.DataFrame(_editor_clean)
     elif _qual_changed or _saved_qual_changed:
         st.session_state.pop("p1_parties_editor", None)
     parties_df_seed = fill_smart_table_defaults(pd.DataFrame(st.session_state.parties), PARTY_SMART_DEFAULTS)
-    if "التأهيل" in parties_df_seed.columns:
-        parties_df_seed["التأهيل"] = parties_df_seed["التأهيل"].apply(normalize_driving_qualification)
+    if not parties_df_seed.empty:
+        _seed_rows, _ = _normalize_party_qualification_rows(_frame_records(parties_df_seed))
+        parties_df_seed = pd.DataFrame(_seed_rows)
     if isinstance(st.session_state.get("p1_parties_editor"), pd.DataFrame):
-        st.session_state.p1_parties_editor = fill_smart_table_defaults(st.session_state.p1_parties_editor, PARTY_SMART_DEFAULTS)
+        _ed = fill_smart_table_defaults(st.session_state.p1_parties_editor, PARTY_SMART_DEFAULTS)
+        _ed_rows, _ = _normalize_party_qualification_rows(_frame_records(_ed) if not _ed.empty else [])
+        st.session_state.p1_parties_editor = pd.DataFrame(_ed_rows) if _ed_rows else _ed
     vehicles_source = fill_smart_table_defaults(pd.DataFrame(st.session_state.vehicles), VEHICLE_SMART_DEFAULTS)
     if isinstance(st.session_state.get("p1_vehicles_editor"), pd.DataFrame):
         st.session_state.p1_vehicles_editor = fill_smart_table_defaults(st.session_state.p1_vehicles_editor, VEHICLE_SMART_DEFAULTS)
@@ -3918,10 +4075,17 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
                     "تأهيل للقيادة",
                     options=QUALIFICATION_OPTIONS,
                     default="مؤهل للقيادة",
-                    required=True,
+                    required=False,
                 ),
             }
         )
+        # شريط بطاقات فوري من قيم المحرر الحالية (قبل الاعتماد أيضاً)
+        try:
+            _live_party_rows = _frame_records(parties_df) if isinstance(parties_df, pd.DataFrame) else []
+            _live_party_rows, _ = _normalize_party_qualification_rows(_live_party_rows)
+            _render_party_role_cards(_live_party_rows)
+        except Exception:
+            pass
         st.divider()
         st.subheader("جدول معلومات المركبات")
         vehicles_df = st.data_editor(
@@ -3943,13 +4107,26 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
 
     inject_rtl_tab_for_data_editors()
     if page1_submitted:
-        st.session_state.parties = _frame_records(parties_df)
+        raw_parties = _frame_records(parties_df)
+        cleaned_parties, _ = _normalize_party_qualification_rows(raw_parties)
+        st.session_state.parties = cleaned_parties
         st.session_state.vehicles = _frame_records(vehicles_df)
         st.session_state.p1_parties_records = _clone_page1_value(st.session_state.parties)
         st.session_state.p1_vehicles_records = _clone_page1_value(st.session_state.vehicles)
+        # لا تنبيه رخصة للراكب/المشاة؛ تنبيه السائق غير المؤهل فقط
+        _unqual_drivers = _unqualified_driver_parties(cleaned_parties)
+        for _p in cleaned_parties:
+            if _is_non_driver_role(_p.get("المشاركة")):
+                continue
+        if _unqual_drivers:
+            _names = "، ".join(
+                (_p.get("الطرف") or _p.get("الاسم") or "سائق") for _p in _unqual_drivers
+            )
+            st.warning(f"تنبيه رخصة قيادة: {_names} غير مؤهل للقيادة (السائقون فقط).")
         _mirror_page1_fields()
         sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=False)
         st.toast("تم اعتماد بيانات الحادث والأطراف في الجلسة", icon="✅")
+        parties_df = pd.DataFrame(cleaned_parties)
     else:
         # الإبقاء على آخر اعتماد في الجلسة دون إعادة كتابة مع كل حرف
         parties_df = pd.DataFrame(st.session_state.get("parties") or [])
@@ -4451,6 +4628,24 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         except (TypeError, ValueError):
             st.session_state.custom_p1_ratio = 75
     st.markdown("### ⚖️ الرأي وتوزيع نسب المسؤولية")
+    _liability_party_rows = _party_rows_for_liability(st.session_state.get("parties") or [])
+    _license_violation_parties = _unqualified_driver_parties(st.session_state.get("parties") or [])
+    # استبعاد الراكب/المشاة من قوائم توزيع المسؤولية ومخالفات رخصة القيادة
+    if _liability_party_rows:
+        _liab_labels = [
+            f"{(p.get('الطرف') or 'طرف')} — {(p.get('الاسم') or 'بدون اسم')} | {(p.get('التأهيل') or '')}"
+            for p in _liability_party_rows
+        ]
+        st.caption("أطراف توزيع المسؤولية (السائقون فقط — الراكب/المشاة مستبعدون): " + " · ".join(_liab_labels))
+    if _license_violation_parties:
+        _lic_labels = [
+            f"{(p.get('الطرف') or 'طرف')} — {(p.get('الاسم') or 'سائق')}"
+            for p in _license_violation_parties
+        ]
+        st.info("مخالفات رخصة القيادة المحتملة (سائق غير مؤهل فقط): " + " · ".join(_lic_labels))
+        # لا تُقترح مادة الرخصة على راكب/مشاة
+        if "art_32_1" not in (st.session_state.get("selected_articles") or []):
+            st.caption("يمكن إدراج المادة (32/1) يدوياً للسائق غير المؤهل عند الحاجة.")
     ratio_options = [
         "100% الطرف الأول | 0% الطرف الثاني",
         "75% الطرف الأول | 25% الطرف الثاني",
@@ -5562,11 +5757,20 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         parties_df = pd.DataFrame(st.session_state.get("parties") or [])
     if not isinstance(vehicles_df, pd.DataFrame):
         vehicles_df = pd.DataFrame(st.session_state.get("vehicles") or [])
+    # تنظيف None/NaN قبل الطباعة
+    if not parties_df.empty:
+        _a4_parties, _ = _normalize_party_qualification_rows(_frame_records(parties_df))
+        parties_df = pd.DataFrame(_a4_parties)
     parties_rows = ""
     for _, row in parties_df.iterrows():
-        parties_rows += "<tr>" + "".join(
-            f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>" for key, _label in _party_columns
-        ) + "</tr>"
+        cells = []
+        role_val = _page1_cell(row.get("المشاركة", ""))
+        for key, _label in _party_columns:
+            if key == "التأهيل":
+                cells.append(f"<td style=\"text-align:center; vertical-align:middle;\">{_party_qualification_cell_html(role_val, row.get(key, ''))}</td>")
+            else:
+                cells.append(f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>")
+        parties_rows += "<tr>" + "".join(cells) + "</tr>"
     vehicles_rows = ""
     for _, row in vehicles_df.iterrows():
         vehicles_rows += "<tr>" + "".join(
