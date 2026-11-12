@@ -5695,15 +5695,20 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[1]:
     render_compact_sketch_legends(key_prefix="legend_key_")
     legend_keys = [str(st.session_state.get(f"legend_key_{index}") or "") for index in range(1, 11)]
 
+MAX_ACCIDENT_PHOTOS = 15
+
 def convert_gallery_image(uploaded_file):
+    """تصغير أي بُعد يتجاوز 1200px ثم تحويل JPEG بجودة 80 قبل Base64."""
     try:
         uploaded_file.seek(0)
         with Image.open(uploaded_file) as source:
             image = ImageOps.exif_transpose(source)
             image = image.convert("RGB")
-            image.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
+            width, height = image.size
+            if width > 1200 or height > 1200:
+                image.thumbnail((1200, 1200), Image.Resampling.LANCZOS)
             buffer = io.BytesIO()
-            image.save(buffer, format="JPEG", quality=82)
+            image.save(buffer, format="JPEG", quality=80, optimize=True)
         encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
         return f"data:image/jpeg;base64,{encoded}"
     except Exception:
@@ -5862,16 +5867,19 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
 
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     st.subheader("📸 إرفاق صور موقع الحادث والمركبات للتقرير الرسمي")
-    _max_accident_photos = 10
+    _max_accident_photos = MAX_ACCIDENT_PHOTOS
     if "gallery_photos" not in st.session_state:
         st.session_state.gallery_photos = list(st.session_state.get("accident_photos_data") or [])
+    # قصّ القائمة عند الاسترجاع إن تجاوزت الحد الجديد
+    if isinstance(st.session_state.gallery_photos, list) and len(st.session_state.gallery_photos) > _max_accident_photos:
+        st.session_state.gallery_photos = st.session_state.gallery_photos[:_max_accident_photos]
     if "uploaded_ids" not in st.session_state:
         st.session_state.uploaded_ids = set(st.session_state.get("processed_file_keys") or set())
         for entry in st.session_state.gallery_photos:
             if entry.get("id"):
                 st.session_state.uploaded_ids.add(entry["id"])
     gallery_uploads = st.file_uploader(
-        "📸 اضغط هنا لاختيار صور الحادث من معرض الجوال (حتى 10 صور)",
+        "📸 اضغط هنا لاختيار صور الحادث من معرض الجوال (حتى 15 صورة)",
         type=None,
         accept_multiple_files=True,
         key="mobile_gallery_uploader",
@@ -5880,9 +5888,9 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         """
 <script>
 (function () {
-  var MAX = 10;
+  var MAX = 15;
   var EDGE = 1200;
-  var QUALITY = 0.78;
+  var QUALITY = 0.80;
   var doc;
   try { doc = window.parent.document; } catch (err) { return; }
   if (!doc || !doc.body) return;
@@ -5974,7 +5982,9 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     st.session_state.gallery_photos = gallery_photos
     st.session_state.uploaded_ids = uploaded_ids
     if photo_limit_hit:
-        st.warning("تم الوصول للحد الأقصى (10 صور).")
+        st.warning("تم الوصول للحد الأقصى (15 صورة).")
+    # مزامنة قائمة الحفظ/الاسترجاع بنفس الحد
+    st.session_state["accident_photos_data"] = list(gallery_photos[:_max_accident_photos])
     pending_remove = None
     for row_start in range(0, len(gallery_photos), 2):
         cols = st.columns(2)
@@ -6207,7 +6217,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         st.session_state.get("p1_dept_region", dept_region),
         st.session_state.get("p1_dept_branch", dept_branch),
     )
-    photos_list = list(st.session_state.gallery_photos or [])
+    # صفحات ديناميكية: 1–6، 7–12، 13–15 مع ترقيم متسلسل حتى 15
+    photos_list = list(st.session_state.get("gallery_photos") or [])[:MAX_ACCIDENT_PHOTOS]
     include_sketch = (
         (st.session_state.get("include_sketch", True) is True and bool(safe_sketch_src))
         or (st.session_state.get("include_aerial", True) is True and bool(safe_aerial_src))
@@ -6216,7 +6227,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     photos_pages_html = ""
     photos_per_page = 6
     annex_first_page = 5 if include_sketch else 4
-    for page_idx in range(0, len(photos_list), photos_per_page):
+    for page_idx in range(0, len(photos_list[:MAX_ACCIDENT_PHOTOS]), photos_per_page):
         page_photos = photos_list[page_idx:page_idx + photos_per_page]
         if not page_photos:
             continue
@@ -6344,10 +6355,18 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .photo-annex .header-box {{ min-height: 88px; margin-bottom: 6px; padding-bottom: 4px; }}
         .photo-annex .header-logo img {{ height: 72px; max-width: 80px; }}
         .photo-annex .section-badge {{ margin: 4px auto 6px auto; padding: 3px 14px; }}
-        .photo-grid {{ display: flex; flex-wrap: wrap; justify-content: space-between; align-items: flex-start; overflow: visible; }}
+        .photo-grid {{
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 12px;
+            align-items: start;
+            overflow: visible;
+            width: 100%;
+        }}
         .photo-card {{
-            width: 48%; margin-bottom: 8px; text-align: center; overflow: visible;
+            width: 100%; max-width: 100%; margin-bottom: 0; text-align: center; overflow: visible;
             break-inside: avoid; page-break-inside: avoid;
+            box-sizing: border-box;
         }}
         .photo-card img {{
             width: auto; max-width: 100%; max-height: 185px; height: auto; object-fit: contain;
