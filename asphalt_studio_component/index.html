@@ -72,6 +72,12 @@
             font-weight: 900;
             box-shadow: 0 0 14px rgba(16, 185, 129, 0.45);
         }
+        #cloneCarSourceSel {
+            width: 150px;
+            max-width: 42vw;
+            padding: 5px 8px;
+            font-size: 12px;
+        }
         .canvas-wrap {
             width: 100%;
             max-width: 1080px;
@@ -152,6 +158,17 @@
                 <button class="t-btn" onclick="rotateSelected(-15)">↺ تدوير يسار</button>
                 <button class="t-btn" onclick="rotateSelected(15)">↻ تدوير يمين</button>
                 <button class="t-btn commit" onclick="commitToStreamlit(true)">✅ اعتماد الكروكي في التقرير</button>
+            </div>
+        </div>
+        <div class="toolbar-row">
+            <div class="btn-group">
+                <span style="font-size:11.5px;color:#93c5fd;font-weight:800;margin-left:4px;">نسخ ما بعد التصادم:</span>
+                <select id="cloneCarSourceSel"></select>
+                <button class="t-btn" onclick="cloneVehiclePostImpact()">📋 نسخ المركبة لما بعد التصادم</button>
+                <button class="t-btn" onclick="applyOrClonePosture('upside_down')">🙃 مقلوبة</button>
+                <button class="t-btn" onclick="applyOrClonePosture('right_side')">↪️ الجانب الأيمن</button>
+                <button class="t-btn" onclick="applyOrClonePosture('left_side')">↩️ الجانب الأيسر</button>
+                <button class="t-btn" onclick="applyOrClonePosture('upright')">🚗 معتدلة</button>
             </div>
         </div>
         <div class="canvas-wrap">
@@ -408,6 +425,7 @@
         items.push(compass);
         if (sc.fallMeters) updateFallMeters(sc.fallMeters, false);
         selectedIdx = -1;
+        syncCloneCarDropdown();
         renderAll(false);
         if (!quiet) markDirty();
     }
@@ -581,7 +599,78 @@
         }
         ctx.restore();
     }
+    const POST_IMPACT_POSTURES = ["upside_down", "right_side", "left_side", "upright"];
+    function vehicleSourceIndexes() {
+        const found = [];
+        items.forEach((it, idx) => {
+            if (it && ["car", "truck", "bike", "overturned_car"].includes(it.type)) found.push(idx);
+        });
+        return found;
+    }
+    function syncCloneCarDropdown() {
+        const sel = document.getElementById("cloneCarSourceSel");
+        if (!sel) return;
+        const prev = sel.value;
+        sel.innerHTML = "";
+        vehicleSourceIndexes().forEach(idx => {
+            const it = items[idx];
+            const kind = it.type === "truck" ? "شاحنة" : (it.type === "bike" ? "دراجة" : (it.type === "overturned_car" ? "بعد التصادم" : "مركبة"));
+            const opt = document.createElement("option");
+            opt.value = String(idx);
+            opt.textContent = String(it.label || "1") + " — " + kind;
+            sel.appendChild(opt);
+        });
+        if (prev && Array.from(sel.options).some(opt => opt.value === prev)) sel.value = prev;
+    }
+    function spawnPostImpactClone(src, posture) {
+        return {
+            type: "overturned_car",
+            label: src.label || "1",
+            color: src.color || "#ef4444",
+            x: Math.max(30, Math.min(930, Number(src.x || 480) + 52)),
+            y: Math.max(30, Math.min(420, Number(src.y || 250) + 22)),
+            angle: Number(src.angle) || 0,
+            posture: POST_IMPACT_POSTURES.includes(posture) ? posture : (src.posture || "upside_down"),
+            tailX: Number(src.x) || 480,
+            tailY: Number(src.y) || 250,
+            skid: true
+        };
+    }
+    function cloneVehiclePostImpact() {
+        const sel = document.getElementById("cloneCarSourceSel");
+        const idx = Number(sel && sel.value);
+        const src = items[idx];
+        if (!src || !["car", "truck", "bike", "overturned_car"].includes(src.type)) return;
+        items.push(spawnPostImpactClone(src, src.posture || "upside_down"));
+        selectedIdx = items.length - 1;
+        renderAll(false);
+        syncCloneCarDropdown();
+        scheduleAutoCommit();
+    }
+    function applyOrClonePosture(posture) {
+        if (!POST_IMPACT_POSTURES.includes(posture)) return;
+        if (selectedIdx >= 0 && items[selectedIdx] && items[selectedIdx].type === "overturned_car") {
+            items[selectedIdx].posture = posture;
+            renderAll(false);
+            scheduleAutoCommit();
+            return;
+        }
+        const sel = document.getElementById("cloneCarSourceSel");
+        let idx = Number(sel && sel.value);
+        if (!items[idx] || !["car", "truck", "bike", "overturned_car"].includes(items[idx].type)) {
+            idx = items.findIndex(it => it && ["car", "truck", "bike"].includes(it.type));
+        }
+        if (idx < 0 || !items[idx]) return;
+        items.push(spawnPostImpactClone(items[idx], posture));
+        selectedIdx = items.length - 1;
+        renderAll(false);
+        syncCloneCarDropdown();
+        scheduleAutoCommit();
+    }
+    window.cloneVehiclePostImpact = cloneVehiclePostImpact;
+    window.applyOrClonePosture = applyOrClonePosture;
     function drawOverturnedCarItem(it, isSelected, hideHandles) {
+        const posture = POST_IMPACT_POSTURES.includes(it.posture) ? it.posture : "right_side";
         if (it.tailX !== undefined && it.tailY !== undefined) {
             drawRolloverMarks(it.tailX, it.tailY, it.x, it.y);
             ctx.save();
@@ -591,45 +680,55 @@
             ctx.beginPath(); ctx.arc(it.tailX, it.tailY, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
             ctx.restore();
         }
+        const rot = ((it.angle || 0) * Math.PI) / 180;
         ctx.save();
         ctx.translate(it.x, it.y);
-        ctx.rotate(((it.angle || 0) * Math.PI) / 180);
-        ctx.fillStyle = "rgba(0,0,0,0.35)";
-        ctx.beginPath(); ctx.ellipse(4, 16, 36, 10, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.rotate(rot);
+        ctx.save();
+        if (posture === "upside_down") ctx.rotate(Math.PI);
+        else if (posture === "right_side") ctx.rotate(Math.PI / 2);
+        else if (posture === "left_side") ctx.rotate(-Math.PI / 2);
+        ctx.fillStyle = "rgba(0,0,0,0.32)";
+        ctx.beginPath(); ctx.ellipse(2, 18, 34, 8, 0, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = "#0f172a";
-        ctx.beginPath(); ctx.arc(-24, 8, 8, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.arc(22, 8, 8, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(-22, 12, 7.5, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(20, 12, 7.5, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#cbd5e1";
+        ctx.beginPath(); ctx.arc(-22, 12, 3.2, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(20, 12, 3.2, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = it.color || "#ef4444";
         ctx.strokeStyle = "#ffffff";
         ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.roundRect(-34, -16, 68, 26, 6); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.roundRect(-34, -14, 68, 28, 7); ctx.fill(); ctx.stroke();
         ctx.fillStyle = "#0f172a";
-        ctx.fillRect(-8, -12, 22, 12);
+        ctx.beginPath(); ctx.roundRect(-6, -11, 24, 16, 4); ctx.fill();
         ctx.fillStyle = "#fef08a";
-        ctx.fillRect(28, -12, 4, 6);
-        ctx.fillRect(28, 2, 4, 6);
-        ctx.rotate(-((it.angle || 0) * Math.PI) / 180);
+        ctx.fillRect(30, -10, 4, 6);
+        ctx.fillRect(30, 2, 4, 6);
+        if (posture !== "upright") {
+            ctx.strokeStyle = "rgba(15,23,42,0.55)";
+            ctx.lineWidth = 1.2;
+            ctx.beginPath(); ctx.moveTo(-10, -6); ctx.lineTo(8, 6); ctx.moveTo(8, -6); ctx.lineTo(-10, 6); ctx.stroke();
+        }
+        ctx.restore();
+        ctx.rotate(-rot);
         ctx.fillStyle = "#ffffff";
         ctx.strokeStyle = "#0f172a";
         ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.arc(0, -2, 10.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.beginPath(); ctx.arc(0, 0, 10.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         ctx.fillStyle = "#0f172a";
         ctx.font = "900 12px Tahoma, Arial";
         ctx.textAlign = "center";
         ctx.textBaseline = "middle";
-        ctx.fillText(String(it.label || "1"), 0, -1);
+        ctx.fillText(String(it.label || "1"), 0, 1);
         if (isSelected && !hideHandles) {
-            ctx.rotate(((it.angle || 0) * Math.PI) / 180);
-            ctx.strokeStyle = "#38bdf8";
+            ctx.rotate(rot);
+            ctx.strokeStyle = "#22c55e";
             ctx.lineWidth = 2;
-            ctx.setLineDash([4, 3]);
-            ctx.strokeRect(-42, -24, 84, 48);
-            ctx.setLineDash([]);
-            ctx.beginPath(); ctx.moveTo(42, 0); ctx.lineTo(60, 0); ctx.stroke();
-            ctx.fillStyle = "#38bdf8";
+            ctx.beginPath(); ctx.moveTo(18, 0); ctx.lineTo(36, 0); ctx.stroke();
+            ctx.fillStyle = "#22c55e";
             ctx.strokeStyle = "#ffffff";
-            ctx.beginPath(); ctx.arc(62, 0, 7, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-            ctx.rotate(-((it.angle || 0) * Math.PI) / 180);
+            ctx.beginPath(); ctx.arc(42, 0, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
         }
         ctx.restore();
     }
@@ -1361,6 +1460,19 @@
     }
     canvas.addEventListener("mousedown", e => {
         const p = getCanvasPos(e);
+        for (let i = items.length - 1; i >= 0; i--) {
+            const it = items[i];
+            if (!it || it.type !== "overturned_car") continue;
+            const rot = ((it.angle || 0) * Math.PI) / 180;
+            const hx = it.x + 42 * Math.cos(rot);
+            const hy = it.y + 42 * Math.sin(rot);
+            if (Math.hypot(p.x - hx, p.y - hy) < 12) {
+                selectedIdx = i;
+                dragMode = "rotate";
+                renderAll(false);
+                return;
+            }
+        }
         if (selectedIdx >= 0 && canRotateItem(items[selectedIdx].type)) {
             const sel = items[selectedIdx];
             const rad = (sel.angle || 0) * Math.PI / 180;
@@ -1373,9 +1485,6 @@
             } else if (isVectorShape(sel.type)) {
                 hx = sel.x + Math.cos(rad) * 44;
                 hy = sel.y + Math.sin(rad) * 44;
-            } else if (sel.type === "overturned_car") {
-                hx = sel.x + Math.cos(rad) * 62;
-                hy = sel.y + Math.sin(rad) * 62;
             } else if (sel.type === "mountain") {
                 const sc = Number(sel.scale) || 1;
                 const lx = 64 * sc;
@@ -1489,8 +1598,10 @@
             return;
         }
         if (selectedIdx >= 0) {
+            const removed = items[selectedIdx];
             items.splice(selectedIdx, 1);
             selectedIdx = -1;
+            if (removed && ["car", "truck", "bike", "overturned_car"].includes(removed.type)) syncCloneCarDropdown();
             renderAll(false);
             scheduleAutoCommit();
         }
@@ -1509,10 +1620,11 @@
             const meters = updateFallMeters(fallMetersIn ? fallMetersIn.value : 35, false);
             items.push({type:"cliff_fall", x:640, y:340, tailX:540, tailY:230, fallMeters: meters, color:"#b91c1c"});
         }
-        else if (kind === "overturned_car") items.push({type:"overturned_car", label:"1", color:"#ef4444", x:520, y:240, angle:75, tailX:390, tailY:300, skid:true});
+        else if (kind === "overturned_car") items.push({type:"overturned_car", label:"1", color:"#ef4444", x:520, y:240, angle:75, posture:"right_side", tailX:390, tailY:300, skid:true});
         else if (kind === "mountain") items.push({type:"mountain", x:220, y:130, scale:1, angle:0});
         else if (kind === "slope_arrow") items.push({type:"slope_arrow", x:460, y:280, angle:120});
         else if (kind === "skid" && selectedIdx >= 0) items[selectedIdx].skid = !items[selectedIdx].skid;
+        if (["sedan3", "truck", "bike", "overturned_car"].includes(kind)) syncCloneCarDropdown();
         selectedIdx = items.length - 1;
         renderAll(false);
         scheduleAutoCommit();
@@ -1548,8 +1660,14 @@
             }
             if (it.type === "overturned_car" && Math.hypot(p.x - it.x, p.y - it.y) <= 42) {
                 selectedIdx = i;
-                it.label = String(it.label) === "1" ? "2" : "1";
-                it.color = it.label === "2" ? "#3b82f6" : "#ef4444";
+                if (e.shiftKey) {
+                    it.label = String(it.label) === "1" ? "2" : "1";
+                    it.color = String(it.label) === "2" ? "#3b82f6" : "#ef4444";
+                } else {
+                    const current = POST_IMPACT_POSTURES.includes(it.posture) ? it.posture : "right_side";
+                    const cur = POST_IMPACT_POSTURES.indexOf(current);
+                    it.posture = POST_IMPACT_POSTURES[(cur + 1) % POST_IMPACT_POSTURES.length];
+                }
                 renderAll(false);
                 scheduleAutoCommit();
                 return;
@@ -1586,6 +1704,7 @@
                 items = JSON.parse(JSON.stringify(args.saved_state.items));
                 ensureCompass();
                 selectedIdx = -1;
+                syncCloneCarDropdown();
                 renderAll(false);
             } else {
                 if (args.default_loc && !roadNameIn.value) {
