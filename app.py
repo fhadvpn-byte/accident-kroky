@@ -1652,15 +1652,18 @@ def inject_bayyinah_blue_styles():
     }
     .stButton > button[kind="primary"],
     .stButton > button {
-        font-weight: 800 !important;
+        font-weight: 700 !important;
         letter-spacing: 0.2px !important;
+        color: #041426 !important;
+        -webkit-text-fill-color: #041426 !important;
+        text-shadow: none !important;
     }
     button[kind="primary"],
     button[kind="primary"] p,
     button[kind="primary"] span {
-        color: #031527 !important;
-        -webkit-text-fill-color: #031527 !important;
-        font-weight: 900 !important;
+        color: #041426 !important;
+        -webkit-text-fill-color: #041426 !important;
+        font-weight: 700 !important;
         text-shadow: none !important;
     }
     </style>
@@ -3617,8 +3620,28 @@ st.markdown("""
         color: #f7fcff !important;
     }
     [data-testid="stMultiSelect"] [data-baseweb="tag"],
-    [data-testid="stMultiSelect"] [data-baseweb="tag"] span {
-        color: #071422 !important;
+    [data-testid="stMultiSelect"] span[data-baseweb="tag"],
+    span[data-baseweb="tag"] {
+        background: #0f294a !important;
+        border: 1px solid #38bdf8 !important;
+        border-radius: 8px !important;
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        text-shadow: none !important;
+    }
+    [data-testid="stMultiSelect"] [data-baseweb="tag"] span,
+    [data-testid="stMultiSelect"] span[data-baseweb="tag"] span,
+    span[data-baseweb="tag"] span {
+        color: #ffffff !important;
+        font-weight: 600 !important;
+        text-shadow: none !important;
+        -webkit-text-fill-color: #ffffff !important;
+    }
+    [data-testid="stMultiSelect"] [data-baseweb="tag"] svg,
+    [data-testid="stMultiSelect"] span[data-baseweb="tag"] svg,
+    span[data-baseweb="tag"] svg {
+        color: #fca5a5 !important;
+        fill: #fca5a5 !important;
     }
     [data-testid="stSelectbox"] svg,
     [data-testid="stMultiSelect"] svg,
@@ -3626,21 +3649,14 @@ st.markdown("""
     [data-testid="stNumberInput"] svg {
         fill: #00f2fe !important;
     }
+    [data-testid="stMultiSelect"] [data-baseweb="tag"] svg,
+    span[data-baseweb="tag"] svg {
+        fill: #fca5a5 !important;
+    }
     [data-testid="stNumberInput"] button {
         background: #1d6ec4 !important;
         color: #f7fcff !important;
         border: 1px solid #7ad7ff !important;
-    }
-    [data-baseweb="tag"] {
-        background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
-        color: #071422 !important;
-        border: 0 !important;
-        border-radius: 8px !important;
-    }
-    [data-baseweb="tag"] span,
-    [data-baseweb="tag"] svg {
-        color: #071422 !important;
-        fill: #071422 !important;
     }
     [data-baseweb="popover"],
     [data-baseweb="menu"],
@@ -3653,20 +3669,28 @@ st.markdown("""
         border-radius: 10px !important;
         box-shadow: 0 0 18px rgba(0, 229, 255, 0.35) !important;
     }
-    [role="option"] {
+    [role="option"],
+    li[role="option"] {
         background: #1460a8 !important;
         color: #f7fcff !important;
     }
-    [role="option"] * {
+    [role="option"] *,
+    li[role="option"] * {
         color: #f7fcff !important;
     }
     [role="option"]:hover,
-    [role="option"][aria-selected="true"] {
-        background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
+    [role="option"][aria-selected="true"],
+    li[role="option"]:hover,
+    li[role="option"][aria-selected="true"] {
+        background: #1e3a8a !important;
+        color: #ffffff !important;
     }
     [role="option"]:hover *,
-    [role="option"][aria-selected="true"] * {
-        color: #071422 !important;
+    [role="option"][aria-selected="true"] *,
+    li[role="option"]:hover *,
+    li[role="option"][aria-selected="true"] * {
+        color: #ffffff !important;
+        -webkit-text-fill-color: #ffffff !important;
     }
     [data-testid="stRadio"] [role="radiogroup"] label,
     [data-testid="stCheckbox"] label {
@@ -3753,11 +3777,13 @@ st.markdown("""
     [data-testid="stBaseButton-secondary"],
     [data-testid="stBaseButton-primary"] {
         background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
-        color: #0a192f !important;
+        color: #041426 !important;
+        -webkit-text-fill-color: #041426 !important;
         border: none !important;
         border-radius: 10px !important;
         font-weight: 700 !important;
         font-family: 'Tajawal', sans-serif !important;
+        text-shadow: none !important;
         box-shadow: 0 0 14px rgba(0, 242, 254, 0.4);
         transition: transform 0.2s ease, box-shadow 0.2s ease;
     }
@@ -3766,15 +3792,23 @@ st.markdown("""
     [data-testid="stBaseButton-secondary"]:hover,
     [data-testid="stBaseButton-primary"]:hover {
         background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
-        color: #0a192f !important;
+        color: #041426 !important;
+        -webkit-text-fill-color: #041426 !important;
         transform: scale(1.05);
         box-shadow: 0 0 22px rgba(0, 242, 254, 0.9);
     }
     div.stButton > button p,
     div.stDownloadButton > button p,
+    div.stButton > button span,
+    div.stDownloadButton > button span,
     [data-testid="stBaseButton-secondary"] p,
-    [data-testid="stBaseButton-primary"] p {
-        color: #0a192f !important;
+    [data-testid="stBaseButton-primary"] p,
+    [data-testid="stBaseButton-secondary"] span,
+    [data-testid="stBaseButton-primary"] span {
+        color: #041426 !important;
+        -webkit-text-fill-color: #041426 !important;
+        font-weight: 700 !important;
+        text-shadow: none !important;
     }
     iframe[title="st.iframe"] {
         background: #0d2137 !important;
@@ -4200,6 +4234,16 @@ TRAFFIC_LAW_ARTICLES = [
         "legalOpinion": "تحمل المسؤولية المرورية لمخالفة المادة (50/1/1) من نظام المرور ولائحته التنفيذية.",
     },
     {
+        "id": "art_50_1_2",
+        "code": "المادة (50/1/2)",
+        "label": "المادة (50/1/2) - عدم التقيد بحدود المسارات المحددة على الطريق أو التعدي على المسار المجاور",
+        "category": "قواعد السير والأولويات (المادة 50)",
+        "isQuasiCriminal": False,
+        "resultPoint": "عدم التقيد بحدود المسار المحدد نظاماً والتعدي على المسار المجاور.",
+        "technicalDraft": "كما تبين من المعاينة الفنية عدم تقيد قائد المركبة بحدود المسار المحدد له نظاماً على الطريق والتعدي على المسار المجاور مما أدى إلى وقوع الاصطدام، وذلك بالمخالفة لأحكام المادة (50/1/2) من نظام المرور ولائحته التنفيذية.",
+        "legalOpinion": "ثبوت المسؤولية المرورية استناداً للمادة (50/1/2) لعدم التقيد بحدود المسارات المحددة أو التعدي على المسار المجاور.",
+    },
+    {
         "id": "art_50_1_4",
         "code": "المادة (50/1/4)",
         "label": "المادة (50/1/4) - الانحراف المفاجئ أو تغيير المسار دون إشارة ضوئية ودون التأكد من خلو المسار",
@@ -4348,6 +4392,16 @@ TRAFFIC_LAW_ARTICLES = [
         "resultPoint": "عدم التهدئة وإعطاء الأفضلية للمشاة أثناء عبورهم الطريق.",
         "technicalDraft": "عدم انتباه قائد المركبة وعدم تخفيفه للسرعة عند الاقتراب من منطقة عبور المشاة، مما أدى إلى صدم عابر الطريق بجسم المركبة.",
         "legalOpinion": "ثبوت المسؤولية التقصيرية استناداً للمادة (55/1) لعدم مراعاة سلامة وأولوية المشاة.",
+    },
+    {
+        "id": "art_57_1_lane_markings",
+        "code": "المادة (57/1 - خطوط أرضية)",
+        "label": "المادة (57/1) - عدم التقيد بالخطوط الأرضية والعلامات المرورية المنظمة للمسارات",
+        "category": "المخالفات الخطرة وتجهيزات السلامة (51 - 58)",
+        "isQuasiCriminal": False,
+        "resultPoint": "عدم التقيد بالخطوط الأرضية والعلامات المرورية المنظمة للمسارات.",
+        "technicalDraft": "كما اتضح من المعاينة الفنية عدم التزام قائد المركبة بالخطوط الأرضية والعلامات المرورية المحددة لتنظيم المسارات على الطريق وتجاوز الخط الفاصل بين المسارات بشكل غير نظامي، خلافاً لأحكام المادة (57/1) من نظام المرور.",
+        "legalOpinion": "ثبوت المسؤولية المرورية استناداً للمادة (57/1) لعدم التقيد بالخطوط الأرضية والعلامات المرورية المنظمة للمسارات.",
     },
     {
         "id": "art_57_1_distraction",
