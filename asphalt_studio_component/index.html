@@ -229,7 +229,7 @@
                 </select>
                 <label for="flexCenterSel">خط الوسط</label>
                 <select id="flexCenterSel" onchange="updateFlexRoadParams()">
-                    <option value="double_yellow">خطان أصفران</option>
+                    <option value="double_yellow">خطان أبيضان متصلان</option>
                     <option value="dashed_white">خط أبيض متقطع</option>
                     <option value="none">بدون خط</option>
                 </select>
@@ -1329,8 +1329,8 @@
         if (center.length < 2) return;
         const halfW = Math.max(30, Math.min(110, flexRoadWidth / 2));
         const asphaltCol = "#334155";
-        const yellowCol = "#fbbf24";
-        const whiteCol = "#f8fafc";
+        const laneMarkCol = "#ffffff";
+        const whiteCol = "#ffffff";
         const curbCol = "#94a3b8";
         function strokeRibbon(offset, width, color, dash) {
             ctx.lineCap = "butt";
@@ -1384,16 +1384,16 @@
             strokeRibbon(-(totalW * 0.27), 2, "#ffffff", [14, 12]);
             strokeRibbon(+(totalW * 0.27), 2, "#ffffff", [14, 12]);
             strokeRibbon(0, 16, "#94a3b8", []);
-            strokeRibbon(-8, 2.5, yellowCol, [9, 6]);
-            strokeRibbon(+8, 2.5, yellowCol, [9, 6]);
+            strokeRibbon(-8, 2.5, laneMarkCol, [9, 6]);
+            strokeRibbon(+8, 2.5, laneMarkCol, [9, 6]);
         } else if (flexRoadStyle === "highway_3lane") {
             const totalW = flexRoadWidth * 1.75;
             strokeRibbon(0, totalW + 18, "#b45309", []);
             strokeRibbon(0, totalW, asphaltCol, []);
-            strokeRibbon(-(totalW / 2 - 5), 2.5, yellowCol, []);
-            strokeRibbon(+(totalW / 2 - 5), 2.5, "#ffffff", []);
-            strokeRibbon(-(totalW / 6), 2.2, "#ffffff", [16, 12]);
-            strokeRibbon(+(totalW / 6), 2.2, "#ffffff", [16, 12]);
+            strokeRibbon(-(totalW / 2 - 5), 2.5, laneMarkCol, []);
+            strokeRibbon(+(totalW / 2 - 5), 2.5, laneMarkCol, []);
+            strokeRibbon(-(totalW / 6), 2.2, laneMarkCol, [16, 12]);
+            strokeRibbon(+(totalW / 6), 2.2, laneMarkCol, [16, 12]);
         } else if (flexRoadStyle === "jersey_guardrail") {
             strokeRibbon(0, flexRoadWidth + 20, "#cbd5e1", []);
             strokeRibbon(0, flexRoadWidth, asphaltCol, []);
@@ -1401,18 +1401,18 @@
             strokeRibbon(+(halfW + 6), 7, "#94a3b8", []);
             strokeRibbon(-(halfW + 6), 3, "#ef4444", [10, 14]);
             strokeRibbon(+(halfW + 6), 3, "#ef4444", [10, 14]);
-            strokeRibbon(-2.6, 2.3, yellowCol, []);
-            strokeRibbon(+2.6, 2.3, yellowCol, []);
+            strokeRibbon(-2.6, 2.3, laneMarkCol, []);
+            strokeRibbon(+2.6, 2.3, laneMarkCol, []);
         } else {
             strokeRibbon(0, flexRoadWidth + 16, "#e2e8f0", []);
             strokeRibbon(0, flexRoadWidth, asphaltCol, []);
-            strokeRibbon(halfW - 4, 2.6, whiteCol, []);
-            strokeRibbon(-(halfW - 4), 2.6, whiteCol, []);
+            strokeRibbon(halfW - 4, 2.6, laneMarkCol, []);
+            strokeRibbon(-(halfW - 4), 2.6, laneMarkCol, []);
             if (flexRoadCenterLine === "double_yellow") {
-                strokeRibbon(4.2, 3.2, yellowCol, []);
-                strokeRibbon(-4.2, 3.2, yellowCol, []);
+                strokeRibbon(4.2, 3.2, laneMarkCol, []);
+                strokeRibbon(-4.2, 3.2, laneMarkCol, []);
             } else if (flexRoadCenterLine === "dashed_white") {
-                strokeRibbon(0, 2.4, whiteCol, [16, 12]);
+                strokeRibbon(0, 2.4, laneMarkCol, [16, 12]);
             }
         }
         if (flexRoadTerrain === "mountain") {
@@ -1488,8 +1488,8 @@
     function drawAsphaltRoad(type) {
         const asphalt = "#334155";
         const curb = "#94a3b8";
-        const yellow = "#fbbf24";
-        const white = "#f8fafc";
+        const yellow = "#ffffff";
+        const white = "#ffffff";
         ctx.save();
         ctx.lineCap = "butt";
         ctx.lineJoin = "round";
