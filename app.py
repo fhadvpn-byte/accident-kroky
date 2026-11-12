@@ -734,9 +734,33 @@ def _write_actions_editor(cur_acts):
     if "ACTIONS_SCENARIOS" not in globals():
         st.session_state["_pending_actions_text"] = True
         return
-    st.session_state["actions_taken_editor"] = "\n".join(
-        f"{i}- {ACTIONS_SCENARIOS[k]}" for i, k in enumerate(cur_acts, 1) if k in ACTIONS_SCENARIOS
-    )
+    try:
+        deaths_count = int(st.session_state.get("p1_acc_deaths") or 0)
+    except (TypeError, ValueError):
+        deaths_count = 0
+    lines = []
+    for i, k in enumerate(cur_acts, 1):
+        if k not in ACTIONS_SCENARIOS:
+            continue
+        # تُطبَّق صيغ الجمع لاحقاً عبر action_scenario_text إن وُجدت
+        if "action_scenario_text" in globals():
+            text = action_scenario_text(k, deaths_count)
+        else:
+            text = ACTIONS_SCENARIOS[k]
+            try:
+                num = int(str(k).strip().split(".", 1)[0].strip())
+            except (TypeError, ValueError):
+                num = -1
+            if 20 <= num <= 26 and deaths_count >= 2:
+                text = (
+                    str(text)
+                    .replace("جثمان المتوفى", "جثامين المتوفين")
+                    .replace("للمتوفى", "للمتوفين")
+                    .replace("المتوفى", "المتوفين")
+                )
+        lines.append(f"{i}- {text}")
+    st.session_state["actions_taken_editor"] = "\n".join(lines)
+    st.session_state["_actions_plural_deaths_sig"] = deaths_count
 
 _VEHICLE_ORDINALS_AR = {
     1: "الأولى",
@@ -929,9 +953,7 @@ def flush_pending_casualty_actions():
         st.session_state["_pending_actions_text"] = True
         return
     cur_acts = list(st.session_state.get("selected_actions_multi") or [])
-    st.session_state["actions_taken_editor"] = "\n".join(
-        f"{i}- {ACTIONS_SCENARIOS[k]}" for i, k in enumerate(cur_acts, 1) if k in ACTIONS_SCENARIOS
-    )
+    _write_actions_editor(cur_acts)
 
 def _blank_parties():
     return [
@@ -5010,7 +5032,62 @@ ACTIONS_SCENARIOS = {
     "19. عمل محضر مشترك مع الدفاع المدني": (
         "جرى الشخوص لموقع الحادث ومباشرته بالاشتراك مع فرقة الدفاع المدني المختصة، وتم عمل محضر مشترك مع الدفاع المدني يتضمن وقائع الحالة والإجراءات المتخذة في الموقع وإرفاقه بأوراق المعاملة."
     ),
+    "20. إيداع جثمان المتوفى بثلاجة الموتى بالمستشفى": (
+        "تم إيداع جثمان المتوفى بثلاجة الموتى بالمستشفى وإثبات ذلك في أوراق المعاملة."
+    ),
+    "21. عمل خطاب كشف طبي على الجثمان للمتوفين": (
+        "تم عمل خطاب كشف طبي على الجثمان للمتوفى وإرفاقه بأوراق المعاملة."
+    ),
+    "22. حصر وتحريز المتعلقات الشخصية للمتوفى بمحضر رسمي": (
+        "تم حصر وتحريز المتعلقات الشخصية للمتوفى بمحضر رسمي وإرفاقه بأوراق المعاملة."
+    ),
+    "23. إشعار ذوي المتوفى وطلب صك حصر الورثة والوكالة الشرعية": (
+        "تم إشعار ذوي المتوفى وطلب صك حصر الورثة والوكالة الشرعية لاستكمال الإجراءات النظامية."
+    ),
+    "24. إشعار النيابة العامة والجهات المختصة بوقوع حادث وفاة": (
+        "تم إشعار النيابة العامة والجهات المختصة بوقوع حادث وفاة واستكمال اللازم نظاماً."
+    ),
+    "25. إصدار خطاب تسليم الجثمان وتصريح الدفن بعد الكشف الطبي": (
+        "تم إصدار خطاب تسليم الجثمان وتصريح الدفن بعد الكشف الطبي."
+    ),
+    "26. انقضاء الدعوى الجزائية العامة لوفاة المتسبب في الحادث": (
+        "تقرر انقضاء الدعوى الجزائية العامة لوفاة المتسبب في الحادث وفق الموجب النظامي."
+    ),
 }
+
+FATALITY_ACTION_NUMBERS = set(range(20, 27))
+
+def _accident_deaths_count() -> int:
+    try:
+        return int(st.session_state.get("p1_acc_deaths") or 0)
+    except (TypeError, ValueError):
+        return 0
+
+def _action_key_number(key) -> int:
+    try:
+        head = str(key or "").strip().split(".", 1)[0].strip()
+        return int(head)
+    except (TypeError, ValueError):
+        return -1
+
+def pluralize_fatality_action_text(text: str, deaths_count: int = None) -> str:
+    """ذكاء لغوي لجمع صياغات بنود الوفيات 20–26 عند عدد الوفيات ≥ 2."""
+    if deaths_count is None:
+        deaths_count = _accident_deaths_count()
+    out = str(text or "")
+    if int(deaths_count or 0) < 2:
+        return out
+    # الأطول أولاً حتى لا يُكسر «جثمان المتوفى» إلى «جثمان المتوفين»
+    out = out.replace("جثمان المتوفى", "جثامين المتوفين")
+    out = out.replace("للمتوفى", "للمتوفين")
+    out = out.replace("المتوفى", "المتوفين")
+    return out
+
+def action_scenario_text(key: str, deaths_count: int = None) -> str:
+    raw = ACTIONS_SCENARIOS.get(key, "")
+    if _action_key_number(key) in FATALITY_ACTION_NUMBERS:
+        return pluralize_fatality_action_text(raw, deaths_count)
+    return raw
 
 def sync_selected_actions():
     selected_keys = [
@@ -5020,8 +5097,13 @@ def sync_selected_actions():
     if not selected_keys:
         st.session_state["actions_taken_editor"] = ""
         return
-    lines = [f"{idx}- {ACTIONS_SCENARIOS[key]}" for idx, key in enumerate(selected_keys, start=1)]
+    deaths_count = _accident_deaths_count()
+    lines = [
+        f"{idx}- {action_scenario_text(key, deaths_count)}"
+        for idx, key in enumerate(selected_keys, start=1)
+    ]
     st.session_state["actions_taken_editor"] = "\n".join(lines)
+    st.session_state["_actions_plural_deaths_sig"] = deaths_count
 
 flush_pending_casualty_actions()
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
@@ -5095,6 +5177,10 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
             rights_status_val = selected_rights
     st.session_state.accident_nature = accident_nature_val
     st.session_state.rights_status = rights_status_val
+    # إعادة توليد صياغات بنود الوفيات 20–26 عند تغيّر عدد الوفيات
+    _deaths_for_actions = _accident_deaths_count()
+    if st.session_state.get("_actions_plural_deaths_sig") != _deaths_for_actions:
+        sync_selected_actions()
     st.multiselect(
         "اختر إجراءً واحداً أو ادمج عدة إجراءات معاً (تُرقّم تلقائياً بالأسفل):",
         options=list(ACTIONS_SCENARIOS.keys()),
