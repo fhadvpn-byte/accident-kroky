@@ -3211,14 +3211,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
             f"<div class='statute-line statute-quote'>{html.escape(_format_statutory_bullet(key, text))}</div>"
         )
     blocks.append(
-        "<div class='liability-block liability-preamble'>"
-        "<div class='liability-heading'>"
-        "استناداً إلى المادة (60) من نظام المرور والفقرات (60/1، 60/2، 60/3) من لائحته التنفيذية "
-        "بشأن ترتب المسؤولية وأركانها (الإهمال 60/2/1، قلة الاحتراز 60/2/2، عدم مراعاة الأنظمة 60/2/3) "
-        "ونسب الخطأ وفق الفقرة (60/2): 100%، 75%، 50%، 25%، 0%:"
-        "</div>"
-        + "".join(preamble_statutes)
-        + "</div>"
+        "<style>li:empty{display:none!important}</style>"
     )
 
     is_shared = p1_ratio > 0 and p2_ratio > 0
@@ -5324,20 +5317,12 @@ def generate_accident_report_fields(selected_article_ids):
             for article in selected_articles if article["isQuasiCriminal"]
         )
         legal_opinion_text = (
-            "⚠️ تنبيه نظامي (شبهة جنائية / مخالفة جسيمة):\n"
-            f"استناداً إلى المادة (60) والفقرات (60/1، 60/2، 60/3) من نظام المرور ولائحته التنفيذية وإلى {criminal_codes}، وبناءً على القرائن الفنية الموثقة أعلاه:\n"
-            f"{opinion_lines}\n"
-            "وعليه يوصى باستكمال محضر الاستدلال النظامي وإحالة كامل ملف القضية والأطراف إلى (الشرطة المختصة / النيابة العامة) لإعمال شؤونها النظامية."
+            ""
         )
     else:
         all_codes = "، ".join(_format_article_cite_for_report(article["code"]) for article in selected_articles)
         legal_opinion_text = (
-            "بناءً على المعاينة الفنية وتطبيق قواعد المساءلة المرورية واستناداً إلى المادة (60) "
-            "والفقرات (60/1، 60/2، 60/3) من نظام المرور ولائحته التنفيذية بشأن أركان المسؤولية "
-            "(الإهمال 60/2/1، قلة الاحتراز 60/2/2، عدم مراعاة الأنظمة 60/2/3) "
-            "ونسب الخطأ وفق الفقرة (60/2): 100%، 75%، 50%، 25%، 0%"
-            f"{'، وإلى (' + all_codes + ')' if all_codes else ''}:\n"
-            f"{opinion_lines}"
+            ""
         )
     return {
         "resultsText": results_text,
