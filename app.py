@@ -14,6 +14,17 @@ from datetime import date, datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
 
+def _fmt_ratio_rtl(opt):
+    import re as _re
+    s = str(opt or "")
+    if "|" in s and "الطرف الأول" in s and "الطرف الثاني" in s:
+        p_a, p_b = s.split("|", 1)
+        s1, s2 = (p_a, p_b) if "الطرف الأول" in p_a else (p_b, p_a)
+        m1, m2 = _re.search(r"\d+", s1), _re.search(r"\d+", s2)
+        if m1 and m2:
+            return f"\u200fالطرف الأول ({m1.group(0)}%)  |  الطرف الثاني ({m2.group(0)}%)\u200f"
+    return f"\u200f{s}\u200f"
+
 def _select_images_dir():
     candidates = (
         Path.cwd() / "saved_accident_images",
@@ -3367,7 +3378,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
 
 
 
-_LIABILITY_RATIO_LOOKUP = {"100% الطرف الأول | 0% الطرف الثاني": (100, 0), "25% الطرف الأول | 75% الطرف الثاني": (25, 75), "50% الطرف الأول | 50% الطرف الثاني": (50, 50), "75% الطرف الأول | 25% الطرف الثاني": (75, 25), "0% الطرف الأول | 100% الطرف الثاني": (0, 100)}
+_LIABILITY_RATIO_LOOKUP = {"100% الطرف الأول | 0% الطرف الثاني": (100, 0), "75% الطرف الأول | 25% الطرف الثاني": (75, 25), "50% الطرف الأول | 50% الطرف الثاني": (50, 50), "25% الطرف الأول | 75% الطرف الثاني": (25, 75), "0% الطرف الأول | 100% الطرف الثاني": (0, 100)}
 
 def resolve_liability_ratios_from_session():
     """قراءة نسب المسؤولية وصفات الأطراف من session_state فقط (آمن عبر التبويبات)."""
@@ -5529,7 +5540,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     selected_ratio = st.selectbox(
         "توزيع نسبة الخطأ والمسؤولية (وفق الفقرة 60/2):",
         options=ratio_options,
-        key="liability_ratio_select"
+        key="liability_ratio_select", format_func=_fmt_ratio_rtl
     )
     p1_ratio, p2_ratio = _LIABILITY_RATIO_LOOKUP[selected_ratio]
     p1_ratio = int(p1_ratio)
