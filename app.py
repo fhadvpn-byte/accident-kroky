@@ -2196,12 +2196,14 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
         )
     with col_save:
         if st.button("💾 حفظ واعتماد البيانات", key="_top_cmd_save", use_container_width=True):
+            _save_bayyinah_state()
             if callable(on_save_callback):
                 on_save_callback()
     with col_print:
         render_direct_print_button(report_html or "", label="🖨️ طباعة فورية A4", btn_id="top")
     with col_new:
         if st.button("🆕 حادث جديد", key="_top_cmd_reset", use_container_width=True):
+            _clear_bayyinah_saved_state()
             if callable(on_reset_callback):
                 on_reset_callback()
                 st.rerun()
@@ -4056,6 +4058,72 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+# === PERSISTENT_AUTOSAVE_START ===
+import json as _p_json, os as _p_os
+
+_PERSIST_FILE = _p_os.path.join(_p_os.path.dirname(_p_os.path.abspath(__file__)), ".bayyinah_saved_state.json")
+
+def _save_bayyinah_state():
+    data = {}
+    skip_prefixes = ("FormSubmitter:", "button", "_persist")
+    for k, v in list(st.session_state.items()):
+        ks = str(k)
+        if ks.startswith(skip_prefixes):
+            continue
+        # تجاهل أزرار التفاعل اللحظية حتى لا تعلق قيمتها True
+        if isinstance(v, bool) and any(w in ks.lower() for w in ("btn", "save", "new", "print", "del", "add", "insert")):
+            continue
+        if hasattr(v, "to_dict"):
+            try:
+                data[ks] = {"__df_records__": v.to_dict("records")}
+                continue
+            except Exception:
+                pass
+        try:
+            _p_json.dumps(v, ensure_ascii=False)
+            data[ks] = v
+        except Exception:
+            pass
+    try:
+        with open(_PERSIST_FILE, "w", encoding="utf-8") as f:
+            _p_json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+def _load_bayyinah_state_once():
+    if st.session_state.get("_persist_restored_ok"):
+        return
+    st.session_state["_persist_restored_ok"] = True
+    if not _p_os.path.exists(_PERSIST_FILE):
+        return
+    try:
+        with open(_PERSIST_FILE, "r", encoding="utf-8") as f:
+            data = _p_json.load(f)
+        if isinstance(data, dict):
+            for k, v in data.items():
+                if k not in st.session_state:
+                    if isinstance(v, dict) and "__df_records__" in v:
+                        try:
+                            import pandas as _pd
+                            st.session_state[k] = _pd.DataFrame(v["__df_records__"])
+                        except Exception:
+                            st.session_state[k] = v["__df_records__"]
+                    else:
+                        st.session_state[k] = v
+    except Exception:
+        pass
+
+def _clear_bayyinah_saved_state():
+    try:
+        if _p_os.path.exists(_PERSIST_FILE):
+            _p_os.remove(_PERSIST_FILE)
+    except Exception:
+        pass
+
+_load_bayyinah_state_once()
+# === PERSISTENT_AUTOSAVE_END ===
+
 st.markdown("""<style id="tags-red-only">
 @media screen {
   /* تلوين العناصر المختارة فقط في قائمتي المواد النظامية والإجراءات باللون الأحمر الهادئ */
@@ -7977,4 +8045,9 @@ st.markdown("""<style id="final-red-tags-only">
     fill: #ffffff !important;
 }
 </style>""", unsafe_allow_html=True)
+
+# --- تأمين الحفظ التلقائي عند ضغط زر الاعتماد ---
+if st.session_state.get("_last_persisted_stamp") != str(st.session_state.get("last_saved_at", "")) and st.session_state.get("last_saved_at"):
+    _save_bayyinah_state()
+    st.session_state["_last_persisted_stamp"] = str(st.session_state.get("last_saved_at", ""))
 
