@@ -3150,112 +3150,208 @@ def _admin_violation_lines_for_zero_ratio(
     return lines
 
 def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ratio, p2_reasons):
-    printed_articles = set()
-    selected_ids = list(st.session_state.get("selected_articles") or [])
-    parties = list(st.session_state.get("parties") or [])
-    p1_party = _resolve_party_for_liability_slot(p1_title, party_index=1, parties=parties)
-    p2_party = _resolve_party_for_liability_slot(p2_title, party_index=2, parties=parties)
-
-    def format_bullets(text, party_row=None):
-        if not text:
-            return ""
-        items = []
-        allow_art32 = _is_unqualified_driver_party(party_row)
-        block_art32 = (not allow_art32) and (
-            _is_qualified_driver_party(party_row)
-            or (
-                party_row
-                and (
-                    _is_non_driver_role(party_row.get("المشاركة"))
-                    or party_row.get("التأهيل") == QUALIFICATION_EXEMPT
-                )
-            )
-        )
-        for line in str(text).splitlines():
-            raw = line.strip().lstrip("-•* ")
-            if not raw:
-                continue
-            # منع إسناد المادة (32) لسائق مؤهل أو لراكب/مشاة في نص الرأي
-            if block_art32 and _reason_line_is_art32_license(raw):
-                continue
-            body = html.escape(raw)
-            if not _is_liability_preamble_line(raw):
-                statutes = _statutory_lines_for_reason(raw, printed_articles)
-                if statutes:
-                    statute_html = "".join(
-                        f"<div class='statute-line statute-quote'>{html.escape(statute)}</div>"
-                        for statute in statutes
-                    )
-                    body = f"{body}{statute_html}"
-            items.append(f"<li class='liability-reason'>{body}</li>")
-        if not items:
-            return ""
-        return f"<ul class='liability-reasons'>{''.join(items)}</ul>"
-
-    p1_ratio = int(p1_ratio or 0)
-    p2_ratio = int(p2_ratio or 0)
-    safe_p1_title = html.escape(str(p1_title or ""))
-    safe_p2_title = html.escape(str(p2_title or ""))
-    blocks = []
-
-    # ديباجة صريحة: المادة (60) والفقرات (60/1، 60/2، 60/3)
-    preamble_statutes = []
-    for key in ("60", "60/1", "60/2", "60/3"):
-        if key in printed_articles:
-            continue
-        text = _lookup_statutory_text(key)
-        if not text:
-            continue
-        printed_articles.add(key)
-        preamble_statutes.append(
-            f"<div class='statute-line statute-quote'>{html.escape(_format_statutory_bullet(key, text))}</div>"
-        )
-    blocks.append(
-        "<style>li:empty{display:none!important}</style>"
-    )
-
+    ords = [
+        "أولاً", "ثانياً", "ثالثاً", "رابعاً", "خامساً",
+        "سادساً", "سابعاً", "ثامناً", "تاسعاً", "عاشراً",
+    ]
+    p1_ratio, p2_ratio = int(p1_ratio or 0), int(p2_ratio or 0)
+    t1_def, t2_def = "قائد المركبة الأولى", "قائد المركبة الثانية"
+    safe_p1_title = html.escape(str(p1_title or t1_def).strip())
+    safe_p2_title = html.escape(str(p2_title or t2_def).strip())
     is_shared = p1_ratio > 0 and p2_ratio > 0
-    if p1_ratio > 0:
-        header_prefix = "أولاً: " if is_shared else ""
-        blocks.append(
-            f"<div class='liability-block'>"
-            f"<div class='liability-heading'>"
-            f"{header_prefix}إدانة ({safe_p1_title}) بنسبة ({p1_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
-            f"</div>"
-            f"{format_bullets(p1_reasons, p1_party)}"
-            f"</div>"
-        )
-    if is_shared:
-        blocks.append("<hr class='liability-divider'>")
-    if p2_ratio > 0:
-        header_prefix = "ثانياً: " if is_shared else ""
-        blocks.append(
-            f"<div class='liability-block'>"
-            f"<div class='liability-heading'>"
-            f"{header_prefix}إدانة ({safe_p2_title}) بنسبة ({p2_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
-            f"</div>"
-            f"{format_bullets(p2_reasons, p2_party)}"
-            f"</div>"
+    parties = list(st.session_state.get("parties") or [])
+
+    def _unlic(idx, t_str):
+        ts = str(t_str or "")
+        drv = ts.split("/", 1)[1].strip() if "/" in ts else ""
+        lbl = "الطرف الأول" if idx == 1 else "الطرف الثاني"
+        row = None
+        if drv:
+            for r in parties:
+                if isinstance(r, dict):
+                    nm = str(r.get("الاسم") or "").strip()
+                    if nm and (nm == drv or (len(nm) > 4 and nm in drv)):
+                        row = r
+                        break
+        if not row:
+            for r in parties:
+                if isinstance(r, dict):
+                    pl = str(r.get("الأطراف") or r.get("الطرف") or "").strip()
+                    if pl == lbl:
+                        row = r
+                        break
+        if not row and len(parties) >= idx and isinstance(parties[idx - 1], dict):
+            row = parties[idx - 1]
+        row = row or {}
+        rk, qk = f"p1_party_role_{idx - 1}", f"p1_party_qual_{idx - 1}"
+        role = str(row.get("نوع المشاركة") or row.get("الصفة") or st.session_state.get(rk) or "سائق")
+        qual = str(row.get("الأهلية") or row.get("دليل القيادة") or st.session_state.get(qk) or "")
+        if "راكب" in role or "لا يُطلب" in qual or "لا يطلب" in qual:
+            return False
+        return "غير مؤهل" in qual
+
+    _fb = {
+        "32": "يحظر على أي شخص قيادة أي مركبة قبل الحصول على رخصة القيادة اللازمة وفقاً لأحكام هذا النظام ولائحته.",
+        "50": "على قائدي المركبات الالتزام بحدود المسارات المحددة على الطريق وعدم تخطي الخطوط الطولية المتصلة.",
+        "51": "تحدد اللائحة قواعد السير على الطرق والمسارات والتجاوز والأفضلية وعلامات الطريق وإشاراته.",
+        "54": "تكون أفضلية المرور في التقاطعات غير المنظمة وفق القواعد المحددة في هذا النظام ولائحته التنفيذية.",
+        "57": "يجب على قائدي المركبات وركابها استخدام أحزمة الأمان أثناء السير على الطرق.",
+    }
+
+    def _txt(c):
+        c = str(c or "").strip()
+        if not c:
+            return ""
+        fn_lk = globals().get("_lookup_statutory_text")
+        t = str(fn_lk(c) or "").strip() if callable(fn_lk) else ""
+        st_map = globals().get("TRAFFIC_STATUTORY_TEXTS")
+        if not t and isinstance(st_map, dict):
+            t = str(st_map.get(c) or "").strip()
+        if not t:
+            try:
+                import traffic_law_1443 as tl
+                for a in vars(tl).values():
+                    vs = a.values() if isinstance(a, dict) else (a if isinstance(a, (list, tuple)) else [])
+                    for v in vs:
+                        if isinstance(v, dict) and str(v.get("code") or "").strip() == c:
+                            t = str(v.get("statute") or v.get("text") or "").strip()
+                            if t:
+                                break
+                    if t:
+                        break
+            except Exception:
+                pass
+        t = t or _fb.get(c, "")
+        rx = r"^•?\s*(?:نص\s+)?(?:المادة|اللائحة|الفقرة)\s*\([^)]+\)[^«:\"]*[:«\"]\s*"
+        t = re.sub(rx, "", t).strip()
+        return t.strip("«»\"' ")
+
+    def _codes(s):
+        rx_tbl = r"(?:الفقرة\s*\(\d+\)\s*من\s*)?جدول(?:\s+المخالفات)?(?:\s+رقم)?\s*\(?[0-9/]+\)?"
+        s = re.sub(rx_tbl, " ", str(s or ""))
+        out = []
+        skip = {"100", "75", "25", "0", "60", "60/1", "60/2", "60/3", "60/2/1", "60/2/2", "60/2/3"}
+        pat = r"(?:المادة|المادتان|المادتين|المواد|اللائحة|الفقرة)\s*((?:\s*(?:و|،|,)?\s*\(?\d+(?:/(?:[0-9]+|[أ-ي]))*\)?)+)"
+        for m in re.finditer(pat, s):
+            for k in re.findall(r"\d+(?:/(?:[0-9]+|[أ-ي]))*", m.group(1)):
+                if k not in skip and k not in out:
+                    out.append(k)
+        for m in re.finditer(r"\b(\d+(?:/\d+){2,})\b", s):
+            if m.group(1) not in skip and m.group(1) not in out:
+                out.append(m.group(1))
+        return out
+
+    sel_c = []
+    art_d = dict(globals().get("TRAFFIC_LAW_ARTICLES") or {})
+    for sid in list(st.session_state.get("selected_articles") or []):
+        ks = str(sid).strip()
+        v = art_d.get(ks)
+        if isinstance(v, dict):
+            s_in = f"المادة ({v.get('code','')}) {v.get('title','')} {v.get('statute','')}"
+        else:
+            s_in = ks
+        for c in _codes(s_in):
+            if c not in sel_c:
+                sel_c.append(c)
+
+    def _collect(reasons_raw, unlic, sole):
+        ls = reasons_raw if isinstance(reasons_raw, (list, tuple)) else str(reasons_raw or "").splitlines()
+        cs = list(sel_c) if sole else []
+        for r in ls:
+            rw = str(r or "").strip()
+            if not rw or ("60/2/1" in rw and "60/2/2" in rw):
+                continue
+            if sole and sel_c and "(54)" in rw and "(57)" in rw and "54" not in sel_c:
+                continue
+            for c in _codes(rw):
+                if c not in cs:
+                    cs.append(c)
+        cs = cs or list(sel_c)
+        out, seen = [], set()
+        for c in cs:
+            if c == "32" and not unlic:
+                continue
+            tx = _txt(c)
+            if c not in seen and tx:
+                seen.add(c)
+                out.append((c, tx))
+        if unlic and "32" not in seen:
+            out.append(("32", _txt("32")))
+        return out
+
+    def _conv(ts, ratio, st_list):
+        rts = []
+        for c, _ in st_list:
+            r0 = c.split("/")[0]
+            if r0 not in rts:
+                rts.append(r0)
+        if "60" not in rts:
+            rts.insert(0, "60")
+        ct = f"للمادة ({rts[0]})" if len(rts) == 1 else "للمواد (" + "، ".join(rts) + ")"
+        cset = {x[0] for x in st_list}
+        li = []
+        for i, (c, tx) in enumerate(st_list):
+            ow = ords[i] if i < len(ords) else f"البند ({i+1})"
+            ec, etx = html.escape(c), html.escape(tx)
+            if "/" in c:
+                ra = c.split("/")[0]
+                era = html.escape(ra)
+                rt = _txt(ra) if ra not in cset else ""
+                if rt:
+                    cset.add(ra)
+                    ert = html.escape(rt)
+                    s_li = (
+                        f"<li class='liability-reason'><strong>{ow}:</strong> "
+                        f"المادة ({era}) من نظام المرور والتي تنص على: «{ert}»، "
+                        f"والفقرة ({ec}) من لائحته التنفيذية والتي تنص على: «{etx}».</li>"
+                    )
+                else:
+                    s_li = (
+                        f"<li class='liability-reason'><strong>{ow}:</strong> "
+                        f"الفقرة ({ec}) من اللائحة التنفيذية للمادة ({era}) "
+                        f"والتي تنص على: «{etx}».</li>"
+                    )
+            else:
+                s_li = (
+                    f"<li class='liability-reason'><strong>{ow}:</strong> "
+                    f"المادة ({ec}) من نظام المرور والتي تنص على: «{etx}».</li>"
+                )
+            li.append(s_li)
+        ul = f"<ul class='liability-reasons'>{''.join(li)}</ul>" if li else ""
+        return (
+            "<div class='liability-block'><div class='liability-heading'>"
+            f"بعد المعاينة ومجريات التحقيق، واستناداً {ct} من نظام المرور ولائحته التنفيذية، "
+            f"جرى إدانة ({ts}) بنسبة ({ratio}%) من المسؤولية، بالآتي:"
+            f"</div>{ul}</div>"
         )
 
-    # ملاحظات إدارية عند 0%: تُطبع للطرف ذي النسبة صفر فقط إن طابقت صفته/تأهيله المخالفة
-    def _append_zero_notes(zero_title, zero_reasons, zero_index, zero_party, zero_safe_title):
-        blocks.append(
-            f"<div class='liability-nonresp'>"
-            f"• عدم مسؤولية ({zero_safe_title}) عن الحادث (نسبة المسؤولية 0%)."
-            f"</div>"
+    def _inn(ts, unlic):
+        adm = ""
+        if unlic:
+            t32 = html.escape(_txt("32"))
+            adm = (
+                "<div class='liability-innocent' style='margin-top:4px;'>"
+                f"• ثبتت مخالفة إدارية مستقلة على ({ts}) بقيادة المركبة قبل الحصول على "
+                f"رخصة القيادة اللازمة وفق المادة (32) من نظام المرور والتي تنص على: «{t32}»، "
+                "وتُحال للعقوبة النظامية دون أن تؤثر على براءته من مسؤولية وقوع الحادث (0%).</div>"
+            )
+        return (
+            "<div class='liability-block liability-innocent-wrap'>"
+            f"<div class='liability-innocent'>• عدم مسؤولية ({ts}) عن الحادث (نسبة المسؤولية 0%).</div>"
+            f"{adm}</div>"
         )
-        for note in _admin_violation_lines_for_zero_ratio(
-            zero_title,
-            zero_reasons,
-            selected_ids,
-            party_index=zero_index,
-            party_row=zero_party,
-        ):
-            blocks.append(f"<div class='liability-admin-note'>{note}</div>")
-        # إن كان الطرف صفر مؤهلاً/راكباً والسائق غير المؤهل طرفاً آخر بنسبة >0،
-        # لا تُنقل مخالفته الإدارية إلى طرف النسبة صفر (تم ضمانه أعلاه).
-        # وإن كان غير المؤهل هو نفسه بنسبة 0% فتظهر ملاحظته هنا فقط.
+
+    u1, u2 = _unlic(1, p1_title), _unlic(2, p2_title)
+    c_blks, i_blks = [], []
+    if p1_ratio > 0:
+        c_blks.append(_conv(safe_p1_title, p1_ratio, _collect(p1_reasons, u1, p1_ratio == 100)))
+    else:
+        i_blks.append(_inn(safe_p1_title, u1))
+    if p2_ratio > 0:
+        c_blks.append(_conv(safe_p2_title, p2_ratio, _collect(p2_reasons, u2, p2_ratio == 100)))
+    else:
+        i_blks.append(_inn(safe_p2_title, u2))
+    blocks = c_blks + i_blks
 
     if p1_ratio == 100 and p2_ratio == 0:
         _append_zero_notes(p2_title, p2_reasons, 2, p2_party, safe_p2_title)
@@ -3266,6 +3362,8 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         f'<div class="section-badge">الرأي والمسؤولية</div>'
         f'<div class="box-content liability-box autofit-box section-box content-box report-box" data-autofit="liability">{inner_content}</div>'
     )
+
+
 
 _LIABILITY_RATIO_LOOKUP = {
     "100% الطرف الأول | 0% الطرف الثاني": (100, 0),
