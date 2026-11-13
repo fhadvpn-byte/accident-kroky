@@ -3174,32 +3174,72 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
 
     def _unlic(idx, t_str):
         ts = str(t_str or "")
-        drv = ts.split("/", 1)[1].strip() if "/" in ts else ""
+        drv = ts.split("/", 1)[1].strip() if "/" in ts else ts.strip()
         lbl = "الطرف الأول" if idx == 1 else "الطرف الثاني"
-        row = None
-        if drv:
-            for r in parties:
+        row = {}
+
+        # 1) استخدام دالة الربط الأصلية في التطبيق إن وجدت
+        fn_res = globals().get("_resolve_party_for_liability_slot")
+        if callable(fn_res):
+            try:
+                r0 = fn_res(t_str, party_index=idx, parties=parties)
+                if isinstance(r0, dict) and r0:
+                    row = r0
+            except Exception:
+                pass
+
+        # 2) البحث في كافة جداول وقوائم session_state بالاسم المطابق أولاً ثم برقم الطرف
+        all_rows = list(parties)
+        for k_ss, v_ss in list(st.session_state.items()):
+            if hasattr(v_ss, "to_dict"):
+                try:
+                    all_rows.extend(v_ss.to_dict("records"))
+                except Exception:
+                    pass
+            elif isinstance(v_ss, list) and v_ss and isinstance(v_ss[0], dict):
+                if any("دليل القيادة" in x or "الأهلية" in x or "نوع المشاركة" in x for x in v_ss if isinstance(x, dict)):
+                    all_rows.extend(v_ss)
+
+        if not row and drv:
+            for r in all_rows:
                 if isinstance(r, dict):
                     nm = str(r.get("الاسم") or "").strip()
-                    if nm and (nm == drv or (len(nm) > 4 and nm in drv)):
+                    if nm and (nm == drv or (len(nm) > 4 and (nm in drv or drv in nm))):
                         row = r
                         break
+
         if not row:
-            for r in parties:
+            for r in all_rows:
                 if isinstance(r, dict):
                     pl = str(r.get("الأطراف") or r.get("الطرف") or "").strip()
                     if pl == lbl:
                         row = r
                         break
-        if not row and len(parties) >= idx and isinstance(parties[idx - 1], dict):
-            row = parties[idx - 1]
-        row = row or {}
-        rk, qk = f"p1_party_role_{idx - 1}", f"p1_party_qual_{idx - 1}"
-        role = str(row.get("نوع المشاركة") or row.get("الصفة") or st.session_state.get(rk) or "سائق")
-        qual = str(row.get("الأهلية") or row.get("دليل القيادة") or st.session_state.get(qk) or "")
+
+        role = str(row.get("نوع المشاركة") or row.get("الصفة") or "").strip()
+        qual = str(row.get("دليل القيادة") or row.get("الأهلية") or "").strip()
+
+        # 3) المفاتيح الديناميكية بالترقيم الفعلي في المشروع (1 للطرف الأول، 2 للطرف الثاني)
+        if not qual:
+            qual = str(
+                st.session_state.get(f"p1_party_qual_{idx}")
+                or st.session_state.get(f"party_qual_{idx}")
+                or st.session_state.get(f"p{idx}_party_qual")
+                or ""
+            ).strip()
+            role = str(
+                st.session_state.get(f"p1_party_role_{idx}")
+                or st.session_state.get(f"party_role_{idx}")
+                or "سائق"
+            ).strip()
+
         if "راكب" in role or "لا يُطلب" in qual or "لا يطلب" in qual:
             return False
-        return "غير مؤهل" in qual
+        if "غير مؤهل" in qual:
+            return True
+        if "مؤهل" in qual:
+            return False
+        return False
 
     _fb = {
         "32": "يحظر على أي شخص قيادة أي مركبة قبل الحصول على رخصة القيادة اللازمة وفقاً لأحكام هذا النظام ولائحته.",
