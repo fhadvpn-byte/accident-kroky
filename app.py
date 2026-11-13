@@ -8512,7 +8512,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
   function fitReportBodies() {{
     var bodies = document.querySelectorAll('.page-body-flex, .p2-body-flex, .p3-body-flex');
     bodies.forEach(function(body) {{
-      body.style.zoom = '1';
+      
       var boxes = body.querySelectorAll('div.box-content, div.autofit-box, td.autofit-box, div[class*="liability"], .table-scroll td');
       var badges = body.querySelectorAll('.section-badge');
 
@@ -8578,7 +8578,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
 
       if (body.scrollHeight > avail + 2 && body.scrollHeight > 0) {{
         var scale = Math.max(0.70, (avail - 4) / body.scrollHeight);
-        body.style.zoom = scale.toFixed(3);
+        
       }}
     }});
   }}
