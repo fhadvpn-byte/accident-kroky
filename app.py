@@ -3251,7 +3251,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         ks = str(sid).strip()
         v = art_d.get(ks)
         if isinstance(v, dict):
-            s_in = f"المادة ({v.get('code','')}) {v.get('title','')} {v.get('statute','')}"
+            s_in = f"المادة ({v.get('code','')}) " + " ".join(str(x) for x in v.values() if isinstance(x, (str, int)))
         else:
             s_in = ks
         for c in _codes(s_in):
@@ -3356,11 +3356,9 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
     else:
         i_blks.append(_inn(safe_p2_title, u2))
     blocks = c_blks + i_blks
+    p1_party = p2_party = {}
+    append_zero_notes = lambda *a, **k: None
 
-    if p1_ratio == 100 and p2_ratio == 0:
-        _append_zero_notes(p2_title, p2_reasons, 2, p2_party, safe_p2_title)
-    elif p2_ratio == 100 and p1_ratio == 0:
-        _append_zero_notes(p1_title, p1_reasons, 1, p1_party, safe_p1_title)
     inner_content = "".join(blocks)
     return (
         f'<div class="section-badge">الرأي والمسؤولية</div>'
@@ -3369,13 +3367,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
 
 
 
-_LIABILITY_RATIO_LOOKUP = {
-    "100% الطرف الأول | 0% الطرف الثاني": (100, 0),
-    "75% الطرف الأول | 25% الطرف الثاني": (75, 25),
-    "50% الطرف الأول | 50% الطرف الثاني": (50, 50),
-    "25% الطرف الأول | 75% الطرف الثاني": (25, 75),
-    "0% الطرف الأول | 100% الطرف الثاني": (0, 100),
-}
+_LIABILITY_RATIO_LOOKUP = {"0% الطرف الأول | 100% الطرف الثاني": (0, 100), "25% الطرف الأول | 75% الطرف الثاني": (25, 75), "50% الطرف الأول | 50% الطرف الثاني": (50, 50), "75% الطرف الأول | 25% الطرف الثاني": (75, 25), "100% الطرف الأول | 0% الطرف الثاني": (100, 0)}
 
 def resolve_liability_ratios_from_session():
     """قراءة نسب المسؤولية وصفات الأطراف من session_state فقط (آمن عبر التبويبات)."""
