@@ -3173,72 +3173,78 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
     parties = list(st.session_state.get("parties") or [])
 
     def _unlic(idx, t_str):
-        ts = str(t_str or "")
-        drv = ts.split("/", 1)[1].strip() if "/" in ts else ts.strip()
-        lbl = "الطرف الأول" if idx == 1 else "الطرف الثاني"
-        row = {}
+        ts = str(t_str or "").strip()
+        drv = ts.split("/", 1)[1].strip() if "/" in ts else ts
+        lbl = "الطرف الأول" if int(idx) == 1 else "الطرف الثاني"
 
-        # 1) استخدام دالة الربط الأصلية في التطبيق إن وجدت
-        fn_res = globals().get("_resolve_party_for_liability_slot")
-        if callable(fn_res):
+        # 1) الفحص القطعي عبر مطابقة الاسم في جميع هياكل جدول الأطراف داخل الجلسة
+        cand_rows = []
+        p_main = st.session_state.get("parties")
+        if isinstance(p_main, list):
+            cand_rows.extend([r for r in p_main if isinstance(r, dict)])
+        elif hasattr(p_main, "to_dict"):
             try:
-                r0 = fn_res(t_str, party_index=idx, parties=parties)
-                if isinstance(r0, dict) and r0:
-                    row = r0
+                cand_rows.extend(p_main.to_dict("records"))
             except Exception:
                 pass
 
-        # 2) البحث في كافة جداول وقوائم session_state بالاسم المطابق أولاً ثم برقم الطرف
-        all_rows = list(parties)
-        for k_ss, v_ss in list(st.session_state.items()):
-            if hasattr(v_ss, "to_dict"):
+        for k_s, v_s in list(st.session_state.items()):
+            if k_s == "parties":
+                continue
+            if hasattr(v_s, "to_dict"):
                 try:
-                    all_rows.extend(v_ss.to_dict("records"))
+                    recs = v_s.to_dict("records")
+                    if recs and isinstance(recs[0], dict) and any(x in recs[0] for x in ("دليل القيادة", "الأهلية", "نوع المشاركة", "الاسم")):
+                        cand_rows.extend(recs)
                 except Exception:
                     pass
-            elif isinstance(v_ss, list) and v_ss and isinstance(v_ss[0], dict):
-                if any("دليل القيادة" in x or "الأهلية" in x or "نوع المشاركة" in x for x in v_ss if isinstance(x, dict)):
-                    all_rows.extend(v_ss)
+            elif isinstance(v_s, list) and v_s and isinstance(v_s[0], dict):
+                if any(x in v_s[0] for x in ("دليل القيادة", "الأهلية", "نوع المشاركة", "الاسم")):
+                    cand_rows.extend([r for r in v_s if isinstance(r, dict)])
 
-        if not row and drv:
-            for r in all_rows:
-                if isinstance(r, dict):
-                    nm = str(r.get("الاسم") or "").strip()
-                    if nm and (nm == drv or (len(nm) > 4 and (nm in drv or drv in nm))):
-                        row = r
-                        break
+        matched_row = None
+        if drv:
+            drv_tokens = [w for w in drv.split() if len(w) >= 3]
+            for r in cand_rows:
+                nm = str(r.get("الاسم") or r.get("اسم الطرف") or "").strip()
+                if not nm:
+                    continue
+                if nm == drv or nm in drv or drv in nm or (len(drv_tokens) >= 2 and all(t in nm for t in drv_tokens[:2])):
+                    matched_row = r
+                    break
 
-        if not row:
-            for r in all_rows:
-                if isinstance(r, dict):
-                    pl = str(r.get("الأطراف") or r.get("الطرف") or "").strip()
-                    if pl == lbl:
-                        row = r
-                        break
+        if matched_row is None:
+            for r in cand_rows:
+                pl = str(r.get("الأطراف") or r.get("الطرف") or "").strip()
+                if pl == lbl:
+                    matched_row = r
+                    break
 
-        role = str(row.get("نوع المشاركة") or row.get("الصفة") or "").strip()
-        qual = str(row.get("دليل القيادة") or row.get("الأهلية") or "").strip()
-
-        # 3) المفاتيح الديناميكية بالترقيم الفعلي في المشروع (1 للطرف الأول، 2 للطرف الثاني)
-        if not qual:
-            qual = str(
-                st.session_state.get(f"p1_party_qual_{idx}")
-                or st.session_state.get(f"party_qual_{idx}")
-                or st.session_state.get(f"p{idx}_party_qual")
-                or ""
+        if isinstance(matched_row, dict):
+            role_v = str(matched_row.get("نوع المشاركة") or matched_row.get("الصفة") or "").strip()
+            qual_v = " ".join(
+                str(matched_row.get(k) or "").strip()
+                for k in ("دليل القيادة", "الأهلية", "حالة الرخصة", "رخصة القيادة")
             ).strip()
-            role = str(
-                st.session_state.get(f"p1_party_role_{idx}")
-                or st.session_state.get(f"party_role_{idx}")
-                or "سائق"
-            ).strip()
+            if "راكب" in role_v or "لا يُطلب" in qual_v or "لا يطلب" in qual_v:
+                return False
+            if "غير مؤهل" in qual_v:
+                return True
+            if "مؤهل" in qual_v:
+                return False
 
-        if "راكب" in role or "لا يُطلب" in qual or "لا يطلب" in qual:
-            return False
-        if "غير مؤهل" in qual:
-            return True
-        if "مؤهل" in qual:
-            return False
+        # 2) إذا وجد محرر جدول Streamlit (edited_rows) نقرأ التعديل المباشر حسب ترتيب الصف (0 للطرف الأول، 1 للطرف الثاني)
+        for k_s, v_s in list(st.session_state.items()):
+            if isinstance(v_s, dict) and "edited_rows" in v_s and isinstance(v_s["edited_rows"], dict):
+                ed = v_s["edited_rows"].get(int(idx) - 1) or v_s["edited_rows"].get(str(int(idx) - 1))
+                if isinstance(ed, dict):
+                    q_ed = str(ed.get("دليل القيادة") or ed.get("الأهلية") or "").strip()
+                    if "غير مؤهل" in q_ed:
+                        return True
+                    if "مؤهل" in q_ed:
+                        return False
+
+        # 3) صمام أمان صارم: لا تُسند مخالفة رخصة أبداً إلا بتحقق صريح ومؤكد
         return False
 
     _fb = {
