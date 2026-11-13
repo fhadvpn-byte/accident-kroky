@@ -1,5 +1,41 @@
 import html
 import streamlit as st
+
+
+# === PERSISTENT_SAVE_START ===
+import json, os
+_PERSISTENT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bayyinah_saved_state.json")
+
+def _load_bayyinah_state():
+    if os.path.exists(_PERSISTENT_FILE):
+        try:
+            with open(_PERSISTENT_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                for k, v in data.items():
+                    if k not in st.session_state:
+                        st.session_state[k] = v
+        except Exception:
+            pass
+
+def _save_bayyinah_state():
+    data = {}
+    skip_prefixes = ("FormSubmitter:", "button", "_persist")
+    for k, v in st.session_state.items():
+        ks = str(k)
+        if any(ks.startswith(p) for p in skip_prefixes):
+            continue
+        if isinstance(v, bool) and any(w in ks.lower() for w in ("btn", "save", "new", "print", "del", "add", "insert")):
+            continue
+        data[ks] = v
+    try:
+        with open(_PERSISTENT_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+    except Exception:
+        pass
+
+_load_bayyinah_state()
+# === PERSISTENT_SAVE_END ===
+
 import streamlit.components.v1 as components
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageOps
