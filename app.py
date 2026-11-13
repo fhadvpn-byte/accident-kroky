@@ -8447,7 +8447,152 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             </div>
             {official_footer_html}
         </div>
-        <div class="page report-page page-three page-flow page-p3">
+        <!-- BAYYINAH_P2P3_FIT_START -->
+<style>
+.page.report-page,
+.report-page {{
+  height: 296mm !important;
+  max-height: 296mm !important;
+  overflow: hidden !important;
+  page-break-inside: avoid !important;
+  break-inside: avoid-page !important;
+}}
+.page-body-flex,
+.p2-body-flex,
+.p3-body-flex {{
+  flex: 1 1 0% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+  justify-content: flex-start !important;
+}}
+.page-body-flex div.box-content,
+.page-body-flex div.autofit-box,
+.page-body-flex div.results-box,
+.page-body-flex div.how-happened-box,
+.page-body-flex div[class*="liability"],
+.page-body-flex .table-scroll {{
+  display: block !important;
+  height: auto !important;
+  min-height: 0 !important;
+  max-height: none !important;
+  flex: 0 0 auto !important;
+  flex-shrink: 0 !important;
+  overflow: visible !important;
+  justify-content: flex-start !important;
+  align-items: stretch !important;
+  box-sizing: border-box !important;
+}}
+.page-body-flex td.autofit-box {{
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  vertical-align: top !important;
+}}
+.page-body-flex .section-badge {{
+  flex: 0 0 auto !important;
+  margin-left: auto !important;
+  margin-right: auto !important;
+}}
+@media print {{
+  @page {{ size: A4 portrait; margin: 0mm !important; }}
+  .page.report-page,
+  .report-page {{
+    height: 296mm !important;
+    max-height: 296mm !important;
+    overflow: hidden !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+  }}
+}}
+</style>
+<script>
+(function() {{
+  function fitReportBodies() {{
+    var bodies = document.querySelectorAll('.page-body-flex, .p2-body-flex, .p3-body-flex');
+    bodies.forEach(function(body) {{
+      body.style.zoom = '1';
+      var boxes = body.querySelectorAll('div.box-content, div.autofit-box, td.autofit-box, div[class*="liability"], .table-scroll td');
+      var badges = body.querySelectorAll('.section-badge');
+
+      boxes.forEach(function(bx) {{
+        bx.style.setProperty('height', 'auto', 'important');
+        bx.style.setProperty('max-height', 'none', 'important');
+        bx.style.setProperty('overflow', 'visible', 'important');
+        bx.style.setProperty('flex', '0 0 auto', 'important');
+        if (bx.tagName === 'DIV') {{
+          bx.style.setProperty('display', 'block', 'important');
+        }}
+      }});
+
+      var page = body.closest('.report-page') || body.parentElement;
+      var footer = page ? page.querySelector('[class*="footer"]') : null;
+      var avail = body.clientHeight;
+      if (footer && window.getComputedStyle(footer).position === 'absolute') {{
+        var bRect = body.getBoundingClientRect();
+        var fRect = footer.getBoundingClientRect();
+        if (fRect.top > bRect.top) {{
+          avail = Math.min(avail, fRect.top - bRect.top - 8);
+        }}
+      }}
+      if (!avail || body.scrollHeight <= avail + 1) return;
+
+      var steps = [
+        {{ fs: '12.2px', lh: '1.38', pad: '6px 10px', gap: '4px', bm: '3px auto', lm: '2px' }},
+        {{ fs: '11.4px', lh: '1.32', pad: '5px 9px',  gap: '3px', bm: '2px auto', lm: '1.5px' }},
+        {{ fs: '10.6px', lh: '1.25', pad: '4px 8px',  gap: '2.5px', bm: '2px auto', lm: '1px' }},
+        {{ fs: '9.8px',  lh: '1.20', pad: '3px 7px',  gap: '2px', bm: '1.5px auto', lm: '0.5px' }},
+        {{ fs: '9.1px',  lh: '1.15', pad: '2.5px 6px', gap: '1.5px', bm: '1px auto', lm: '0px' }},
+        {{ fs: '8.4px',  lh: '1.12', pad: '2px 6px',  gap: '1px', bm: '1px auto', lm: '0px' }}
+      ];
+
+      for (var i = 0; i < steps.length; i++) {{
+        if (body.scrollHeight <= avail + 1) break;
+        var st = steps[i];
+        body.style.setProperty('gap', st.gap, 'important');
+        badges.forEach(function(bd) {{
+          bd.style.setProperty('margin', st.bm, 'important');
+          bd.style.setProperty('padding', '2px 12px', 'important');
+          bd.style.setProperty('font-size', st.fs, 'important');
+        }});
+        boxes.forEach(function(bx) {{
+          bx.style.setProperty('font-size', st.fs, 'important');
+          bx.style.setProperty('line-height', st.lh, 'important');
+          bx.style.setProperty('padding', st.pad, 'important');
+          bx.style.setProperty('margin-bottom', st.gap, 'important');
+          bx.querySelectorAll('p, li, ul, ol, div, span, b').forEach(function(ch) {{
+            if (ch.classList && ch.classList.contains('section-badge')) return;
+            ch.style.setProperty('font-size', st.fs, 'important');
+            ch.style.setProperty('line-height', st.lh, 'important');
+            if (ch.tagName === 'UL' || ch.tagName === 'OL') {{
+              ch.style.setProperty('margin-top', '2px', 'important');
+              ch.style.setProperty('margin-bottom', '2px', 'important');
+            }} else if (ch.tagName === 'LI' || ch.tagName === 'P' || ch.tagName === 'DIV') {{
+              ch.style.setProperty('margin-top', '0px', 'important');
+              ch.style.setProperty('margin-bottom', st.lm, 'important');
+            }}
+          }});
+        }});
+      }}
+
+      if (body.scrollHeight > avail + 2 && body.scrollHeight > 0) {{
+        var scale = Math.max(0.70, (avail - 4) / body.scrollHeight);
+        body.style.zoom = scale.toFixed(3);
+      }}
+    }});
+  }}
+
+  window.addEventListener('DOMContentLoaded', fitReportBodies);
+  window.addEventListener('load', fitReportBodies);
+  window.addEventListener('beforeprint', fitReportBodies);
+  setTimeout(fitReportBodies, 120);
+  setTimeout(fitReportBodies, 450);
+  setTimeout(fitReportBodies, 1000);
+}})();
+</script>
+<!-- BAYYINAH_P2P3_FIT_END -->
+    <div class="page report-page page-three page-flow page-p3">
             {build_header()}
             <div class="p3-body-flex page-body page-body-flex">
                 <div class="table-scroll"><table>
@@ -8639,146 +8784,4 @@ if st.session_state.get("_last_persisted_stamp") != str(st.session_state.get("la
     _save_bayyinah_state()
     st.session_state["_last_persisted_stamp"] = str(st.session_state.get("last_saved_at", ""))
 
-# === BAYYINAH_SINGLE_A4_RUNTIME_START ===
-import streamlit.components.v1 as _st_a4_fit
-st.markdown("""<style id="bayyinah-single-a4-md">
-/* === BAYYINAH_SINGLE_A4_START === */
-/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
-.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
-.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
-    height: auto !important;
-    min-height: 0 !important;
-    max-height: none !important;
-    overflow: visible !important;
-    flex-shrink: 1 !important;
-    justify-content: flex-start !important;
-    align-items: stretch !important;
-    box-sizing: border-box !important;
-    overflow-wrap: break-word !important;
-}
-
-/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
-.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
-    width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
-    box-sizing: border-box !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid-page !important;
-    overflow: hidden !important;
-    position: relative !important;
-}
-
-@media print {
-    @page {
-        size: A4 portrait;
-        margin: 0mm !important;
-    }
-    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
-        width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
-        page-break-inside: avoid !important;
-        break-inside: avoid-page !important;
-        page-break-after: always !important;
-        break-after: page !important;
-        overflow: hidden !important;
-    }
-    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
-        page-break-after: auto !important;
-        break-after: auto !important;
-    }
-}
-/* === BAYYINAH_SINGLE_A4_END === */
-
-</style>""", unsafe_allow_html=True)
-
-_st_a4_fit.html("""<script>
-(function() {
-  const PAGE_SEL = '.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page';
-  const BOX_SEL = '.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title';
-
-  function fitPageBoxes(doc) {
-    if (!doc) return;
-    const pages = doc.querySelectorAll(PAGE_SEL);
-    pages.forEach(page => {
-      // فك أي ضغط سابق لقياس الحجم الطبيعي أولاً
-      page.style.zoom = '1';
-      const boxes = page.querySelectorAll(BOX_SEL + ', div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="badge"])');
-      boxes.forEach(bx => {
-        bx.style.height = 'auto';
-        bx.style.maxHeight = 'none';
-        bx.style.overflow = 'visible';
-        bx.style.justifyContent = 'flex-start';
-      });
-
-      const maxH = page.clientHeight || 1118;
-      if (page.scrollHeight <= maxH + 2) return;
-
-      // المرحلة 1: تقليص الهوامش والحشوات والمسافة بين الأسطر تدريجياً عند كثرة المواد
-      const steps = [
-        { fs: '12.5px', lh: '1.42', pad: '7px 10px', gap: '5px', liMb: '2px' },
-        { fs: '11.5px', lh: '1.34', pad: '5px 9px',  gap: '4px', liMb: '1.5px' },
-        { fs: '10.6px', lh: '1.26', pad: '4px 8px',  gap: '3px', liMb: '1px' },
-        { fs: '9.8px',  lh: '1.20', pad: '3px 7px',  gap: '2px', liMb: '0.5px' },
-        { fs: '9.0px',  lh: '1.15', pad: '2px 6px',  gap: '1.5px', liMb: '0px' }
-      ];
-
-      for (const st of steps) {
-        if (page.scrollHeight <= maxH + 2) break;
-        boxes.forEach(bx => {
-          bx.style.fontSize = st.fs;
-          bx.style.lineHeight = st.lh;
-          bx.style.padding = st.pad;
-          bx.style.marginBottom = st.gap;
-          bx.querySelectorAll('li, p, div').forEach(ch => {
-            ch.style.fontSize = st.fs;
-            ch.style.lineHeight = st.lh;
-            ch.style.marginBottom = st.liMb;
-            ch.style.marginTop = '0px';
-          });
-        });
-        page.querySelectorAll('[class*="badge"], [class*="title-pill"], [class*="sec-title"]').forEach(bd => {
-          bd.style.marginTop = st.gap;
-          bd.style.marginBottom = st.gap;
-          bd.style.paddingTop = '2px';
-          bd.style.paddingBottom = '2px';
-        });
-      }
-
-      // المرحلة 2: صمام أمان نهائي إذا بقي أي زيادة طفيفة جداً لتثبيت الفوتر داخل نفس الورقة
-      if (page.scrollHeight > maxH + 2) {
-        const ratio = Math.max(0.76, (maxH - 6) / page.scrollHeight);
-        Array.from(page.children).forEach(ch => {
-          const cl = (ch.className || '').toLowerCase();
-          if (!cl.includes('footer') && !cl.includes('header')) {
-            ch.style.zoom = ratio.toFixed(3);
-          }
-        });
-      }
-    });
-  }
-
-  function runAllFits() {
-    try { fitPageBoxes(window.parent.document); } catch(e) {}
-    try {
-      window.parent.document.querySelectorAll('iframe').forEach(ifr => {
-        try { if (ifr.contentDocument) fitPageBoxes(ifr.contentDocument); } catch(e) {}
-      });
-    } catch(e) {}
-  }
-
-  runAllFits();
-  setTimeout(runAllFits, 350);
-  setTimeout(runAllFits, 1000);
-
-  if (!window.parent.__bayyinahSinglePageObs) {
-    window.parent.__bayyinahSinglePageObs = true;
-    const obs = new MutationObserver(() => setTimeout(runAllFits, 120));
-    obs.observe(window.parent.document.body, { childList: true, subtree: true });
-    window.parent.addEventListener('beforeprint', runAllFits);
-  }
-})();
-</script>""", height=0, width=0)
-# === BAYYINAH_SINGLE_A4_RUNTIME_END ===
 
