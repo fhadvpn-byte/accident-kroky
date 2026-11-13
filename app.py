@@ -1,41 +1,5 @@
 import html
 import streamlit as st
-
-
-# === PERSISTENT_SAVE_START ===
-import json, os
-_PERSISTENT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "bayyinah_saved_state.json")
-
-def _load_bayyinah_state():
-    if os.path.exists(_PERSISTENT_FILE):
-        try:
-            with open(_PERSISTENT_FILE, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                for k, v in data.items():
-                    if k not in st.session_state:
-                        st.session_state[k] = v
-        except Exception:
-            pass
-
-def _save_bayyinah_state():
-    data = {}
-    skip_prefixes = ("FormSubmitter:", "button", "_persist")
-    for k, v in st.session_state.items():
-        ks = str(k)
-        if any(ks.startswith(p) for p in skip_prefixes):
-            continue
-        if isinstance(v, bool) and any(w in ks.lower() for w in ("btn", "save", "new", "print", "del", "add", "insert")):
-            continue
-        data[ks] = v
-    try:
-        with open(_PERSISTENT_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
-    except Exception:
-        pass
-
-_load_bayyinah_state()
-# === PERSISTENT_SAVE_END ===
-
 import streamlit.components.v1 as components
 import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageOps
@@ -475,15 +439,17 @@ def load_permanent_dept_staff() -> dict:
         st.session_state["_perm_dept_staff"] = {**DEFAULT_DEPT_STAFF, **disk_data}
     return st.session_state["_perm_dept_staff"]
 
-def save_permanent_dept_staff(data: dict):
+def save_permanent_dept_staff(data: dict) -> bool:
     st.session_state["_perm_dept_staff"] = dict(data)
     try:
         DEPT_STAFF_PATH.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-    except Exception:
-        pass
+        return True
+    except Exception as error:
+        st.error(f"تعذر حفظ الإعدادات الثابتة على القرص: {error}")
+        return False
 
 def capture_sidebar_before_reset():
     """يحفظ آخر قيم القائمة قبل مسح الجلسة حتى لا تضيع مع حادث جديد أو مسح الحقول."""
@@ -611,9 +577,10 @@ def render_persistent_sidebar_settings():
             if name and not any(item.get("name") == name and item.get("rank") == rank for item in presets):
                 presets.append({"name": name, "rank": rank})
         current["saved_officers"] = presets
-        save_permanent_dept_staff(current)
-        _mirror_dept_staff_local_storage(current)
-        st.toast("تم حفظ الإعدادات الثابتة", icon="💾")
+        if save_permanent_dept_staff(current):
+            _mirror_dept_staff_local_storage(current)
+            st.toast("تم حفظ الإعدادات الثابتة", icon="💾")
+            st.session_state["_sidebar_save_ok"] = True
 
     def _noop_commit():
         return None
@@ -659,6 +626,8 @@ def render_persistent_sidebar_settings():
         manager_rank = str(st.session_state.get("manager_rank") or "")
     if st.button("💾 حفظ الإعدادات الثابتة", key="_sidebar_save_perm_settings", use_container_width=True):
         _commit_sidebar_settings()
+    if st.session_state.pop("_sidebar_save_ok", False):
+        st.success("تم حفظ إعدادات القسم والمنسوبين بنجاح.")
     return (
         dept_region,
         dept_branch,
@@ -1774,6 +1743,14 @@ def init_and_load_state():
             for key, default_val in DEFAULT_REPORT_STATE.items():
                 st.session_state[key] = saved_data.get(key, default_val)
             queue_load_page1_payload(saved_data)
+            # استرجع الأطراف/المركبات المحفوظة يدوياً إن وُجدت
+            if isinstance(saved_data.get("parties"), list):
+                st.session_state.parties = saved_data.get("parties") or _blank_parties()
+            if isinstance(saved_data.get("vehicles"), list):
+                st.session_state.vehicles = saved_data.get("vehicles") or _blank_vehicles()
+            if saved_data.get("last_saved_time"):
+                st.session_state["last_saved_time"] = saved_data.get("last_saved_time")
+                st.session_state["last_saved_at"] = saved_data.get("last_saved_time")
         except (OSError, json.JSONDecodeError, TypeError):
             for key, default_val in DEFAULT_REPORT_STATE.items():
                 st.session_state.setdefault(key, default_val)
@@ -1813,6 +1790,19 @@ def init_and_load_state():
     _normalize_loaded_video_state()
     st.session_state.law_selection_sig = tuple(st.session_state.get("selected_articles") or [])
     st.session_state["state_initialized"] = True
+
+def _flush_page1_editors_to_session() -> None:
+    """اسحب آخر قيم محرري الأطراف/المركبات إلى الجلسة قبل الحفظ اليدوي."""
+    ed_p = st.session_state.get("p1_parties_editor")
+    if isinstance(ed_p, pd.DataFrame):
+        rows, _ = _normalize_party_qualification_rows(_frame_records(ed_p))
+        st.session_state.parties = rows
+        st.session_state.p1_parties_records = _clone_page1_value(rows)
+    ed_v = st.session_state.get("p1_vehicles_editor")
+    if isinstance(ed_v, pd.DataFrame):
+        rows = _frame_records(ed_v)
+        st.session_state.vehicles = rows
+        st.session_state.p1_vehicles_records = _clone_page1_value(rows)
 
 def save_current_work():
     data_to_save = {}
@@ -1869,15 +1859,37 @@ def save_current_work():
     data_to_save["aerial_place"] = st.session_state.get("aerial_place", "below")
     data_to_save["studio_layout_mode"] = st.session_state.get("studio_layout_mode") or st.session_state.get("_studio_layout_mode")
     data_to_save["saved_satellite_state"] = sat_state if isinstance(sat_state, dict) else {}
+    # أطراف/مركبات معتمدة في الجلسة
+    data_to_save["parties"] = list(st.session_state.get("parties") or [])
+    data_to_save["vehicles"] = list(st.session_state.get("vehicles") or [])
     now_str = datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d | %I:%M:%S %p")
     data_to_save["last_saved_time"] = now_str
     st.session_state["last_saved_time"] = now_str
+    st.session_state["last_saved_at"] = now_str
     try:
         with open(DRAFT_FILE_PATH, "w", encoding="utf-8") as draft_file:
-            json.dump(data_to_save, draft_file, ensure_ascii=False, indent=2)
+            json.dump(data_to_save, draft_file, ensure_ascii=False, indent=2, default=str)
         return True
     except OSError as error:
         st.error(f"حدث خطأ أثناء حفظ المسودة: {error}")
+        return False
+
+def perform_manual_save(show_toast: bool = True) -> bool:
+    """مسار الحفظ اليدوي الموحّد: مزامنة المحررات → خزنة الصفحة1 → مسودة التقرير."""
+    try:
+        _flush_page1_editors_to_session()
+        _mirror_page1_fields()
+        sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=True)
+        ok = save_current_work()
+        if ok:
+            _save_bayyinah_state()
+            st.session_state["_last_persisted_stamp"] = str(st.session_state.get("last_saved_at") or "")
+            st.session_state["_save_success_banner"] = st.session_state.get("last_saved_time")
+            if show_toast:
+                st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
+        return bool(ok)
+    except Exception as error:
+        st.error(f"تعذر إتمام الحفظ اليدوي: {error}")
         return False
 
 def clear_all_work():
@@ -2237,9 +2249,10 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
         )
     with col_save:
         if st.button("💾 حفظ واعتماد البيانات", key="_top_cmd_save", use_container_width=True):
-            _save_bayyinah_state()
             if callable(on_save_callback):
                 on_save_callback()
+            else:
+                perform_manual_save(show_toast=True)
     with col_print:
         render_direct_print_button(report_html or "", label="🖨️ طباعة فورية A4", btn_id="top")
     with col_new:
@@ -2376,9 +2389,7 @@ OFFICIAL_A4_HIGH_CONTRAST_CSS = """
 """
 
 def _quick_save_from_header():
-    sync_page1_to_vault()
-    if save_current_work():
-        st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
+    perform_manual_save(show_toast=True)
 
 VIDEO_MARKER_START = "[بداية القرائن المرئية]"
 VIDEO_MARKER_END = "[نهاية القرائن المرئية]"
@@ -4101,18 +4112,25 @@ st.set_page_config(
 )
 
 # === PERSISTENT_AUTOSAVE_START ===
-import json as _p_json, os as _p_os
-
-_PERSIST_FILE = _p_os.path.join(_p_os.path.dirname(_p_os.path.abspath(__file__)), ".bayyinah_saved_state.json")
+# نسخة احتياطية خفيفة بجانب المسودة اليدوية (bayyinah_autosave_draft.json) — لا تمنع تحميل المسودة.
+_PERSIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".bayyinah_saved_state.json")
+_PERSIST_SKIP_KEYS = frozenset({
+    "state_initialized",
+    "_persist_restored_ok",
+    "_last_persisted_stamp",
+    "_save_success_banner",
+    "_sidebar_save_ok",
+    "confirm_clear",
+})
+_PERSIST_SKIP_PREFIXES = ("FormSubmitter:", "button", "_persist", "_top_cmd_", "_sidebar_save")
 
 def _save_bayyinah_state():
+    """نسخة احتياطية JSON بعد الحفظ اليدوي — دون كسر مسار المسودة الأساسي."""
     data = {}
-    skip_prefixes = ("FormSubmitter:", "button", "_persist")
     for k, v in list(st.session_state.items()):
         ks = str(k)
-        if ks.startswith(skip_prefixes):
+        if ks in _PERSIST_SKIP_KEYS or any(ks.startswith(p) for p in _PERSIST_SKIP_PREFIXES):
             continue
-        # تجاهل أزرار التفاعل اللحظية حتى لا تعلق قيمتها True
         if isinstance(v, bool) and any(w in ks.lower() for w in ("btn", "save", "new", "print", "del", "add", "insert")):
             continue
         if hasattr(v, "to_dict"):
@@ -4122,45 +4140,59 @@ def _save_bayyinah_state():
             except Exception:
                 pass
         try:
-            _p_json.dumps(v, ensure_ascii=False)
+            json.dumps(v, ensure_ascii=False, default=str)
             data[ks] = v
         except Exception:
-            pass
+            continue
     try:
         with open(_PERSIST_FILE, "w", encoding="utf-8") as f:
-            _p_json.dump(data, f, ensure_ascii=False, indent=2)
+            json.dump(data, f, ensure_ascii=False, indent=2, default=str)
+        return True
     except Exception:
-        pass
+        return False
 
 def _load_bayyinah_state_once():
+    """استعادة احتياطية فقط للمفاتيح الغائبة — لا تضبط state_initialized حتى لا تُتخطى المسودة."""
     if st.session_state.get("_persist_restored_ok"):
         return
     st.session_state["_persist_restored_ok"] = True
-    if not _p_os.path.exists(_PERSIST_FILE):
+    if not os.path.exists(_PERSIST_FILE):
+        return
+    # إن وُجدت مسودة يدوية فهي المصدر المعتمد عند init_and_load_state
+    if os.path.exists(DRAFT_FILE_PATH):
         return
     try:
         with open(_PERSIST_FILE, "r", encoding="utf-8") as f:
-            data = _p_json.load(f)
-        if isinstance(data, dict):
-            for k, v in data.items():
-                if k not in st.session_state:
-                    if isinstance(v, dict) and "__df_records__" in v:
-                        try:
-                            import pandas as _pd
-                            st.session_state[k] = _pd.DataFrame(v["__df_records__"])
-                        except Exception:
-                            st.session_state[k] = v["__df_records__"]
-                    else:
-                        st.session_state[k] = v
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return
+        for k, v in data.items():
+            ks = str(k)
+            if ks in _PERSIST_SKIP_KEYS or ks in st.session_state:
+                continue
+            if isinstance(v, dict) and "__df_records__" in v:
+                try:
+                    st.session_state[ks] = pd.DataFrame(v["__df_records__"])
+                except Exception:
+                    st.session_state[ks] = v["__df_records__"]
+            else:
+                st.session_state[ks] = v
     except Exception:
         pass
 
 def _clear_bayyinah_saved_state():
     try:
-        if _p_os.path.exists(_PERSIST_FILE):
-            _p_os.remove(_PERSIST_FILE)
+        if os.path.exists(_PERSIST_FILE):
+            os.remove(_PERSIST_FILE)
     except Exception:
         pass
+    for stale in ("bayyinah_saved_state.json",):
+        try:
+            p = os.path.join(os.path.dirname(os.path.abspath(__file__)), stale)
+            if os.path.exists(p):
+                os.remove(p)
+        except Exception:
+            pass
 
 _load_bayyinah_state_once()
 # === PERSISTENT_AUTOSAVE_END ===
@@ -4997,8 +5029,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
             force=True,
         )
         _mirror_page1_fields()
-        sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=False)
-        st.toast("تم اعتماد بيانات الحادث والأطراف في الجلسة", icon="✅")
+        # اعتماد النموذج = مزامنة الجلسة + حفظ يدوي على القرص (بدون كسر نموذج الحفظ اليدوي)
+        if perform_manual_save(show_toast=False):
+            st.toast("تم اعتماد وحفظ بيانات الحادث والأطراف بنجاح", icon="✅")
+        else:
+            sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=True)
+            st.toast("تم اعتماد بيانات الحادث في الجلسة (تحقق من صلاحية الحفظ على القرص)", icon="⚠️")
         parties_df = pd.DataFrame(cleaned_parties)
     else:
         # الإبقاء على آخر اعتماد في الجلسة دون إعادة كتابة مع كل حرف
@@ -5013,8 +5049,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
         acc_cause = st.session_state.get("p1_acc_cause", "")
 
     if st.session_state.pop("_p1_save_requested", False):
-        if save_current_work():
-            st.toast("تم حفظ جميع بيانات التقرير والصفحات بنجاح", icon="💾")
+        perform_manual_save(show_toast=True)
     _vehicle_rows = list(st.session_state.get("vehicles") or [])
 
     def _vehicle_type_at(index):
@@ -8073,6 +8108,9 @@ with header_slot:
         on_reset_callback=_reset_new_accident,
         report_html=full_report_html,
     )
+    _save_banner = st.session_state.pop("_save_success_banner", None)
+    if _save_banner:
+        st.success(f"تم الحفظ بنجاح — آخر حفظ: {_save_banner}")
 
 # --- تلوين شرائح المواد النظامية والإجراءات المتخذة باللون الأحمر الهادئ ---
 st.markdown("""<style id="final-red-tags-only">
@@ -8093,10 +8131,5 @@ st.markdown("""<style id="final-red-tags-only">
 }
 
 </style>""", unsafe_allow_html=True)
-
-# --- تأمين الحفظ التلقائي عند ضغط زر الاعتماد ---
-if st.session_state.get("_last_persisted_stamp") != str(st.session_state.get("last_saved_at", "")) and st.session_state.get("last_saved_at"):
-    _save_bayyinah_state()
-    st.session_state["_last_persisted_stamp"] = str(st.session_state.get("last_saved_at", ""))
 
 
