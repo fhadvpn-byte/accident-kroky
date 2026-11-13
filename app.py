@@ -7946,3 +7946,28 @@ with header_slot:
         on_reset_callback=_reset_new_accident,
         report_html=full_report_html,
     )
+
+
+# --- تلوين شرائح المواد النظامية والإجراءات المتخذة باللون الأحمر الهادئ ---
+st.markdown("""<style id="red-multiselect-tags-final">
+html body div#root [data-testid="stApp"] [data-testid="stMultiSelect"] span[data-baseweb="tag"],
+html body div#root [data-testid="stAppViewContainer"] [data-testid="stMultiSelect"] span[data-baseweb="tag"],
+html body [data-baseweb="select"] span[data-baseweb="tag"],
+span[data-baseweb="tag"] {
+    background: #991b1b !important;
+    background-image: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%) !important;
+    background-color: #991b1b !important;
+    color: #ffffff !important;
+    border: 1px solid #fca5a5 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+}
+html body [data-testid="stMultiSelect"] span[data-baseweb="tag"] *,
+span[data-baseweb="tag"] span,
+span[data-baseweb="tag"] svg {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+}
+</style>""", unsafe_allow_html=True)
+
