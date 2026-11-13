@@ -3242,7 +3242,11 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         return out
 
     sel_c = []
-    art_d = dict(globals().get("TRAFFIC_LAW_ARTICLES") or {})
+    _raw_arts = globals().get("TRAFFIC_LAW_ARTICLES") or []
+    art_d = _raw_arts if isinstance(_raw_arts, dict) else {
+        str(x.get("id") or x.get("code") or i).strip(): x
+        for i, x in enumerate(_raw_arts) if isinstance(x, dict)
+    }
     for sid in list(st.session_state.get("selected_articles") or []):
         ks = str(sid).strip()
         v = art_d.get(ks)
