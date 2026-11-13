@@ -4056,84 +4056,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-
-# --- FORCE_RED_MULTISELECT_TAGS_START ---
-import streamlit.components.v1 as _st_comp_tags
-st.markdown("""<style id="force-red-tags-css">
-[data-testid="stMultiSelect"] [data-baseweb="tag"],
-div[data-baseweb="select"] span[data-baseweb="tag"],
-span[data-baseweb="tag"] {
-    background: #991b1b !important;
-    background-color: #991b1b !important;
-    background-image: none !important;
-    color: #ffffff !important;
-    border: 1px solid rgba(252, 165, 165, 0.55) !important;
-    box-shadow: none !important;
-    text-shadow: none !important;
-    filter: none !important;
-}
-[data-testid="stMultiSelect"] [data-baseweb="tag"] *,
-span[data-baseweb="tag"] * {
-    color: #ffffff !important;
-    fill: #ffffff !important;
-    text-shadow: none !important;
-}
-</style>""", unsafe_allow_html=True)
-
-_st_comp_tags.html("""<script>
-(function() {
-  const doc = window.parent.document;
-  function paintRedTags() {
-    if (!doc.getElementById('parent-red-tags-override')) {
-      const st = doc.createElement('style');
-      st.id = 'parent-red-tags-override';
-      st.innerHTML = `
-        [data-testid="stMultiSelect"] [data-baseweb="tag"],
-        [data-baseweb="select"] [data-baseweb="tag"],
-        span[data-baseweb="tag"] {
-          background: #991b1b !important;
-          background-color: #991b1b !important;
-          background-image: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%) !important;
-          color: #ffffff !important;
-          border: 1px solid rgba(252, 165, 165, 0.55) !important;
-          box-shadow: none !important;
-          text-shadow: none !important;
-          filter: none !important;
-        }
-        [data-testid="stMultiSelect"] [data-baseweb="tag"] *,
-        span[data-baseweb="tag"] * {
-          color: #ffffff !important;
-          fill: #ffffff !important;
-        }
-      `;
-      doc.head.appendChild(st);
-    }
-    doc.querySelectorAll('[data-testid="stMultiSelect"] [data-baseweb="tag"], span[data-baseweb="tag"]').forEach(el => {
-      el.style.setProperty('background', '#991b1b', 'important');
-      el.style.setProperty('background-color', '#991b1b', 'important');
-      el.style.setProperty('background-image', 'linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%)', 'important');
-      el.style.setProperty('color', '#ffffff', 'important');
-      el.style.setProperty('box-shadow', 'none', 'important');
-      el.style.setProperty('border', '1px solid rgba(252, 165, 165, 0.55)', 'important');
-      el.querySelectorAll('*').forEach(ch => {
-        ch.style.setProperty('color', '#ffffff', 'important');
-        ch.style.setProperty('fill', '#ffffff', 'important');
-      });
-    });
-  }
-  paintRedTags();
-  if (!window.parent.__redTagsObserverSet) {
-    window.parent.__redTagsObserverSet = true;
-    const obs = new MutationObserver(paintRedTags);
-    obs.observe(doc.body, { childList: true, subtree: true });
-  }
-})();
-</script>""", height=0, width=0)
-# --- FORCE_RED_MULTISELECT_TAGS_END ---
-
-
-
 st.markdown("""<style id="tags-red-only">
 @media screen {
   /* تلوين العناصر المختارة فقط في قائمتي المواد النظامية والإجراءات باللون الأحمر الهادئ */
@@ -8036,3 +7958,23 @@ with header_slot:
         on_reset_callback=_reset_new_accident,
         report_html=full_report_html,
     )
+
+# --- تلوين شرائح المواد النظامية والإجراءات المتخذة باللون الأحمر الهادئ ---
+st.markdown("""<style id="final-red-tags-only">
+.stMultiSelect span[data-baseweb="tag"],
+[data-testid="stMultiSelect"] span[data-baseweb="tag"],
+.stMultiSelect [data-baseweb="tag"] {
+    background: linear-gradient(135deg, #991b1b 0%, #7f1d1d 100%) !important;
+    background-color: #991b1b !important;
+    color: #ffffff !important;
+    border: 1px solid #fca5a5 !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+}
+.stMultiSelect span[data-baseweb="tag"] *,
+[data-testid="stMultiSelect"] span[data-baseweb="tag"] * {
+    color: #ffffff !important;
+    fill: #ffffff !important;
+}
+</style>""", unsafe_allow_html=True)
+
