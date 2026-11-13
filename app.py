@@ -236,8 +236,8 @@ def inject_luxury_hijri_css():
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -252,8 +252,8 @@ def inject_luxury_hijri_css():
     }
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -2013,8 +2013,8 @@ def inject_bayyinah_blue_styles():
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -2029,8 +2029,8 @@ def inject_bayyinah_blue_styles():
     }
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -2158,8 +2158,8 @@ def render_direct_print_button(
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -2174,8 +2174,8 @@ def render_direct_print_button(
     }
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -2273,8 +2273,8 @@ def render_direct_print_button(
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -2289,8 +2289,8 @@ def render_direct_print_button(
     }}
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -2388,8 +2388,8 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -2404,8 +2404,8 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
     }
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -4410,8 +4410,8 @@ st.markdown("""<style id="tags-red-only">
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -4426,8 +4426,8 @@ st.markdown("""<style id="tags-red-only">
     }
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -4800,7 +4800,7 @@ st.markdown("""
         box-shadow: 0 0 18px rgba(0, 242, 254, 0.7);
     }
     .stTabs [data-testid="stTab"]:hover {
-        transform: scale(1.04);
+        
     }
     .stTabs [aria-selected="true"],
     .stTabs [data-testid="stTab"][aria-selected="true"] {
@@ -4851,7 +4851,7 @@ st.markdown("""
         background: linear-gradient(90deg, #00f2fe, #4facfe) !important;
         color: #041426 !important;
         -webkit-text-fill-color: #041426 !important;
-        transform: scale(1.05);
+        
         box-shadow: 0 0 22px rgba(0, 242, 254, 0.9);
     }
     div.stButton > button p,
@@ -5011,8 +5011,8 @@ st.markdown("""
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -5027,8 +5027,8 @@ st.markdown("""
     }
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -5140,8 +5140,8 @@ st.markdown(
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -5156,8 +5156,8 @@ st.markdown(
     }
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -6993,8 +6993,8 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -7009,8 +7009,8 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
     }}
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -8167,8 +8167,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -8183,8 +8183,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     }}
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -8451,8 +8451,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
 <style>
 .page.report-page,
 .report-page {{
-  height: 296mm !important;
-  max-height: 296mm !important;
+  min-height: 296mm !important; height: auto !important;
+  max-min-height: 296mm !important; height: auto !important;
   overflow: hidden !important;
   page-break-inside: avoid !important;
   break-inside: avoid-page !important;
@@ -8499,8 +8499,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
   @page {{ size: A4 portrait; margin: 0mm !important; }}
   .page.report-page,
   .report-page {{
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     overflow: hidden !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -8672,8 +8672,8 @@ st.markdown("""
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -8688,8 +8688,8 @@ st.markdown("""
     }
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
@@ -8747,8 +8747,8 @@ st.markdown("""<style id="final-red-tags-only">
 /* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
 .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
     width: 210mm !important;
-    height: 296mm !important;
-    max-height: 296mm !important;
+    min-height: 296mm !important; height: auto !important;
+    max-min-height: 296mm !important; height: auto !important;
     box-sizing: border-box !important;
     page-break-inside: avoid !important;
     break-inside: avoid-page !important;
@@ -8763,8 +8763,8 @@ st.markdown("""<style id="final-red-tags-only">
     }
     .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
         width: 210mm !important;
-        height: 296mm !important;
-        max-height: 296mm !important;
+        min-height: 296mm !important; height: auto !important;
+        max-min-height: 296mm !important; height: auto !important;
         page-break-inside: avoid !important;
         break-inside: avoid-page !important;
         page-break-after: always !important;
