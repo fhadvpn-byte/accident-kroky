@@ -4056,6 +4056,80 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
+
+
+st.markdown("""<style id="calm-eye-ui">
+@media screen {
+  /* تهدئة وسوم المواد النظامية المختارة */
+  html body #root [data-testid="stAppViewContainer"] span[data-baseweb="tag"] {
+    background: #1e3a5f !important;
+    color: #f8fafc !important;
+    border: 1px solid rgba(147, 197, 253, 0.45) !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+    filter: none !important;
+  }
+  html body #root [data-testid="stAppViewContainer"] span[data-baseweb="tag"] * {
+    color: #f8fafc !important;
+  }
+
+  /* تهدئة الأزرار الرئيسية والنشطة وإلغاء الإشعاع */
+  html body #root [data-testid="stAppViewContainer"] .stButton > button[kind="primary"]:not(:disabled),
+  html body #root [data-testid="stAppViewContainer"] [data-testid="stBaseButton-primary"]:not(:disabled),
+  html body #root [data-testid="stAppViewContainer"] .stDownloadButton > button:not(:disabled),
+  html body #root [data-testid="stAppViewContainer"] [data-testid="stFormSubmitButton"] > button:not(:disabled) {
+    background: linear-gradient(135deg, #115e59 0%, #0f4c5c 100%) !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(94, 234, 212, 0.35) !important;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.28) !important;
+    text-shadow: none !important;
+    filter: none !important;
+  }
+  html body #root [data-testid="stAppViewContainer"] .stButton > button[kind="primary"]:not(:disabled) *,
+  html body #root [data-testid="stAppViewContainer"] [data-testid="stBaseButton-primary"]:not(:disabled) * {
+    color: #ffffff !important;
+  }
+  html body #root [data-testid="stAppViewContainer"] .stButton > button[kind="primary"]:not(:disabled):hover,
+  html body #root [data-testid="stAppViewContainer"] [data-testid="stBaseButton-primary"]:not(:disabled):hover {
+    background: linear-gradient(135deg, #0f766e 0%, #155e75 100%) !important;
+    border-color: rgba(147, 197, 253, 0.6) !important;
+    box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35) !important;
+  }
+
+  /* الأزرار الثانوية وغير المفعلة */
+  html body #root [data-testid="stAppViewContainer"] .stButton > button[kind="secondary"]:not(:disabled),
+  html body #root [data-testid="stAppViewContainer"] [data-testid="stBaseButton-secondary"]:not(:disabled) {
+    background: #172a46 !important;
+    color: #e2e8f0 !important;
+    border: 1px solid rgba(148, 163, 184, 0.3) !important;
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  html body #root [data-testid="stAppViewContainer"] .stButton > button:disabled,
+  html body #root [data-testid="stAppViewContainer"] button:disabled {
+    background: rgba(30, 41, 59, 0.5) !important;
+    color: #94a3b8 !important;
+    border: 1px solid rgba(148, 163, 184, 0.18) !important;
+    box-shadow: none !important;
+  }
+
+  /* تهدئة أزرار الاختيار (يوجد / لا يوجد) والتبويبات */
+  html body #root [data-testid="stAppViewContainer"] div[role="radiogroup"] label,
+  html body #root [data-testid="stAppViewContainer"] [data-baseweb="select"] > div,
+  html body #root [data-testid="stAppViewContainer"] [data-baseweb="textarea"] {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
+  html body #root [data-testid="stAppViewContainer"] div[role="radiogroup"] label:has(input:checked),
+  html body #root [data-testid="stAppViewContainer"] button[role="tab"][aria-selected="true"] {
+    background: #115e59 !important;
+    color: #ffffff !important;
+    border: 1px solid rgba(94, 234, 212, 0.45) !important;
+    box-shadow: none !important;
+  }
+}
+</style>""", unsafe_allow_html=True)
+
 st.components.v1.html(
     """
 <script>
