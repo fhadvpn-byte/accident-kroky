@@ -706,28 +706,57 @@ def _official_article_cite(code: str) -> str:
     """يحذف اللاحقة المختصرة داخل القوس مثل «- إشارة» ويبقي رقم المادة النظامي."""
     return re.sub(r"\s*-\s*[^)]+", "", str(code or "").strip())
 
+def _cite_is_art32_license(cite: str) -> bool:
+    text = str(cite or "")
+    return bool(re.search(r"المادة\s*\(\s*32\s*\)", text)) or "قبل الحصول على رخصة" in text
+
 def render_legal_articles_inserter(selected_articles: list, p1_reasons_key: str = "p1_reasons_area", p2_reasons_key: str = "p2_reasons_area"):
     if not selected_articles:
         return
 
-    def _append_articles(target_key: str):
-        existing = str(st.session_state.get(target_key, "") or "").strip()
-        existing_lines = [ln.strip() for ln in existing.splitlines() if ln.strip()]
+    def _append_articles(target_key: str, force_slot: int = None):
+        """force_slot=1/2 يوجّه مواد الرخصة (32) لمستحقها حتى لو ضغط المستخدم الزر الخطأ."""
+        parties = list(st.session_state.get("parties") or [])
+        p1_title = str(st.session_state.get("p1_title_input") or st.session_state.get("party_role_title_1") or "")
+        p2_title = str(st.session_state.get("p2_role_select") or st.session_state.get("party_role_title_2") or "")
+        p1_party = _bind_liability_party(1, p1_title, parties)
+        p2_party = _bind_liability_party(2, p2_title, parties)
+        art32_key = None
+        if _party_may_receive_art32(p1_party):
+            art32_key = p1_reasons_key
+        elif _party_may_receive_art32(p2_party):
+            art32_key = p2_reasons_key
+
+        def _push(key, line):
+            existing = str(st.session_state.get(key, "") or "").strip()
+            lines = [ln.strip() for ln in existing.splitlines() if ln.strip()]
+            if line not in lines:
+                lines.append(line)
+            st.session_state[key] = "\n".join(lines)
+
         for art in selected_articles:
             cite = _format_article_cite_for_report(art)
             formatted_art = f"استناداً إلى {cite} من نظام المرور ولائحته التنفيذية."
-            if formatted_art not in existing_lines:
-                existing_lines.append(formatted_art)
-        st.session_state[target_key] = "\n".join(existing_lines)
+            if _cite_is_art32_license(cite) or _reason_line_is_art32_license(formatted_art):
+                # المادة (32) تذهب فقط لسائق غير مؤهل — لا تُدرج تحت المؤهل/الراكب
+                if art32_key:
+                    _push(art32_key, formatted_art)
+                continue
+            dest = target_key
+            if force_slot == 1:
+                dest = p1_reasons_key
+            elif force_slot == 2:
+                dest = p2_reasons_key
+            _push(dest, formatted_art)
 
     ins_c1, ins_c2 = st.columns(2)
     with ins_c1:
         if st.button("➕ إدراج المواد المختارة في أسباب إدانة الطرف الأول", key="btn_ins_art_p1", use_container_width=True):
-            _append_articles(p1_reasons_key)
+            _append_articles(p1_reasons_key, force_slot=1)
             st.rerun()
     with ins_c2:
         if st.button("➕ إدراج المواد المختارة في أسباب إدانة الطرف الثاني", key="btn_ins_art_p2", use_container_width=True):
-            _append_articles(p2_reasons_key)
+            _append_articles(p2_reasons_key, force_slot=2)
             st.rerun()
 
 def _write_actions_editor(cur_acts):
@@ -1204,32 +1233,63 @@ def _is_qualified_driver_party(party) -> bool:
         return False
     return item.get("التأهيل") == "مؤهل للقيادة"
 
-def _resolve_party_for_liability_slot(party_title: str, party_index: int = None, parties=None) -> dict:
-    """ربط صفة الطرف في التقرير بصف الطرف الفعلي (الاسم ثم لصق الطرف) — بلا تفضيل لتأهيل معيّن."""
+_ART32_REASON_LINE = (
+    "مخالفة صريحة للمادة (32) من نظام المرور لقيادة المركبة قبل الحصول على رخصة القيادة اللازمة، "
+    "ويحال للجهة المختصة لتطبيق العقوبات النظامية."
+)
+
+def _bind_liability_party(party_index: int, party_title: str = "", parties=None) -> dict:
+    """
+    ربط إلزامي لفتحة الرأي (1/2) بصف الطرف عبر:
+    الاسم + رقم/وسم الطرف + صفة المشاركة + التأهيل — لا الاعتماد على ترتيب القائمة وحده.
+    """
     parties = list(parties if parties is not None else (st.session_state.get("parties") or []))
     title = str(party_title or "").strip()
-    # 1) مطابقة بالاسم الأطول داخل صفة التقرير (أدق تطابق — دون تفضيل غير المؤهل)
-    named_matches = []
-    for row in parties:
+    want_label = ""
+    try:
+        want_label = str((_PARTY_LABELS or {}).get(int(party_index)) or "")
+    except Exception:
+        want_label = "الطرف الأول" if int(party_index or 1) == 1 else "الطرف الثاني"
+    if not want_label:
+        want_label = "الطرف الأول" if int(party_index or 1) == 1 else "الطرف الثاني"
+
+    scored = []
+    for pos, row in enumerate(parties):
+        if not isinstance(row, dict):
+            continue
         item = _sanitize_party_row(row)
         name = (item.get("الاسم") or "").strip()
-        if name and name in title:
-            named_matches.append(item)
-    if named_matches:
-        named_matches.sort(key=lambda it: len((it.get("الاسم") or "")), reverse=True)
-        return named_matches[0]
-    # 2) مطابقة عنوان «الطرف الأول/الثاني» داخل النص
-    for row in parties:
-        item = _sanitize_party_row(row)
         label = (item.get("الطرف") or "").strip()
-        if label and label in title:
-            return item
-    # 3) فهرس الطرف في التقرير → صف بنفس الترتيب المعنون
-    if party_index:
-        row = _party_row_for_index(parties, int(party_index))
-        if row:
-            return _sanitize_party_row(row)
-    return {}
+        role = (item.get("المشاركة") or "").strip()
+        score = 0
+        # الاسم داخل صفة التقرير
+        if name and title and name in title:
+            score += 50 + min(len(name), 30)
+        # وسم الطرف يطابق رقم الفتحة (الطرف الأول ↔ 1)
+        if label and label == want_label:
+            score += 40
+        elif label and title and label in title:
+            score += 20
+        # موقع القائمة يطابق الرقم فقط كمرجع ثانوي
+        if pos == int(party_index or 1) - 1:
+            score += 5
+        # السائق يُفضَّل على الراكب لنفس الاسم/الوسم
+        if role and not _is_non_driver_role(role):
+            score += 8
+        elif _is_non_driver_role(role):
+            score -= 15
+        if score > 0:
+            scored.append((score, item))
+    if scored:
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return scored[0][1]
+    # احتياطي أخير: صف موسوم برقم الطرف
+    row = _party_row_for_index(parties, int(party_index or 1))
+    return _sanitize_party_row(row) if row else {}
+
+def _resolve_party_for_liability_slot(party_title: str, party_index: int = None, parties=None) -> dict:
+    """توافق خلفي — يحوّل إلى الربط المركّب بالاسم+الرقم+المشاركة+التأهيل."""
+    return _bind_liability_party(int(party_index or 1), party_title or "", parties)
 
 def _reason_line_is_art32_license(raw: str) -> bool:
     """أسطر إسناد مخالفة الرخصة (32) فقط — لا تُخلط مع وصف تأهيل عام."""
@@ -1243,6 +1303,64 @@ def _reason_line_is_art32_license(raw: str) -> bool:
     if "قيادة المركبة قبل الحصول على رخصة" in text:
         return True
     return False
+
+def _split_art32_reason_lines(text: str):
+    art32, other = [], []
+    for ln in str(text or "").splitlines():
+        raw = ln.strip().lstrip("-•* ").strip()
+        if not raw:
+            continue
+        if _reason_line_is_art32_license(raw):
+            art32.append(raw)
+        else:
+            other.append(raw)
+    return art32, other
+
+def _partition_reasons_by_art32_eligibility(p1_reasons, p2_reasons, p1_party, p2_party):
+    """
+    الجذر: كل أسطر المادة (32) من سببي الطرفين تُجمع ثم تُعاد فقط لمستحقها
+    (سائق غير مؤهل). الطرف المؤهل/الراكب لا يستلم أي سطر (32).
+    """
+    a1, o1 = _split_art32_reason_lines(p1_reasons)
+    a2, o2 = _split_art32_reason_lines(p2_reasons)
+    pooled = []
+    seen = set()
+    for ln in a1 + a2:
+        if ln not in seen:
+            seen.add(ln)
+            pooled.append(ln)
+    p1_may = _party_may_receive_art32(p1_party)
+    p2_may = _party_may_receive_art32(p2_party)
+    if p1_may and not p2_may:
+        if not pooled:
+            pooled = [_ART32_REASON_LINE]
+        return "\n".join(o1 + pooled), "\n".join(o2)
+    if p2_may and not p1_may:
+        if not pooled:
+            pooled = [_ART32_REASON_LINE]
+        return "\n".join(o1), "\n".join(o2 + pooled)
+    if p1_may and p2_may:
+        # نادراً: كلٌّ يستلم أسطره فقط، مع ضمان سطر إن وُجدت مخالفة عامة
+        if not a1 and pooled:
+            a1 = [_ART32_REASON_LINE]
+        if not a2 and pooled:
+            a2 = [_ART32_REASON_LINE]
+        return "\n".join(o1 + a1), "\n".join(o2 + a2)
+    # لا مستحق: احذف كل أسطر (32) من الطرفين
+    return "\n".join(o1), "\n".join(o2)
+
+def _opinion_lines_for_party_debug(party, reasons_text) -> list:
+    """أسطر الرأي التي ستُطبع لهذا الطرف بعد فلترة (32)."""
+    may = _party_may_receive_art32(party)
+    out = []
+    for ln in str(reasons_text or "").splitlines():
+        raw = ln.strip().lstrip("-•* ").strip()
+        if not raw:
+            continue
+        if _reason_line_is_art32_license(raw) and not may:
+            continue
+        out.append(raw)
+    return out
 
 def _render_party_role_cards(rows):
     cards = []
@@ -3103,7 +3221,7 @@ def _admin_violation_lines_for_zero_ratio(
 ) -> list:
     """مخالفة إدارية عند 0%: المادة (32) فقط إن كان هذا الطرف نفسه سائقاً غير مؤهل."""
     parties = list(st.session_state.get("parties") or [])
-    party = party_row or _resolve_party_for_liability_slot(party_title, party_index=party_index, parties=parties)
+    party = party_row or _bind_liability_party(int(party_index or 1), party_title or "", parties)
     display_name = (party.get("الاسم") if party else "") or party_title or "الطرف"
     title = html.escape(str(display_name))
     blob = str(reasons_text or "")
@@ -3149,14 +3267,38 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
     printed_articles = set()
     selected_ids = list(st.session_state.get("selected_articles") or [])
     parties = list(st.session_state.get("parties") or [])
-    p1_party = _resolve_party_for_liability_slot(p1_title, party_index=1, parties=parties)
-    p2_party = _resolve_party_for_liability_slot(p2_title, party_index=2, parties=parties)
+    # ربط مركّب: اسم + رقم الطرف + مشاركة + تأهيل
+    p1_party = _bind_liability_party(1, p1_title, parties)
+    p2_party = _bind_liability_party(2, p2_title, parties)
+    # إعادة توزيع أسطر (32) للمستحق فقط قبل البناء
+    p1_reasons, p2_reasons = _partition_reasons_by_art32_eligibility(
+        p1_reasons, p2_reasons, p1_party, p2_party
+    )
+    # للاختبار/التتبع في الجلسة
+    try:
+        st.session_state["_debug_art32_opinion"] = {
+            "p1": {
+                "name": (p1_party or {}).get("الاسم"),
+                "qual": (p1_party or {}).get("التأهيل"),
+                "role": (p1_party or {}).get("المشاركة"),
+                "may32": _party_may_receive_art32(p1_party),
+                "lines": _opinion_lines_for_party_debug(p1_party, p1_reasons),
+            },
+            "p2": {
+                "name": (p2_party or {}).get("الاسم"),
+                "qual": (p2_party or {}).get("التأهيل"),
+                "role": (p2_party or {}).get("المشاركة"),
+                "may32": _party_may_receive_art32(p2_party),
+                "lines": _opinion_lines_for_party_debug(p2_party, p2_reasons),
+            },
+        }
+    except Exception:
+        pass
 
     def format_bullets(text, party_row=None):
         if not text:
             return ""
         items = []
-        # رفض افتراضي للمادة (32) إلا إذا كان هذا الطرف سائقاً غير مؤهل حرفياً
         may_art32 = _party_may_receive_art32(party_row)
         for line in str(text).splitlines():
             raw = line.strip().lstrip("-•* ")
@@ -3185,19 +3327,6 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
     blocks = []
     blocks.append("<style>li:empty{display:none!important}</style>")
 
-    def _with_art32_if_unqualified(reasons_text, party_row):
-        """إن كان السائق غير مؤهل ولم يُدرج (32) في أسبابه، أضف سطر الإسناد له وحده."""
-        text = str(reasons_text or "")
-        if not _party_may_receive_art32(party_row):
-            return text
-        if any(_reason_line_is_art32_license(ln) for ln in text.splitlines()):
-            return text
-        extra = (
-            "مخالفة صريحة للمادة (32) من نظام المرور لقيادة المركبة قبل الحصول على رخصة القيادة اللازمة، "
-            "ويحال للجهة المختصة لتطبيق العقوبات النظامية."
-        )
-        return (text.rstrip() + "\n" + extra).strip() if text.strip() else extra
-
     is_shared = p1_ratio > 0 and p2_ratio > 0
     if p1_ratio > 0:
         header_prefix = "أولاً: " if is_shared else ""
@@ -3206,7 +3335,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
             f"<div class='liability-heading'>"
             f"{header_prefix}إدانة ({safe_p1_title}) بنسبة ({p1_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
             f"</div>"
-            f"{format_bullets(_with_art32_if_unqualified(p1_reasons, p1_party), p1_party)}"
+            f"{format_bullets(p1_reasons, p1_party)}"
             f"</div>"
         )
     if is_shared:
@@ -3218,7 +3347,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
             f"<div class='liability-heading'>"
             f"{header_prefix}إدانة ({safe_p2_title}) بنسبة ({p2_ratio}%) من المسؤولية، وذلك للأسباب والمواد النظامية التالية:"
             f"</div>"
-            f"{format_bullets(_with_art32_if_unqualified(p2_reasons, p2_party), p2_party)}"
+            f"{format_bullets(p2_reasons, p2_party)}"
             f"</div>"
         )
 
@@ -5354,6 +5483,29 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         merged_opinion = _upsert_marked_block(generated_fields["legalOpinionText"], kept_legal)
         st.session_state.p1_reasons = merged_opinion
         st.session_state.legal_opinion = merged_opinion
+        # عند اختيار المادة (32): انقلها لسائق «غير مؤهل» فقط (لا تبقَ في الطرف الخطأ)
+        _parties_now = list(st.session_state.get("parties") or [])
+        _p1 = _bind_liability_party(1, str(st.session_state.get("p1_title_input") or ""), _parties_now)
+        _p2 = _bind_liability_party(
+            2,
+            str(st.session_state.get("p2_role_select") or st.session_state.get("party_role_title_2") or ""),
+            _parties_now,
+        )
+        _r1, _r2 = _partition_reasons_by_art32_eligibility(
+            st.session_state.get("p1_reasons", ""),
+            st.session_state.get("p2_reasons", ""),
+            _p1,
+            _p2,
+        )
+        # إن كانت (32) مختارة ولم تُدرج بعد، أضفها لمستحقها
+        if "art_32" in set(selected_law_ids or []):
+            if _party_may_receive_art32(_p1) and not any(_reason_line_is_art32_license(x) for x in str(_r1).splitlines()):
+                _r1 = (str(_r1).rstrip() + "\n" + _ART32_REASON_LINE).strip()
+            if _party_may_receive_art32(_p2) and not any(_reason_line_is_art32_license(x) for x in str(_r2).splitlines()):
+                _r2 = (str(_r2).rstrip() + "\n" + _ART32_REASON_LINE).strip()
+        st.session_state.p1_reasons = _r1
+        st.session_state.p2_reasons = _r2
+        st.session_state.legal_opinion = _r1
     if generated_fields["hasCriminalSuspicion"]:
         st.warning("تشمل المواد المختارة شقاً جنائياً أو شبه جنائي، وتُحال إلى الشرطة أو النيابة.")
     render_video_evidence_engine()
