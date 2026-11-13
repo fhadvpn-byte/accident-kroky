@@ -3399,6 +3399,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         return (
             "<div class='liability-block liability-innocent-wrap'>"
             f"<div class='liability-innocent'>• عدم مسؤولية ({ts}) عن الحادث (نسبة المسؤولية 0%).</div>"
+            "<div class='liability-innocent' style='margin-top:3px;'>• يُعفى قائد المركبة من المسؤولية لقاء استيفاء المادة (50) من نظام المرور.</div>"
             f"{adm}</div>"
         )
 
