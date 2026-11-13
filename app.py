@@ -217,7 +217,56 @@ def inject_luxury_hijri_css():
             opacity: 1 !important;
             text-shadow: none !important;
         }
-        </style>
+        
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
+</style>
         """,
         unsafe_allow_html=True,
     )
@@ -1945,7 +1994,56 @@ def inject_bayyinah_blue_styles():
         font-weight: 700 !important;
         text-shadow: none !important;
     }
-    </style>
+    
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
+</style>
     """, unsafe_allow_html=True)
 
 def render_direct_print_button(
@@ -2041,7 +2139,56 @@ def render_direct_print_button(
             border-radius: 8px; padding: 7px 18px; font-weight: 900;
             font-size: 14px; cursor: pointer; margin-left: 8px;
         }
-    </style>
+    
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
+</style>
     <script>
         window.addEventListener("load", function() {
             var imgs = Array.prototype.slice.call(document.images || []).filter(function(im) {
@@ -2107,7 +2254,56 @@ def render_direct_print_button(
                 transition: 0.15s ease;
             }}
             .instant-print-btn:hover {{ filter: brightness(1.07); }}
-        </style>
+        
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {{
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}}
+
+@media print {{
+    @page {{
+        size: A4 portrait;
+        margin: 0mm !important;
+    }}
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }}
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {{
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }}
+}}
+/* === BAYYINAH_SINGLE_A4_END === */
+</style>
         </head>
         <body>
             <button type="button" class="instant-print-btn" id="pBtn_{btn_id}" onclick="openAndPrintA4()">
@@ -2173,7 +2369,56 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
             padding: 2px 9px;
             border-radius: 999px;
         }
-        </style>
+        
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
+</style>
         """,
         unsafe_allow_html=True,
     )
@@ -4146,6 +4391,55 @@ st.markdown("""<style id="tags-red-only">
     text-shadow: none !important;
 }
 }
+
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
 </style>""", unsafe_allow_html=True)
 
 st.components.v1.html(
@@ -4698,6 +4992,55 @@ st.markdown("""
         padding: 0;
         margin: 0;
     }
+
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
 </style>
 """, unsafe_allow_html=True)
 init_and_load_state()
@@ -4778,7 +5121,56 @@ st.markdown(
         background: linear-gradient(135deg, #0284c7, #0369a1) !important;
         color: #ffffff !important;
     }
-    </style>
+    
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
+</style>
     """,
     unsafe_allow_html=True,
 )
@@ -6582,7 +6974,56 @@ def generate_clean_print_html(how_text, results_text, show_numbers=False):
                     font-size: 9px !important;
                 }}
             }}
-        </style>
+        
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {{
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}}
+
+@media print {{
+    @page {{
+        size: A4 portrait;
+        margin: 0mm !important;
+    }}
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }}
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {{
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }}
+}}
+/* === BAYYINAH_SINGLE_A4_END === */
+</style>
     </head>
     <body>
         <div class="report-container">
@@ -7707,7 +8148,56 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         }}
         {page_number_css}
         {OFFICIAL_A4_HIGH_CONTRAST_CSS}
-    </style>
+    
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {{
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}}
+
+@media print {{
+    @page {{
+        size: A4 portrait;
+        margin: 0mm !important;
+    }}
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {{
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }}
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {{
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }}
+}}
+/* === BAYYINAH_SINGLE_A4_END === */
+</style>
     <script>
     function fitReportFrame() {{
       var bar = document.querySelector(".no-print");
@@ -8018,6 +8508,55 @@ st.markdown("""
     overflow: hidden !important;
   }
 }
+
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
 </style>
 """, unsafe_allow_html=True)
 with header_slot:
@@ -8044,10 +8583,202 @@ st.markdown("""<style id="final-red-tags-only">
     color: #ffffff !important;
     fill: #ffffff !important;
 }
+
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
 </style>""", unsafe_allow_html=True)
 
 # --- تأمين الحفظ التلقائي عند ضغط زر الاعتماد ---
 if st.session_state.get("_last_persisted_stamp") != str(st.session_state.get("last_saved_at", "")) and st.session_state.get("last_saved_at"):
     _save_bayyinah_state()
     st.session_state["_last_persisted_stamp"] = str(st.session_state.get("last_saved_at", ""))
+
+# === BAYYINAH_SINGLE_A4_RUNTIME_START ===
+import streamlit.components.v1 as _st_a4_fit
+st.markdown("""<style id="bayyinah-single-a4-md">
+/* === BAYYINAH_SINGLE_A4_START === */
+/* 1) تمدد كامل للمستطيلات حول النص دون قص أو خروج أسطر */
+.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title,
+.a4-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .autofit-page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .block-container div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .main div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .official-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-a4 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-body-flex div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-flow div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p2 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-p3 div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .page-three div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .print-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]), .report-page div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="logo"]):not([class*="sign"]):not([class*="stamp"]):not([class*="badge"]) {
+    height: auto !important;
+    min-height: 0 !important;
+    max-height: none !important;
+    overflow: visible !important;
+    flex-shrink: 1 !important;
+    justify-content: flex-start !important;
+    align-items: stretch !important;
+    box-sizing: border-box !important;
+    overflow-wrap: break-word !important;
+}
+
+/* 2) تثبيت كل ورقة A4 في صفحة واحدة بالضبط ومنع انقسامها لصفحة إضافية */
+.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    max-height: 296mm !important;
+    box-sizing: border-box !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid-page !important;
+    overflow: hidden !important;
+    position: relative !important;
+}
+
+@media print {
+    @page {
+        size: A4 portrait;
+        margin: 0mm !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page {
+        width: 210mm !important;
+        height: 296mm !important;
+        max-height: 296mm !important;
+        page-break-inside: avoid !important;
+        break-inside: avoid-page !important;
+        page-break-after: always !important;
+        break-after: page !important;
+        overflow: hidden !important;
+    }
+    .a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page:last-of-type {
+        page-break-after: auto !important;
+        break-after: auto !important;
+    }
+}
+/* === BAYYINAH_SINGLE_A4_END === */
+
+</style>""", unsafe_allow_html=True)
+
+_st_a4_fit.html("""<script>
+(function() {
+  const PAGE_SEL = '.a4-page, .autofit-page-body, .block-container, .main, .official-page, .page, .page-a4, .page-body, .page-body-flex, .page-flow, .page-p2, .page-p3, .page-three, .print-page, .report-page';
+  const BOX_SEL = '.a4-box, .actions-body, .autofit-box, .box-content, .content-box, .content-text, .how-happened-box, .liability-block, .liability-box, .liability-heading, .liability-innocent, .liability-innocent-wrap, .narrative-box, .official-box, .opinion-box, .p3-body-flex, .procedures-box, .report-box, .results-box, .section-box, .section-title';
+
+  function fitPageBoxes(doc) {
+    if (!doc) return;
+    const pages = doc.querySelectorAll(PAGE_SEL);
+    pages.forEach(page => {
+      // فك أي ضغط سابق لقياس الحجم الطبيعي أولاً
+      page.style.zoom = '1';
+      const boxes = page.querySelectorAll(BOX_SEL + ', div[class*="box"]:not([class*="krok"]):not([class*="sketch"]):not([class*="header"]):not([class*="footer"]):not([class*="badge"])');
+      boxes.forEach(bx => {
+        bx.style.height = 'auto';
+        bx.style.maxHeight = 'none';
+        bx.style.overflow = 'visible';
+        bx.style.justifyContent = 'flex-start';
+      });
+
+      const maxH = page.clientHeight || 1118;
+      if (page.scrollHeight <= maxH + 2) return;
+
+      // المرحلة 1: تقليص الهوامش والحشوات والمسافة بين الأسطر تدريجياً عند كثرة المواد
+      const steps = [
+        { fs: '12.5px', lh: '1.42', pad: '7px 10px', gap: '5px', liMb: '2px' },
+        { fs: '11.5px', lh: '1.34', pad: '5px 9px',  gap: '4px', liMb: '1.5px' },
+        { fs: '10.6px', lh: '1.26', pad: '4px 8px',  gap: '3px', liMb: '1px' },
+        { fs: '9.8px',  lh: '1.20', pad: '3px 7px',  gap: '2px', liMb: '0.5px' },
+        { fs: '9.0px',  lh: '1.15', pad: '2px 6px',  gap: '1.5px', liMb: '0px' }
+      ];
+
+      for (const st of steps) {
+        if (page.scrollHeight <= maxH + 2) break;
+        boxes.forEach(bx => {
+          bx.style.fontSize = st.fs;
+          bx.style.lineHeight = st.lh;
+          bx.style.padding = st.pad;
+          bx.style.marginBottom = st.gap;
+          bx.querySelectorAll('li, p, div').forEach(ch => {
+            ch.style.fontSize = st.fs;
+            ch.style.lineHeight = st.lh;
+            ch.style.marginBottom = st.liMb;
+            ch.style.marginTop = '0px';
+          });
+        });
+        page.querySelectorAll('[class*="badge"], [class*="title-pill"], [class*="sec-title"]').forEach(bd => {
+          bd.style.marginTop = st.gap;
+          bd.style.marginBottom = st.gap;
+          bd.style.paddingTop = '2px';
+          bd.style.paddingBottom = '2px';
+        });
+      }
+
+      // المرحلة 2: صمام أمان نهائي إذا بقي أي زيادة طفيفة جداً لتثبيت الفوتر داخل نفس الورقة
+      if (page.scrollHeight > maxH + 2) {
+        const ratio = Math.max(0.76, (maxH - 6) / page.scrollHeight);
+        Array.from(page.children).forEach(ch => {
+          const cl = (ch.className || '').toLowerCase();
+          if (!cl.includes('footer') && !cl.includes('header')) {
+            ch.style.zoom = ratio.toFixed(3);
+          }
+        });
+      }
+    });
+  }
+
+  function runAllFits() {
+    try { fitPageBoxes(window.parent.document); } catch(e) {}
+    try {
+      window.parent.document.querySelectorAll('iframe').forEach(ifr => {
+        try { if (ifr.contentDocument) fitPageBoxes(ifr.contentDocument); } catch(e) {}
+      });
+    } catch(e) {}
+  }
+
+  runAllFits();
+  setTimeout(runAllFits, 350);
+  setTimeout(runAllFits, 1000);
+
+  if (!window.parent.__bayyinahSinglePageObs) {
+    window.parent.__bayyinahSinglePageObs = true;
+    const obs = new MutationObserver(() => setTimeout(runAllFits, 120));
+    obs.observe(window.parent.document.body, { childList: true, subtree: true });
+    window.parent.addEventListener('beforeprint', runAllFits);
+  }
+})();
+</script>""", height=0, width=0)
+# === BAYYINAH_SINGLE_A4_RUNTIME_END ===
 
