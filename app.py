@@ -1954,6 +1954,28 @@ TAB3_LOCKED_SAVED_KEYS = tuple(spec["saved"] for spec in TAB3_LOCKED_TEXT_SPECS)
 TAB3_LOCKED_MANUAL_KEYS = tuple(spec["manual"] for spec in TAB3_LOCKED_TEXT_SPECS)
 TAB3_LOCKED_REV_KEYS = tuple(spec["rev"] for spec in TAB3_LOCKED_TEXT_SPECS)
 
+# بنود إضافية لنتائج الحادث — مصدر الحقيقة saved_*؛ الودجات UI فقط
+RESULTS_ANIMAL_DEFAULT = "نفوق حيوانات/مواشي أو حيوان أليف"
+RESULTS_PROP_DEFAULT = "تلفيات ممتلكات عامة أو خاصة"
+SAVED_HAS_ANIMALS = "saved_has_animals"
+SAVED_ANIMALS_DESC = "saved_animals_desc"
+SAVED_HAS_PROP = "saved_has_prop"
+SAVED_PROP_DESC = "saved_prop_desc"
+RESULTS_EXTRA_SAVED_KEYS = (
+    SAVED_HAS_ANIMALS,
+    SAVED_ANIMALS_DESC,
+    SAVED_HAS_PROP,
+    SAVED_PROP_DESC,
+)
+RESULTS_EXTRA_WIDGET_KEYS = (
+    "results_animal_loss_enabled",
+    "results_animal_loss_text",
+    "results_property_damage_enabled",
+    "results_property_damage_text",
+)
+_LAST_ANIMAL_RESULT_BODY = "_last_animal_result_body"
+_LAST_PROP_RESULT_BODY = "_last_prop_result_body"
+
 TAB3_PERMANENT_KEYS = (
     "selected_articles",
     "accident_results",
@@ -1997,6 +2019,10 @@ TAB3_PERMANENT_KEYS = (
     "results_animal_loss_text",
     "results_property_damage_enabled",
     "results_property_damage_text",
+    "saved_has_animals",
+    "saved_animals_desc",
+    "saved_has_prop",
+    "saved_prop_desc",
     "results_data_fingerprint",
     "criminal_participating_agency",
     "criminal_escaped_vehicles",
@@ -2205,10 +2231,10 @@ def compute_results_data_fingerprint() -> tuple:
         if isinstance(v, dict)
     )
     extras = (
-        bool(st.session_state.get("results_animal_loss_enabled")),
-        str(st.session_state.get("results_animal_loss_text") or "").strip(),
-        bool(st.session_state.get("results_property_damage_enabled")),
-        str(st.session_state.get("results_property_damage_text") or "").strip(),
+        bool(st.session_state.get(SAVED_HAS_ANIMALS)),
+        str(st.session_state.get(SAVED_ANIMALS_DESC) or "").strip(),
+        bool(st.session_state.get(SAVED_HAS_PROP)),
+        str(st.session_state.get(SAVED_PROP_DESC) or "").strip(),
     )
     return (party_sig, vehicle_sig, extras)
 
@@ -2250,8 +2276,215 @@ def _strip_results_lead_in(text: str) -> str:
     return "\n".join(out_lines).strip()
 
 
+def _ensure_results_extras_defaults() -> None:
+    """تهيئة saved_has_animals/desc وsaved_has_prop/desc مع ترحيل الودجات القديمة."""
+    if SAVED_HAS_ANIMALS not in st.session_state:
+        st.session_state[SAVED_HAS_ANIMALS] = bool(
+            st.session_state.get("results_animal_loss_enabled") or False
+        )
+    if SAVED_ANIMALS_DESC not in st.session_state:
+        st.session_state[SAVED_ANIMALS_DESC] = str(
+            st.session_state.get("results_animal_loss_text") or ""
+        )
+    if SAVED_HAS_PROP not in st.session_state:
+        st.session_state[SAVED_HAS_PROP] = bool(
+            st.session_state.get("results_property_damage_enabled") or False
+        )
+    if SAVED_PROP_DESC not in st.session_state:
+        st.session_state[SAVED_PROP_DESC] = str(
+            st.session_state.get("results_property_damage_text") or ""
+        )
+    # بذر الودجات من saved_* قبل الرسم فقط إن غابت
+    if "results_animal_loss_enabled" not in st.session_state:
+        st.session_state["results_animal_loss_enabled"] = bool(
+            st.session_state.get(SAVED_HAS_ANIMALS)
+        )
+    if "results_animal_loss_text" not in st.session_state:
+        st.session_state["results_animal_loss_text"] = str(
+            st.session_state.get(SAVED_ANIMALS_DESC) or ""
+        )
+    if "results_property_damage_enabled" not in st.session_state:
+        st.session_state["results_property_damage_enabled"] = bool(
+            st.session_state.get(SAVED_HAS_PROP)
+        )
+    if "results_property_damage_text" not in st.session_state:
+        st.session_state["results_property_damage_text"] = str(
+            st.session_state.get(SAVED_PROP_DESC) or ""
+        )
+
+
+def _sync_results_extras_widgets_to_saved() -> None:
+    """انسخ ودجات البنود الإضافية → saved_*."""
+    if "results_animal_loss_enabled" in st.session_state:
+        st.session_state[SAVED_HAS_ANIMALS] = bool(
+            st.session_state.get("results_animal_loss_enabled")
+        )
+    if "results_animal_loss_text" in st.session_state:
+        st.session_state[SAVED_ANIMALS_DESC] = str(
+            st.session_state.get("results_animal_loss_text") or ""
+        )
+    if "results_property_damage_enabled" in st.session_state:
+        st.session_state[SAVED_HAS_PROP] = bool(
+            st.session_state.get("results_property_damage_enabled")
+        )
+    if "results_property_damage_text" in st.session_state:
+        st.session_state[SAVED_PROP_DESC] = str(
+            st.session_state.get("results_property_damage_text") or ""
+        )
+
+
+def _normalize_result_item_body(line: str) -> str:
+    s = str(line or "").strip()
+    s = re.sub(r"^\d+\s*[-–—.)]\s*", "", s).strip()
+    s = _strip_results_lead_in(s.rstrip(".")).strip()
+    return s
+
+
+def _parse_result_item_bodies(text: str) -> list[str]:
+    bodies = []
+    for raw in str(text or "").splitlines():
+        body = _normalize_result_item_body(raw)
+        if body:
+            bodies.append(body)
+    return bodies
+
+
+def _format_result_item_bodies(bodies: list[str]) -> str:
+    numbered = []
+    for i, body in enumerate(bodies, start=1):
+        clean = _normalize_result_item_body(body)
+        if not clean:
+            continue
+        numbered.append(f"{i}- {clean}.")
+    return "\n".join(numbered)
+
+
+def _results_extra_match_set(kind: str, current_desc: str) -> set[str]:
+    """أجسام البنود التي تُعدّ نفوقاً أو تلفيات ممتلكات (للتحديث/الحذف)."""
+    if kind == "animal":
+        defaults = {RESULTS_ANIMAL_DEFAULT}
+        last_key = _LAST_ANIMAL_RESULT_BODY
+    else:
+        defaults = {RESULTS_PROP_DEFAULT}
+        last_key = _LAST_PROP_RESULT_BODY
+    bodies = set(defaults)
+    last = st.session_state.get(last_key)
+    if last:
+        bodies.add(_normalize_result_item_body(str(last)))
+    desc = _normalize_result_item_body(current_desc)
+    if desc:
+        bodies.add(desc)
+    return {b for b in bodies if b}
+
+
+def _looks_like_animal_result_line(body: str, match_set: set[str]) -> bool:
+    b = _normalize_result_item_body(body)
+    if not b:
+        return False
+    if b in match_set:
+        return True
+    if b.startswith("نفوق"):
+        return True
+    return ("حيوانات" in b) or ("مواشي" in b) or ("حيوان أليف" in b)
+
+
+def _looks_like_prop_result_line(body: str, match_set: set[str]) -> bool:
+    b = _normalize_result_item_body(body)
+    if not b:
+        return False
+    if b in match_set:
+        return True
+    if b.startswith("تلفيات ممتلكات"):
+        return True
+    return ("ممتلكات" in b) and ("تلفيات" in b or "أتلاف" in b or "اتلاف" in b)
+
+
+def _apply_results_extras_to_text(
+    text: str,
+    *,
+    has_animals: bool,
+    animals_desc: str,
+    has_prop: bool,
+    prop_desc: str,
+) -> str:
+    """إدراج/تحديث/حذف بنود النفوق والتلفيات داخل نص النتائج مع إعادة الترقيم."""
+    # حافظ على كتلة القرائن المرئية إن وُجدت
+    marked = ""
+    try:
+        marked = _extract_marked_block(text)
+        base_text = _strip_marked_block(text)
+    except Exception:
+        base_text = str(text or "")
+    animal_match = _results_extra_match_set("animal", animals_desc)
+    prop_match = _results_extra_match_set("prop", prop_desc)
+    kept = []
+    for body in _parse_result_item_bodies(base_text):
+        if body in ("[بداية القرائن المرئية]", "[نهاية القرائن المرئية]"):
+            continue
+        if _looks_like_animal_result_line(body, animal_match):
+            continue
+        if _looks_like_prop_result_line(body, prop_match):
+            continue
+        kept.append(body)
+    if has_animals:
+        animal_body = _normalize_result_item_body(animals_desc) or RESULTS_ANIMAL_DEFAULT
+        kept.append(animal_body)
+        st.session_state[_LAST_ANIMAL_RESULT_BODY] = animal_body
+    else:
+        st.session_state.pop(_LAST_ANIMAL_RESULT_BODY, None)
+    if has_prop:
+        prop_body = _normalize_result_item_body(prop_desc) or RESULTS_PROP_DEFAULT
+        kept.append(prop_body)
+        st.session_state[_LAST_PROP_RESULT_BODY] = prop_body
+    else:
+        st.session_state.pop(_LAST_PROP_RESULT_BODY, None)
+    formatted = _format_result_item_bodies(kept)
+    if marked:
+        try:
+            return _upsert_marked_block(formatted, marked)
+        except Exception:
+            return formatted
+    return formatted
+
+
+def patch_saved_results_extras(*, bump_rev: bool = True) -> bool:
+    """حدّث saved_accident_results_text ببنود النفوق/التلفيات حتى مع is_manual."""
+    _ensure_tab3_locked_text_defaults()
+    _ensure_results_extras_defaults()
+    has_animals = bool(st.session_state.get(SAVED_HAS_ANIMALS))
+    animals_desc = str(st.session_state.get(SAVED_ANIMALS_DESC) or "")
+    has_prop = bool(st.session_state.get(SAVED_HAS_PROP))
+    prop_desc = str(st.session_state.get(SAVED_PROP_DESC) or "")
+    current = _read_tab3_saved_text("accident_results")
+    updated = _apply_results_extras_to_text(
+        current,
+        has_animals=has_animals,
+        animals_desc=animals_desc,
+        has_prop=has_prop,
+        prop_desc=prop_desc,
+    )
+    if updated == current:
+        return False
+    # لا تلمس is_manual — الإدراج/التحديث/الحذف يعمل مع القفل اليدوي
+    _write_tab3_saved_text("accident_results", updated, mark_manual=None)
+    if bump_rev:
+        _bump_tab3_text_rev("accident_results")
+    return True
+
+
+def _on_results_extras_change() -> None:
+    """on_change: احفظ saved_* ثم رقّع نص النتائج وارفع rev."""
+    _sync_results_extras_widgets_to_saved()
+    patch_saved_results_extras(bump_rev=True)
+    try:
+        sync_permanent_form_data(reason="results_extras")
+    except Exception:
+        pass
+
+
 def build_accident_results_text() -> str:
     """توليد نتائج الحادث من وفيات/إصابات الأطراف ثم تلفيات المركبات والبنود الإضافية."""
+    _ensure_results_extras_defaults()
     lines = []
     parties = st.session_state.get("parties") or []
     for idx, party in enumerate(parties, start=1):
@@ -2282,12 +2515,12 @@ def build_accident_results_text() -> str:
             item += f" لوحة {plate}"
         lines.append(item)
 
-    if st.session_state.get("results_animal_loss_enabled"):
-        text = str(st.session_state.get("results_animal_loss_text") or "").strip()
-        lines.append(text or "نفوق حيوانات/مواشي أو حيوان أليف")
-    if st.session_state.get("results_property_damage_enabled"):
-        text = str(st.session_state.get("results_property_damage_text") or "").strip()
-        lines.append(text or "تلفيات ممتلكات عامة أو خاصة")
+    if st.session_state.get(SAVED_HAS_ANIMALS):
+        text = str(st.session_state.get(SAVED_ANIMALS_DESC) or "").strip()
+        lines.append(text or RESULTS_ANIMAL_DEFAULT)
+    if st.session_state.get(SAVED_HAS_PROP):
+        text = str(st.session_state.get(SAVED_PROP_DESC) or "").strip()
+        lines.append(text or RESULTS_PROP_DEFAULT)
 
     if not lines:
         return ""
@@ -2427,14 +2660,15 @@ def init_and_load_state():
         st.session_state.show_page_numbers = False
     if not isinstance(st.session_state.get("auto_analyze_video"), bool):
         st.session_state.auto_analyze_video = False
-    if not isinstance(st.session_state.get("results_animal_loss_enabled"), bool):
-        st.session_state.results_animal_loss_enabled = False
-    if not isinstance(st.session_state.get("results_property_damage_enabled"), bool):
-        st.session_state.results_property_damage_enabled = False
-    if not isinstance(st.session_state.get("results_animal_loss_text"), str):
-        st.session_state.results_animal_loss_text = ""
-    if not isinstance(st.session_state.get("results_property_damage_text"), str):
-        st.session_state.results_property_damage_text = ""
+    _ensure_results_extras_defaults()
+    if not isinstance(st.session_state.get(SAVED_HAS_ANIMALS), bool):
+        st.session_state[SAVED_HAS_ANIMALS] = bool(st.session_state.get(SAVED_HAS_ANIMALS))
+    if not isinstance(st.session_state.get(SAVED_HAS_PROP), bool):
+        st.session_state[SAVED_HAS_PROP] = bool(st.session_state.get(SAVED_HAS_PROP))
+    if not isinstance(st.session_state.get(SAVED_ANIMALS_DESC), str):
+        st.session_state[SAVED_ANIMALS_DESC] = str(st.session_state.get(SAVED_ANIMALS_DESC) or "")
+    if not isinstance(st.session_state.get(SAVED_PROP_DESC), str):
+        st.session_state[SAVED_PROP_DESC] = str(st.session_state.get(SAVED_PROP_DESC) or "")
     if not isinstance(st.session_state.get("include_sketch"), bool):
         st.session_state.include_sketch = True
     if not isinstance(st.session_state.get("include_aerial"), bool):
@@ -4960,6 +5194,7 @@ _BAYYINAH_JSON_DATA_WHITELIST = frozenset({
     *TAB3_LOCKED_SAVED_KEYS,
     *TAB3_LOCKED_MANUAL_KEYS,
     *TAB3_LOCKED_REV_KEYS,
+    *RESULTS_EXTRA_SAVED_KEYS,
 })
 
 def _is_persist_ui_widget_key(key: str) -> bool:
@@ -4967,6 +5202,8 @@ def _is_persist_ui_widget_key(key: str) -> bool:
     if _is_persist_file_camera_key(ks):
         return True
     if ks in WIDGET_TO_SAVED_ACC or ks in ("p1_acc_type_choice", "p1_acc_weather_choice"):
+        return True
+    if ks in RESULTS_EXTRA_WIDGET_KEYS:
         return True
     # ودجات text_area المقفلة + زر الاستعادة — ليست بيانات
     if "_ta_" in ks or ks.startswith("restore_auto_"):
@@ -6653,47 +6890,59 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     content_fp = compute_tab3_content_fingerprint()
     st.session_state.tab3_content_fingerprint = content_fp
 
-    # بنود إضافية في نتائج الحادث (تُحفظ دائماً مع تبويب 3)
-    if "results_animal_loss_enabled" not in st.session_state:
-        st.session_state.results_animal_loss_enabled = False
-    if "results_animal_loss_text" not in st.session_state:
-        st.session_state.results_animal_loss_text = ""
-    if "results_property_damage_enabled" not in st.session_state:
-        st.session_state.results_property_damage_enabled = False
-    if "results_property_damage_text" not in st.session_state:
-        st.session_state.results_property_damage_text = ""
+    # بنود إضافية في نتائج الحادث — saved_* مصدر الحقيقة؛ on_change يرقّع النص حتى مع is_manual
+    _ensure_results_extras_defaults()
     st.markdown("#### بنود إضافية في نتائج الحادث")
     _ex1, _ex2 = st.columns(2)
     with _ex1:
         st.checkbox(
             "نفوق حيوانات/مواشي أو حيوان أليف",
             key="results_animal_loss_enabled",
+            on_change=_on_results_extras_change,
         )
-        if st.session_state.get("results_animal_loss_enabled"):
+        if st.session_state.get("results_animal_loss_enabled") or st.session_state.get(SAVED_HAS_ANIMALS):
             st.text_input(
                 "وصف النفوق (يُدرج بنداً في النتائج):",
                 key="results_animal_loss_text",
                 placeholder="مثلاً: نفوق رأسي أغنام في موقع الحادث",
+                on_change=_on_results_extras_change,
             )
     with _ex2:
         st.checkbox(
             "تلفيات ممتلكات عامة أو خاصة",
             key="results_property_damage_enabled",
+            on_change=_on_results_extras_change,
         )
-        if st.session_state.get("results_property_damage_enabled"):
+        if st.session_state.get("results_property_damage_enabled") or st.session_state.get(SAVED_HAS_PROP):
             st.text_input(
                 "وصف التلفيات (يُدرج بنداً في النتائج):",
                 key="results_property_damage_text",
                 placeholder="مثلاً: تلفيات عمود إنارة / سياج",
+                on_change=_on_results_extras_change,
             )
+    # مزامنة الودجات → saved_* ثم ترقيع النص (إن لم يُستدعَ on_change بعد)
+    _sync_results_extras_widgets_to_saved()
+    patch_saved_results_extras(bump_rev=True)
 
     # نتائج الحادث من الأطراف/المركبات — لا تُكتب فوق النص إن is_manual
+    # (بنود النفوق/التلفيات تُرقَّع أعلاه حتى مع is_manual)
     results_fp = compute_results_data_fingerprint()
     previous_results_fp = st.session_state.get("results_data_fingerprint")
     should_regen_results = previous_results_fp is None or previous_results_fp != results_fp
     if should_regen_results and not _tab3_text_is_manual("accident_results"):
         generated_results = _strip_results_lead_in(build_accident_results_text())
         _set_tab3_generated_text("accident_results", generated_results)
+        # ثبّت أجسام البنود الإضافية بعد التوليد الكامل
+        if st.session_state.get(SAVED_HAS_ANIMALS):
+            st.session_state[_LAST_ANIMAL_RESULT_BODY] = (
+                _normalize_result_item_body(st.session_state.get(SAVED_ANIMALS_DESC) or "")
+                or RESULTS_ANIMAL_DEFAULT
+            )
+        if st.session_state.get(SAVED_HAS_PROP):
+            st.session_state[_LAST_PROP_RESULT_BODY] = (
+                _normalize_result_item_body(st.session_state.get(SAVED_PROP_DESC) or "")
+                or RESULTS_PROP_DEFAULT
+            )
     elif not _tab3_text_is_manual("accident_results"):
         _cleaned_results = _strip_results_lead_in(_read_tab3_saved_text("accident_results"))
         if _cleaned_results != _read_tab3_saved_text("accident_results"):

@@ -92,10 +92,10 @@ TAB3_KEYS = (
     "video_custom_notes",
     "video_injected_text",
     "auto_analyze_video",
-    "results_animal_loss_enabled",
-    "results_animal_loss_text",
-    "results_property_damage_enabled",
-    "results_property_damage_text",
+    "saved_has_animals",
+    "saved_animals_desc",
+    "saved_has_prop",
+    "saved_prop_desc",
     "results_data_fingerprint",
     "criminal_participating_agency",
     "criminal_escaped_vehicles",
@@ -188,6 +188,18 @@ _WIDGET_ACCIDENT_KEYS = frozenset({
     "p1_acc_location",
     "p1_acc_cause",
 })
+_RESULTS_EXTRA_WIDGET_KEYS = frozenset({
+    "results_animal_loss_enabled",
+    "results_animal_loss_text",
+    "results_property_damage_enabled",
+    "results_property_damage_text",
+})
+_RESULTS_EXTRA_SAVED_KEYS = frozenset({
+    "saved_has_animals",
+    "saved_animals_desc",
+    "saved_has_prop",
+    "saved_prop_desc",
+})
 _SAVED_ACC_KEY_MAP = {
     "p1_acc_number": "saved_acc_number",
     "p1_acc_location": "saved_acc_location",
@@ -243,6 +255,8 @@ def _is_ui_widget_key(key: str) -> bool:
     if key.endswith("_manual") and not key.endswith("_is_manual"):
         return True
     if key in _WIDGET_ACCIDENT_KEYS:
+        return True
+    if key in _RESULTS_EXTRA_WIDGET_KEYS:
         return True
     if key in ("p1_acc_type_choice", "p1_acc_weather_choice"):
         return True
