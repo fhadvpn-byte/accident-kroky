@@ -119,6 +119,24 @@ table.sign-table th[colspan] {
   overflow: visible !important;
   flex-shrink: 0 !important;
 }
+.page.report-page th.actions-title {
+  text-align: center !important;
+}
+.page.report-page td.actions-body {
+  direction: rtl !important;
+  text-align: right !important;
+  padding: 10px 14px !important;
+  vertical-align: top !important;
+}
+.page.report-page td.actions-body .action-item {
+  display: block !important;
+  direction: rtl !important;
+  text-align: right !important;
+  line-height: 1.75 !important;
+  margin: 0 0 4px 0 !important;
+  padding-right: 1.5em !important;
+  text-indent: -1.5em !important;
+}
 .page.report-page .section-badge {
   flex: 0 0 auto !important;
   margin: 3px auto !important;

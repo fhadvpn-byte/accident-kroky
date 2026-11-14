@@ -1357,6 +1357,17 @@ def _plain_text_len_for_autofit(value) -> int:
         pass
     return len(re.sub(r"\s+", " ", text).strip())
 
+
+def build_final_actions_html(raw_text: str) -> str:
+    """بنود الإجراءات: كل بند في <div class=\"action-item\"> مستقل لـ A4."""
+    items = []
+    for line in str(raw_text or "").splitlines():
+        clean = line.strip()
+        if not clean:
+            continue
+        items.append(f'<div class="action-item">{html.escape(clean)}</div>')
+    return "".join(items)
+
 def _estimate_a4_autofit_base_font_px(
     *,
     results_text: str = "",
@@ -4567,9 +4578,7 @@ def load_a4_report_fields_from_session() -> dict:
     if rights_status == "تحديد حقوق مخصصة":
         rights_status = str(get_form_value("rights_custom") or "")
     actions_raw = str(get_form_value("actions_taken_editor") or "")
-    final_actions_html = "<br>".join(
-        html.escape(line.strip()) for line in actions_raw.splitlines() if line.strip()
-    )
+    final_actions_html = build_final_actions_html(actions_raw)
     fields = {
         "acc_num": _read_core_accident_value("p1_acc_number"),
         "acc_date": st.session_state.get("hijri_date") or st.session_state.get("p1_acc_date", ""),
@@ -7300,9 +7309,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         height=120,
         key="actions_taken_editor"
     )
-    final_actions_html = "<br>".join(
-        html.escape(line.strip()) for line in str(actions_taken_raw or "").splitlines() if line.strip()
-    )
+    final_actions_html = build_final_actions_html(actions_taken_raw)
     st.session_state["final_actions_html"] = final_actions_html
     accident_nature = str(st.session_state.get("accident_nature") or accident_nature_val or "")
     rights_status = str(st.session_state.get("rights_status") or rights_status_val or "")
@@ -8903,6 +8910,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .page-p3 table:not(.sign-table) th {{
             padding: 8px 10px !important;
             font-size: 13px !important;
+            text-align: center !important;
         }}
         .page-p3 table:not(.sign-table) td {{
             padding: 10px 12px !important;
@@ -8913,17 +8921,40 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .page-p3 table.sign-table td {{
             padding: 8px 6px !important;
         }}
-        .page-p3 td.actions-body {{
+        .page-p3 th.actions-title {{
+            text-align: center !important;
+        }}
+        /* خلية الإجراءات: يمين/RTL دون تأثر بـ td center العامة */
+        .page-p3 td.actions-body,
+        .page-p3 table.actions-table td.actions-body {{
+            direction: rtl !important;
+            text-align: right !important;
+            padding: 10px 14px !important;
             min-height: 18mm !important;
             height: auto !important;
-            line-height: 1.85 !important;
-            padding: 10px 14px !important;
             vertical-align: top !important;
+            line-height: 1.75 !important;
         }}
         .page-p3 td.actions-body.autofit-box {{
             font-size: var(--shared-box-font, 13.5px) !important;
-            line-height: var(--shared-line-height, 1.60) !important;
             overflow: hidden;
+            direction: rtl !important;
+            text-align: right !important;
+            padding: 10px 14px !important;
+            line-height: 1.75 !important;
+        }}
+        .page-p3 td.actions-body .action-item {{
+            display: block !important;
+            direction: rtl !important;
+            text-align: right !important;
+            line-height: 1.75 !important;
+            margin: 0 0 4px 0 !important;
+            padding-right: 1.5em !important;
+            text-indent: -1.5em !important;
+            white-space: normal !important;
+        }}
+        .page-p3 td.actions-body .action-item:last-child {{
+            margin-bottom: 0 !important;
         }}
         .page-p3 table.sign-table tr.sig-row td {{
             height: 28mm !important;
@@ -9222,23 +9253,46 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             .page-p3 table:not(.sign-table) th {{
                 padding: 8px 10px !important;
                 font-size: 13px !important;
+                text-align: center !important;
             }}
             .page-p3 table:not(.sign-table) td {{
                 padding: 10px 12px !important;
                 font-size: 12.5px !important;
                 line-height: 1.75 !important;
             }}
-            .page-p3 td.actions-body {{
+            .page-p3 th.actions-title {{
+                text-align: center !important;
+            }}
+            .page-p3 td.actions-body,
+            .page-p3 table.actions-table td.actions-body {{
+                direction: rtl !important;
+                text-align: right !important;
+                padding: 10px 14px !important;
                 min-height: 18mm !important;
                 height: auto !important;
-                line-height: 1.85 !important;
-                padding: 10px 14px !important;
                 vertical-align: top !important;
+                line-height: 1.75 !important;
             }}
             .page-p3 td.actions-body.autofit-box {{
                 font-size: var(--shared-box-font, 13.5px) !important;
-                line-height: var(--shared-line-height, 1.60) !important;
                 overflow: hidden !important;
+                direction: rtl !important;
+                text-align: right !important;
+                padding: 10px 14px !important;
+                line-height: 1.75 !important;
+            }}
+            .page-p3 td.actions-body .action-item {{
+                display: block !important;
+                direction: rtl !important;
+                text-align: right !important;
+                line-height: 1.75 !important;
+                margin: 0 0 4px 0 !important;
+                padding-right: 1.5em !important;
+                text-indent: -1.5em !important;
+                white-space: normal !important;
+            }}
+            .page-p3 td.actions-body .action-item:last-child {{
+                margin-bottom: 0 !important;
             }}
             .page-p3 table.sign-table tr.sig-row td {{
                 height: 28mm !important;
@@ -9568,8 +9622,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                     <tr><th>الحقوق الخاصة والعامة</th></tr>
                     <tr><td class="autofit-box" data-autofit="rights">{html.escape(rights_status_val or "")}</td></tr>
                 </table></div>
-                <div class="table-scroll"><table>
-                    <tr><th>الإجراءات المتخذة</th></tr>
+                <div class="table-scroll"><table class="actions-table">
+                    <tr><th class="actions-title">الإجراءات المتخذة</th></tr>
                     <tr><td class="actions-body autofit-box" data-autofit="actions">{final_actions_html}</td></tr>
                 </table></div>
                 {criminal_details_html}
