@@ -108,8 +108,11 @@
             width: 100% !important;
             height: 100% !important;
             cursor: grab;
+            touch-action: none;
+            -ms-touch-action: none;
         }
         canvas:active { cursor: grabbing; }
+        canvas.dragging { touch-action: none; }
         .status-bar {
             display: flex;
             justify-content: space-between;
@@ -532,23 +535,115 @@
         opt.value = k; opt.textContent = v;
         roadSel.appendChild(opt);
     });
+    function captureEditorState() {
+        return {
+            kind: "asphalt",
+            updatedAt: Date.now(),
+            scenarioIndex: Number(scenSel.value || 0),
+            road: currentRoad,
+            roadName: roadNameIn.value,
+            fallMeters: Number(fallMetersIn && fallMetersIn.value) || 35,
+            items: items,
+            flexRoad: flexRoadState(),
+            roadGlobalAngle: roadGlobalAngle,
+            roadFlipX: roadFlipX,
+            roadFlipY: roadFlipY,
+            roadWidthScale: roadWidthScale,
+            roadTerrainBg: roadTerrainBg,
+            flexRoadStyle: flexRoadStyle
+        };
+    }
+    function idbOpen() {
+        return new Promise(function(resolve, reject) {
+            try {
+                var req = indexedDB.open("BayyinahPersistDB", 1);
+                req.onupgradeneeded = function() {
+                    var db = req.result;
+                    if (!db.objectStoreNames.contains("sketch")) db.createObjectStore("sketch");
+                };
+                req.onsuccess = function() { resolve(req.result); };
+                req.onerror = function() { reject(req.error); };
+            } catch (err) { reject(err); }
+        });
+    }
+    function idbPut(key, value) {
+        return idbOpen().then(function(db) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var tx = db.transaction("sketch", "readwrite");
+                    tx.objectStore("sketch").put(value, key);
+                    tx.oncomplete = function() { resolve(true); };
+                    tx.onerror = function() { reject(tx.error); };
+                } catch (err) { reject(err); }
+            });
+        }).catch(function() { return false; });
+    }
+    function idbGet(key) {
+        return idbOpen().then(function(db) {
+            return new Promise(function(resolve, reject) {
+                try {
+                    var tx = db.transaction("sketch", "readonly");
+                    var req = tx.objectStore("sketch").get(key);
+                    req.onsuccess = function() { resolve(req.result || null); };
+                    req.onerror = function() { reject(req.error); };
+                } catch (err) { reject(err); }
+            });
+        }).catch(function() { return null; });
+    }
     function persistEditor() {
+        var state = captureEditorState();
         try {
-            window.parent.localStorage.setItem("bayyinah_asphalt_editor", JSON.stringify({
-                scenarioIndex: Number(scenSel.value || 0),
-                road: currentRoad,
-                roadName: roadNameIn.value,
-                fallMeters: Number(fallMetersIn && fallMetersIn.value) || 35,
-                items: items,
-                flexRoad: flexRoadState(),
-                roadGlobalAngle: roadGlobalAngle,
-                roadFlipX: roadFlipX,
-                roadFlipY: roadFlipY,
-                roadWidthScale: roadWidthScale,
-                roadTerrainBg: roadTerrainBg,
-                flexRoadStyle: flexRoadStyle
-            }));
+            var parentWin = window.parent || window;
+            parentWin.__BAYYINAH_SKETCH_STATE__ = parentWin.__BAYYINAH_SKETCH_STATE__ || {};
+            parentWin.__BAYYINAH_SKETCH_STATE__.asphalt = state;
+            parentWin.__BAYYINAH_SKETCH_STATE__.updatedAt = Date.now();
+            parentWin.localStorage.setItem("bayyinah_asphalt_editor", JSON.stringify(state));
         } catch (err) {}
+        idbPut("asphalt", state);
+    }
+    function applyEditorState(state) {
+        if (!state || !Array.isArray(state.items) || !state.items.length) return false;
+        currentRoad = state.road || "cross_4way";
+        roadSel.value = currentRoad;
+        roadNameIn.value = state.roadName || roadNameIn.value || "";
+        if (state.fallMeters != null) updateFallMeters(state.fallMeters, false);
+        items = JSON.parse(JSON.stringify(state.items));
+        if (state.flexRoad) restoreFlexRoad(state.flexRoad);
+        restoreRoadGeometry(state);
+        ensureCompass();
+        selectedIdx = -1;
+        if (typeof syncCloneCarDropdown === "function") syncCloneCarDropdown();
+        if (typeof syncFlexToolbarVisibility === "function") syncFlexToolbarVisibility();
+        renderAll(false);
+        return true;
+    }
+    function restoreEditorFromMemory(streamlitState, defaultLoc) {
+        var candidates = [];
+        if (streamlitState && Array.isArray(streamlitState.items) && streamlitState.items.length > 0) {
+            candidates.push(streamlitState);
+        }
+        try {
+            var parentWin = window.parent || window;
+            var mem = parentWin.__BAYYINAH_SKETCH_STATE__ && parentWin.__BAYYINAH_SKETCH_STATE__.asphalt;
+            if (mem && Array.isArray(mem.items) && mem.items.length) candidates.push(mem);
+            var ls = parentWin.localStorage.getItem("bayyinah_asphalt_editor");
+            if (ls) {
+                var parsed = JSON.parse(ls);
+                if (parsed && Array.isArray(parsed.items) && parsed.items.length) candidates.push(parsed);
+            }
+        } catch (errMem) {}
+        if (candidates.length) {
+            candidates.sort(function(a, b) {
+                return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+            });
+            if (applyEditorState(candidates[0])) return true;
+        }
+        idbGet("asphalt").then(function(stored) {
+            if (applyEditorState(stored)) return;
+            if (defaultLoc && !roadNameIn.value) roadNameIn.value = defaultLoc;
+            if (!items.length) loadScenario(0, true);
+        });
+        return false;
     }
     function defaultCompass() {
         return { type: "compass", x: 895, y: 55, angle: 0 };
@@ -2209,11 +2304,19 @@
         drawHudOverlay();
         drawFlexRoadHandlesOverlay(hideSelectionHandles);
     }
+    function eventClientPoint(evt) {
+        if (evt.touches && evt.touches.length) return evt.touches[0];
+        if (evt.changedTouches && evt.changedTouches.length) return evt.changedTouches[0];
+        return evt;
+    }
     function getCanvasPos(evt) {
+        const t = eventClientPoint(evt);
         const r = canvas.getBoundingClientRect();
+        const scaleX = canvas.width / (r.width || 1);
+        const scaleY = canvas.height / (r.height || 1);
         return {
-            x: (evt.clientX - r.left) * (canvas.width / r.width),
-            y: (evt.clientY - r.top) * (canvas.height / r.height)
+            x: (t.clientX - r.left) * scaleX,
+            y: (t.clientY - r.top) * scaleY
         };
     }
     function isVectorShape(type) {
@@ -2223,46 +2326,72 @@
         return ["car","truck","bike","compass","traffic_light","overturned_car","mountain","slope_arrow"].includes(type) || isVectorShape(type);
     }
     function itemHitRadius(it) {
-        if (it.type === "truck") return 46;
-        if (it.type === "compass") return 34;
-        if (it.type === "traffic_light") return 42;
-        if (it.type === "cliff_fall") return 18;
-        if (it.type === "overturned_car") return 40;
-        if (it.type === "mountain") return 48;
-        if (it.type === "slope_arrow") return 28;
-        if (isVectorShape(it.type)) return 36;
-        return 32;
+        let r = 32;
+        if (it.type === "truck") r = 46;
+        else if (it.type === "compass") r = 34;
+        else if (it.type === "traffic_light") r = 42;
+        else if (it.type === "cliff_fall") r = 24;
+        else if (it.type === "overturned_car") r = 40;
+        else if (it.type === "mountain") r = 48;
+        else if (it.type === "slope_arrow") r = 28;
+        else if (isVectorShape(it.type)) r = 36;
+        return Math.max(24, r);
+    }
+    const TOUCH_HIT = 24;
+    function setDraggingTouch(on) {
+        if (on) {
+            canvas.classList.add("dragging");
+            canvas.style.touchAction = "none";
+            document.body.style.touchAction = "none";
+        } else {
+            canvas.classList.remove("dragging");
+            canvas.style.touchAction = "none";
+            document.body.style.touchAction = "";
+        }
     }
     function flexEditArmed() {
         return flexEditActive && isSplineRoad(currentRoad);
     }
-    canvas.addEventListener("mousedown", e => {
-        if (!flexEditArmed()) return;
+    function beginFlexDrag(e) {
+        if (!flexEditArmed()) return false;
         const p = getCanvasPos(e);
-        const idx = nearestFlexNode(p, 14);
-        if (idx < 0) return;
+        const idx = nearestFlexNode(p, TOUCH_HIT);
+        if (idx < 0) return false;
         flexDragIndex = idx;
+        setDraggingTouch(true);
         e.stopPropagation();
-        e.preventDefault();
+        if (e.cancelable) e.preventDefault();
         renderAll(false);
-    }, true);
-    window.addEventListener("mousemove", e => {
-        if (!flexEditArmed() || flexDragIndex < 0) return;
+        return true;
+    }
+    function moveFlexDrag(e) {
+        if (!flexEditArmed() || flexDragIndex < 0) return false;
         const node = flexRoadNodes[flexDragIndex];
-        if (!node) return;
+        if (!node) return false;
         const p = getCanvasPos(e);
         node.x = Math.max(8, Math.min(952, p.x));
         node.y = Math.max(8, Math.min(492, p.y));
         e.stopPropagation();
+        if (e.cancelable) e.preventDefault();
         renderAll(false);
-    }, true);
-    window.addEventListener("mouseup", e => {
-        if (flexDragIndex < 0) return;
+        return true;
+    }
+    function endFlexDrag(e) {
+        if (flexDragIndex < 0) return false;
         flexDragIndex = -1;
-        e.stopPropagation();
+        setDraggingTouch(false);
+        if (e) e.stopPropagation();
         renderAll(false);
         scheduleAutoCommit();
-    }, true);
+        return true;
+    }
+    canvas.addEventListener("mousedown", e => { beginFlexDrag(e); }, true);
+    window.addEventListener("mousemove", e => { moveFlexDrag(e); }, true);
+    window.addEventListener("mouseup", e => { endFlexDrag(e); }, true);
+    canvas.addEventListener("touchstart", e => { beginFlexDrag(e); }, { capture: true, passive: false });
+    window.addEventListener("touchmove", e => { moveFlexDrag(e); }, { capture: true, passive: false });
+    window.addEventListener("touchend", e => { endFlexDrag(e); }, { capture: true, passive: false });
+    window.addEventListener("touchcancel", e => { endFlexDrag(e); }, { capture: true, passive: false });
     canvas.addEventListener("dblclick", e => {
         if (!flexEditArmed()) return;
         const p = getCanvasPos(e);
@@ -2292,22 +2421,24 @@
         renderAll(false);
         scheduleAutoCommit();
     }, true);
-    canvas.addEventListener("mousedown", e => {
+    function beginItemDrag(e) {
         const p = getCanvasPos(e);
+        let hit = false;
         for (let i = items.length - 1; i >= 0; i--) {
             const it = items[i];
             if (!it || it.type !== "overturned_car") continue;
             const rot = ((it.angle || 0) * Math.PI) / 180;
             const hx = it.x + 42 * Math.cos(rot);
             const hy = it.y + 42 * Math.sin(rot);
-            if (Math.hypot(p.x - hx, p.y - hy) < 12) {
+            if (Math.hypot(p.x - hx, p.y - hy) < TOUCH_HIT) {
                 selectedIdx = i;
                 dragMode = "rotate";
+                hit = true;
                 renderAll(false);
-                return;
+                break;
             }
         }
-        if (selectedIdx >= 0 && canRotateItem(items[selectedIdx].type)) {
+        if (!hit && selectedIdx >= 0 && canRotateItem(items[selectedIdx].type)) {
             const sel = items[selectedIdx];
             const rad = (sel.angle || 0) * Math.PI / 180;
             let hx;
@@ -2333,37 +2464,49 @@
                 hx = sel.x + Math.cos(rad) * (w/2 + 26);
                 hy = sel.y + Math.sin(rad) * (w/2 + 26);
             }
-            if (Math.hypot(p.x - hx, p.y - hy) <= 15) {
+            if (Math.hypot(p.x - hx, p.y - hy) <= TOUCH_HIT) {
                 dragMode = "rotate";
-                return;
+                hit = true;
             }
         }
-        for (let i = items.length - 1; i >= 0; i--) {
-            const it = items[i];
-            if (it.tailX !== undefined && Math.hypot(p.x - it.tailX, p.y - it.tailY) <= 14) {
-                selectedIdx = i; dragMode = "tail"; renderAll(false); return;
-            }
-            if (it.type === "cliff_fall" && Math.hypot(p.x - it.x, p.y - it.y) <= 16) {
-                selectedIdx = i; dragMode = "tip"; renderAll(false); return;
-            }
-        }
-        for (let i = items.length - 1; i >= 0; i--) {
-            const it = items[i];
-            const hitR = itemHitRadius(it);
-            if (it.type === "cliff_fall") continue;
-            if (Math.hypot(p.x - it.x, p.y - it.y) <= hitR) {
-                selectedIdx = i;
-                dragMode = "body";
-                dragOffset = { x: p.x - it.x, y: p.y - it.y };
-                renderAll(false);
-                return;
+        if (!hit) {
+            for (let i = items.length - 1; i >= 0; i--) {
+                const it = items[i];
+                if (it.tailX !== undefined && Math.hypot(p.x - it.tailX, p.y - it.tailY) <= TOUCH_HIT) {
+                    selectedIdx = i; dragMode = "tail"; hit = true; renderAll(false); break;
+                }
+                if (it.type === "cliff_fall" && Math.hypot(p.x - it.x, p.y - it.y) <= TOUCH_HIT) {
+                    selectedIdx = i; dragMode = "tip"; hit = true; renderAll(false); break;
+                }
             }
         }
-        selectedIdx = -1;
-        renderAll(false);
-    });
-    window.addEventListener("mousemove", e => {
-        if (!dragMode || selectedIdx < 0) return;
+        if (!hit) {
+            for (let i = items.length - 1; i >= 0; i--) {
+                const it = items[i];
+                const hitR = itemHitRadius(it);
+                if (it.type === "cliff_fall") continue;
+                if (Math.hypot(p.x - it.x, p.y - it.y) <= hitR) {
+                    selectedIdx = i;
+                    dragMode = "body";
+                    dragOffset = { x: p.x - it.x, y: p.y - it.y };
+                    hit = true;
+                    renderAll(false);
+                    break;
+                }
+            }
+        }
+        if (!hit) {
+            selectedIdx = -1;
+            dragMode = null;
+            renderAll(false);
+            return false;
+        }
+        setDraggingTouch(true);
+        if (e.cancelable) e.preventDefault();
+        return true;
+    }
+    function moveItemDrag(e) {
+        if (!dragMode || selectedIdx < 0) return false;
         const p = getCanvasPos(e);
         const it = items[selectedIdx];
         if (dragMode === "body") {
@@ -2382,14 +2525,24 @@
             const upright = it.type === "compass" || it.type === "traffic_light";
             it.angle = Math.round(upright ? pointer + 90 : pointer);
         }
+        if (e.cancelable) e.preventDefault();
         renderAll(false);
-    });
-    window.addEventListener("mouseup", () => {
-        if (dragMode) {
-            dragMode = null;
-            scheduleAutoCommit();
-        }
-    });
+        return true;
+    }
+    function endItemDrag() {
+        if (!dragMode) return false;
+        dragMode = null;
+        setDraggingTouch(false);
+        scheduleAutoCommit();
+        return true;
+    }
+    canvas.addEventListener("mousedown", e => { beginItemDrag(e); });
+    window.addEventListener("mousemove", e => { moveItemDrag(e); });
+    window.addEventListener("mouseup", () => { endItemDrag(); });
+    canvas.addEventListener("touchstart", e => { beginItemDrag(e); }, { passive: false });
+    window.addEventListener("touchmove", e => { moveItemDrag(e); }, { passive: false });
+    window.addEventListener("touchend", () => { endItemDrag(); }, { passive: false });
+    window.addEventListener("touchcancel", () => { endItemDrag(); }, { passive: false });
     canvas.addEventListener("wheel", e => {
         const p = getCanvasPos(e);
         for (let i = items.length - 1; i >= 0; i--) {
@@ -2531,29 +2684,29 @@
         const args = event.data.args || {};
         if (!componentInitialized) {
             componentInitialized = true;
-            if (args.saved_state && Array.isArray(args.saved_state.items) && args.saved_state.items.length > 0) {
-                currentRoad = args.saved_state.road || "cross_4way";
-                roadSel.value = currentRoad;
-                roadNameIn.value = args.saved_state.roadName || args.default_loc || "";
-                if (args.saved_state.fallMeters != null) updateFallMeters(args.saved_state.fallMeters, false);
-                items = JSON.parse(JSON.stringify(args.saved_state.items));
-                if (args.saved_state.flexRoad) restoreFlexRoad(args.saved_state.flexRoad);
-                restoreRoadGeometry(args.saved_state);
-                ensureCompass();
-                selectedIdx = -1;
-                syncCloneCarDropdown();
-                syncFlexToolbarVisibility();
-                renderAll(false);
-            } else {
+            const restored = restoreEditorFromMemory(args.saved_state, args.default_loc || "");
+            if (!restored) {
                 if (args.default_loc && !roadNameIn.value) {
                     roadNameIn.value = args.default_loc;
                 }
-                loadScenario(0, true);
+                // restoreEditorFromMemory قد يكمل عبر IndexedDB لاحقاً؛ لا تُحمّل سيناريو فوراً إن وُجدت ذاكرة
+                try {
+                    var parentWin = window.parent || window;
+                    var mem = parentWin.__BAYYINAH_SKETCH_STATE__ && parentWin.__BAYYINAH_SKETCH_STATE__.asphalt;
+                    var ls = parentWin.localStorage.getItem("bayyinah_asphalt_editor");
+                    if (!(mem && mem.items && mem.items.length) && !ls) {
+                        loadScenario(0, true);
+                    }
+                } catch (errInit) {
+                    loadScenario(0, true);
+                }
             }
+            persistEditor();
             syncFrameHeight();
         }
     });
     function markDirty() {
+        persistEditor();
         const stEl = document.getElementById("saveStatus");
         if (stEl) {
             stEl.textContent = "⚠️ تعديلات غير معتمدة — اضغط «اعتماد الكروكي في التقرير»";
@@ -2569,22 +2722,11 @@
             stEl.textContent = "✅ تم اعتماد وإرسال الكروكي إلى صفحة التقرير A4";
             stEl.style.color = "#34d399";
         }
+        persistEditor();
         sendToStreamlit("streamlit:setComponentValue", {
             value: {
                 image: pngDataUrl,
-                state: {
-                    road: currentRoad,
-                    roadName: roadNameIn.value || "",
-                    fallMeters: Number(fallMetersIn && fallMetersIn.value) || 35,
-                    items: items,
-                    flexRoad: flexRoadState(),
-                    roadGlobalAngle: roadGlobalAngle,
-                    roadFlipX: roadFlipX,
-                    roadFlipY: roadFlipY,
-                    roadWidthScale: roadWidthScale,
-                    roadTerrainBg: roadTerrainBg,
-                    flexRoadStyle: flexRoadStyle
-                },
+                state: captureEditorState(),
                 ts: Date.now()
             }
         });

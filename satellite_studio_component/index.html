@@ -50,7 +50,9 @@
     #drawCanvas {
         position: absolute; top: 0; left: 0; width: 100%; height: 100%;
         z-index: 450; pointer-events: none; background: transparent;
+        touch-action: none; -ms-touch-action: none;
     }
+    #drawCanvas.drawing { touch-action: none; pointer-events: auto; }
     .leaflet-container { background: #0f172a; }
     .status-bar {
         display: flex; justify-content: space-between; align-items: center;
@@ -96,6 +98,87 @@
 <script>
 function sendToStreamlit(type, extra) {
     window.parent.postMessage(Object.assign({ isStreamlitMessage: true, type: type }, extra || {}), "*");
+}
+const TOUCH_HIT = 24;
+function idbOpen() {
+    return new Promise(function(resolve, reject) {
+        try {
+            var req = indexedDB.open("BayyinahPersistDB", 1);
+            req.onupgradeneeded = function() {
+                var db = req.result;
+                if (!db.objectStoreNames.contains("sketch")) db.createObjectStore("sketch");
+            };
+            req.onsuccess = function() { resolve(req.result); };
+            req.onerror = function() { reject(req.error); };
+        } catch (err) { reject(err); }
+    });
+}
+function idbPut(key, value) {
+    return idbOpen().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            try {
+                var tx = db.transaction("sketch", "readwrite");
+                tx.objectStore("sketch").put(value, key);
+                tx.oncomplete = function() { resolve(true); };
+                tx.onerror = function() { reject(tx.error); };
+            } catch (err) { reject(err); }
+        });
+    }).catch(function() { return false; });
+}
+function idbGet(key) {
+    return idbOpen().then(function(db) {
+        return new Promise(function(resolve, reject) {
+            try {
+                var tx = db.transaction("sketch", "readonly");
+                var req = tx.objectStore("sketch").get(key);
+                req.onsuccess = function() { resolve(req.result || null); };
+                req.onerror = function() { reject(req.error); };
+            } catch (err) { reject(err); }
+        });
+    }).catch(function() { return null; });
+}
+function captureAerialState() {
+    var c = map.getCenter();
+    return {
+        kind: "aerial",
+        updatedAt: Date.now(),
+        center: [c.lat, c.lng],
+        lat: c.lat,
+        lng: c.lng,
+        zoom: map.getZoom(),
+        shapes: shapes,
+        provider: currentProvider,
+        labelsVisible: labelsVisible
+    };
+}
+function persistAerialEditor() {
+    var state = captureAerialState();
+    try {
+        var parentWin = window.parent || window;
+        parentWin.__BAYYINAH_SKETCH_STATE__ = parentWin.__BAYYINAH_SKETCH_STATE__ || {};
+        parentWin.__BAYYINAH_SKETCH_STATE__.aerial = state;
+        parentWin.__BAYYINAH_SKETCH_STATE__.updatedAt = Date.now();
+        parentWin.localStorage.setItem("bayyinah_aerial_editor", JSON.stringify(state));
+    } catch (err) {}
+    idbPut("aerial", state);
+}
+function applyAerialState(saved) {
+    if (!saved || typeof saved !== "object") return false;
+    var center = saved.center;
+    if ((!center || !center.length) && saved.lat != null && saved.lng != null) {
+        center = [saved.lat, saved.lng];
+    }
+    if (saved.provider === "esri" || saved.provider === "google") currentProvider = saved.provider;
+    if (typeof saved.labelsVisible === "boolean") labelsVisible = saved.labelsVisible;
+    refreshMapLayers();
+    if (center && center.length >= 2) {
+        map.invalidateSize();
+        map.setView(center, saved.zoom || 18);
+        map.invalidateSize();
+    }
+    shapes = Array.isArray(saved.shapes) ? JSON.parse(JSON.stringify(saved.shapes)) : shapes;
+    setTimeout(redraw, 120);
+    return true;
 }
 if (!CanvasRenderingContext2D.prototype.roundRect) {
     CanvasRenderingContext2D.prototype.roundRect = function(x, y, w, h, r) {
@@ -239,6 +322,8 @@ function setMode(m) {
     const ids = { pan: "btnPan", v1: "btnV1", v2: "btnV2", impact: "btnImp" };
     if (ids[m]) document.getElementById(ids[m]).classList.add("active");
     canvas.style.pointerEvents = (m === "pan") ? "none" : "auto";
+    if (m === "pan") canvas.classList.remove("drawing");
+    else canvas.classList.add("drawing");
 }
 
 function arabicDigitsToLatin(str) {
@@ -376,9 +461,10 @@ map.on("moveend", () => {
     const c = map.getCenter();
     const box = document.getElementById("coordBox");
     if (box) box.value = c.lat.toFixed(5) + ", " + c.lng.toFixed(5);
+    persistAerialEditor();
 });
 
-function clearDrawings() { shapes = []; redraw(); }
+function clearDrawings() { shapes = []; redraw(); persistAerialEditor(); }
 
 function drawArrowOnCtx(targetCtx, x1, y1, x2, y2, color, label, scale) {
     const head = 15 * scale;
@@ -419,21 +505,63 @@ function redraw() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     renderShapesToCtx(ctx, 1, 1);
 }
-canvas.addEventListener("mousedown", e => {
+function eventClientPoint(evt) {
+    if (evt.touches && evt.touches.length) return evt.touches[0];
+    if (evt.changedTouches && evt.changedTouches.length) return evt.changedTouches[0];
+    return evt;
+}
+function getCanvasPos(evt) {
+    const t = eventClientPoint(evt);
     const r = canvas.getBoundingClientRect();
-    const x = e.clientX - r.left, y = e.clientY - r.top;
-    if (mode === "impact") { shapes.push({ type: "impact", x, y }); redraw(); }
-    else startPt = { x, y };
-});
-canvas.addEventListener("mouseup", e => {
-    if (!startPt) return;
-    const r = canvas.getBoundingClientRect();
-    const x2 = e.clientX - r.left, y2 = e.clientY - r.top;
-    if (Math.hypot(x2 - startPt.x, y2 - startPt.y) > 10) {
-        shapes.push({ type: mode, x1: startPt.x, y1: startPt.y, x2, y2 });
+    const scaleX = canvas.width / (r.width || 1);
+    const scaleY = canvas.height / (r.height || 1);
+    return {
+        x: (t.clientX - r.left) * scaleX,
+        y: (t.clientY - r.top) * scaleY
+    };
+}
+function beginDraw(e) {
+    if (mode === "pan") return false;
+    const p = getCanvasPos(e);
+    if (mode === "impact") {
+        shapes.push({ type: "impact", x: p.x, y: p.y });
+        redraw();
+        persistAerialEditor();
+        if (e.cancelable) e.preventDefault();
+        return true;
     }
-    startPt = null; redraw();
-});
+    startPt = { x: p.x, y: p.y };
+    canvas.classList.add("drawing");
+    canvas.style.touchAction = "none";
+    if (e.cancelable) e.preventDefault();
+    return true;
+}
+function moveDraw(e) {
+    if (!startPt || mode === "pan" || mode === "impact") return false;
+    if (e.cancelable) e.preventDefault();
+    return true;
+}
+function endDraw(e) {
+    if (!startPt) return false;
+    const p = getCanvasPos(e);
+    if (Math.hypot(p.x - startPt.x, p.y - startPt.y) > Math.max(10, TOUCH_HIT / 2)) {
+        shapes.push({ type: mode, x1: startPt.x, y1: startPt.y, x2: p.x, y2: p.y });
+    }
+    startPt = null;
+    redraw();
+    persistAerialEditor();
+    if (mode === "pan") canvas.classList.remove("drawing");
+    if (e && e.cancelable) e.preventDefault();
+    return true;
+}
+canvas.addEventListener("mousedown", e => { beginDraw(e); });
+canvas.addEventListener("mousemove", e => { moveDraw(e); });
+canvas.addEventListener("mouseup", e => { endDraw(e); });
+canvas.addEventListener("mouseleave", e => { if (startPt) endDraw(e); });
+canvas.addEventListener("touchstart", e => { beginDraw(e); }, { passive: false });
+canvas.addEventListener("touchmove", e => { moveDraw(e); }, { passive: false });
+canvas.addEventListener("touchend", e => { endDraw(e); }, { passive: false });
+canvas.addEventListener("touchcancel", e => { endDraw(e); }, { passive: false });
 
 function commitSatelliteToStreamlit() {
     const stEl = document.getElementById("satSaveStatus");
@@ -499,21 +627,14 @@ function commitSatelliteToStreamlit() {
     }
     stEl.textContent = "✅ معتمد في ورقة التقرير A4";
     stEl.style.color = "#34d399";
+    persistAerialEditor();
     sendToStreamlit("streamlit:setComponentValue", {
         value: {
             image: jpgDataUrl,
             coords: coordTxt,
             aerial_sketch_data_url: jpgDataUrl,
             satellite_img_b64: jpgDataUrl,
-            state: {
-                center: [c.lat, c.lng],
-                lat: c.lat,
-                lng: c.lng,
-                zoom: map.getZoom(),
-                shapes: shapes,
-                provider: currentProvider,
-                labelsVisible: labelsVisible
-            },
+            state: captureAerialState(),
             ts: Date.now()
         }
     });
@@ -524,24 +645,32 @@ window.addEventListener("message", function(event) {
     const args = event.data.args || {};
     if (!initialized) {
         initialized = true;
+        let restored = false;
+        const candidates = [];
         const saved = args.saved_sat_state || {};
-        let center = saved.center;
-        if ((!center || !center.length) && saved.lat != null && saved.lng != null) {
-            center = [saved.lat, saved.lng];
+        if (saved && (saved.center || (saved.lat != null && saved.lng != null) || (saved.shapes && saved.shapes.length))) {
+            candidates.push(saved);
         }
-        if (saved.provider === "esri" || saved.provider === "google") {
-            currentProvider = saved.provider;
+        try {
+            var parentWin = window.parent || window;
+            var mem = parentWin.__BAYYINAH_SKETCH_STATE__ && parentWin.__BAYYINAH_SKETCH_STATE__.aerial;
+            if (mem) candidates.push(mem);
+            var ls = parentWin.localStorage.getItem("bayyinah_aerial_editor");
+            if (ls) candidates.push(JSON.parse(ls));
+        } catch (errMem) {}
+        if (candidates.length) {
+            candidates.sort(function(a, b) {
+                return Number(b.updatedAt || 0) - Number(a.updatedAt || 0);
+            });
+            restored = applyAerialState(candidates[0]);
         }
-        if (typeof saved.labelsVisible === "boolean") {
-            labelsVisible = saved.labelsVisible;
-        }
-        refreshMapLayers();
-        if (center && center.length >= 2) {
-            map.invalidateSize();
-            map.setView(center, saved.zoom || 18);
-            map.invalidateSize();
-            shapes = Array.isArray(saved.shapes) ? saved.shapes : [];
-            setTimeout(redraw, 200);
+        if (!restored) {
+            idbGet("aerial").then(function(stored) {
+                if (stored) applyAerialState(stored);
+                persistAerialEditor();
+            });
+        } else {
+            persistAerialEditor();
         }
         setTimeout(() => {
             map.invalidateSize();

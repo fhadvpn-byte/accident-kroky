@@ -1838,11 +1838,11 @@ def save_current_work():
         "analysis_api_key",
     ):
         data_to_save.pop(secret_key_name, None)
-    # الصورة الجوية تُحفظ في ملف دائم منفصل (مثل الكروكي) وليست داخل JSON الضخم
+    # DataURL الضخم خارج JSON؛ الملفات الدائمة + الخزنة الكاملة تحتفظ به دون مسحه من الجلسة
     data_to_save.pop("aerial_sketch_data_url", None)
     data_to_save.pop("sketch_data_url", None)
     data_to_save["page1_data"] = export_page1_payload()
-    aerial_img = str(st.session_state.get("aerial_sketch_data_url") or "")
+    aerial_img = str(st.session_state.get("aerial_sketch_data_url") or st.session_state.get("aerial_data_url") or "")
     sat_state = st.session_state.get("saved_satellite_state") or st.session_state.get("_saved_satellite_state") or {}
     if aerial_img.startswith("data:image/"):
         _remember_aerial_data_url(aerial_img, sat_state if isinstance(sat_state, dict) else {})
@@ -1852,7 +1852,18 @@ def save_current_work():
         data_to_save["has_aerial_image"] = False
         data_to_save["satellite_img_b64"] = False
     sketch_img = str(st.session_state.get("sketch_data_url") or "")
-    data_to_save["has_sketch_image"] = sketch_img.startswith("data:image/")
+    if sketch_img.startswith("data:image/"):
+        _remember_sketch_data_url(sketch_img, "sketch_data_url")
+        data_to_save["has_sketch_image"] = True
+    else:
+        data_to_save["has_sketch_image"] = False
+    asphalt_state = st.session_state.get("_saved_asphalt_state") or st.session_state.get("saved_asphalt_state") or {}
+    if isinstance(asphalt_state, dict) and asphalt_state:
+        st.session_state["_saved_asphalt_state"] = dict(asphalt_state)
+        st.session_state["saved_asphalt_state"] = dict(asphalt_state)
+        data_to_save["saved_asphalt_state"] = {
+            k: v for k, v in asphalt_state.items() if k != "image"
+        }
     data_to_save["report_media_mode"] = st.session_state.get("report_media_mode", "كلاهما")
     data_to_save["include_aerial"] = bool(st.session_state.get("include_aerial", True))
     data_to_save["include_sketch"] = bool(st.session_state.get("include_sketch", True))
@@ -1920,6 +1931,11 @@ def clear_all_work():
     reset_page1_payload()
     st.session_state["_restore_perm_sidebar"] = True
     _clear_remembered_aerial()
+    try:
+        _clear_remembered_sketch()
+    except Exception:
+        pass
+    st.session_state["_BAYYINAH_CLEAR_BROWSER_SKETCH_"] = True
 
 def inject_bayyinah_blue_styles():
     st.markdown("""
@@ -3080,6 +3096,7 @@ def _reset_new_accident():
     for key in list(st.session_state.keys()):
         del st.session_state[key]
     st.session_state["_BAYYINAH_SKIP_AUTOSAVE_"] = True
+    st.session_state["_BAYYINAH_CLEAR_BROWSER_SKETCH_"] = True
     reset_page1_payload()
     st.session_state["_restore_perm_sidebar"] = True
     try:
@@ -3088,6 +3105,7 @@ def _reset_new_accident():
             "adopted_sketch_uri.txt",
             "adopted_aerial_uri.txt",
             "adopted_aerial_state.json",
+            "report_media_mode.txt",
         ):
             adopted = SAVED_IMAGES_DIR / adopted_name
             if adopted.is_file():
@@ -6175,10 +6193,14 @@ REPORT_MEDIA_MODE_KEY = "report_media_mode"
 REPORT_MEDIA_MODE_UI_KEY = "report_media_mode_ui"
 
 def _remember_sketch_data_url(data_uri: str, state_key: str = SKETCH_DATA_URL_KEY):
-    st.session_state[state_key] = data_uri
+    image = str(data_uri or "").strip()
+    if not image.startswith("data:image/"):
+        return
+    st.session_state[state_key] = image
+    st.session_state[SKETCH_DATA_URL_KEY] = image
     try:
         SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
-        SKETCH_URI_PATH.write_text(data_uri, encoding="utf-8")
+        SKETCH_URI_PATH.write_text(image, encoding="utf-8")
     except OSError:
         pass
 
@@ -6194,6 +6216,18 @@ def _load_remembered_sketch():
         return
     if stored.startswith("data:image/"):
         st.session_state[SKETCH_DATA_URL_KEY] = stored
+
+def _clear_remembered_sketch():
+    for key in (SKETCH_DATA_URL_KEY, "_saved_asphalt_state", "saved_asphalt_state", "_last_sketch_commit_ts"):
+        st.session_state.pop(key, None)
+    try:
+        if SKETCH_URI_PATH.is_file():
+            SKETCH_URI_PATH.unlink()
+        adopted_png = SAVED_IMAGES_DIR / "adopted_sketch.png"
+        if adopted_png.is_file():
+            adopted_png.unlink()
+    except OSError:
+        pass
 
 def _remember_aerial_data_url(data_uri: str, map_state=None):
     image = str(data_uri or "").strip()
@@ -6297,11 +6331,42 @@ def _clear_remembered_aerial():
     except OSError:
         pass
 
-# استرجاع الجوي عند كل تشغيل بعد تعريف الدوال (لا autosave للحقول النصية)
+# استرجاع الكروكي/الجوي عند كل تشغيل بعد تعريف الدوال — لا تُمسَح عند مغادرة التبويب
+try:
+    _load_remembered_sketch()
+except Exception:
+    pass
 try:
     _load_remembered_aerial()
 except Exception:
     pass
+try:
+    import bayyinah_persistence as _bp_media
+    _bp_media.ensure_media_every_cycle()
+except Exception:
+    pass
+# تصفير ذاكرة المتصفح للكروكي فقط عند «حادث جديد»
+if st.session_state.pop("_BAYYINAH_CLEAR_BROWSER_SKETCH_", None):
+    st.components.v1.html(
+        """
+<script>
+(function(){
+  try {
+    var p = window.parent;
+    if (p) {
+      p.__BAYYINAH_SKETCH_STATE__ = { asphalt: null, aerial: null, clearedAt: Date.now() };
+      try { p.localStorage.removeItem("bayyinah_asphalt_editor"); } catch (e1) {}
+      try { p.localStorage.removeItem("bayyinah_aerial_editor"); } catch (e2) {}
+    }
+    try {
+      indexedDB.deleteDatabase("BayyinahPersistDB");
+    } catch (e3) {}
+  } catch (err) {}
+})();
+</script>
+        """,
+        height=0,
+    )
 
 _ASPHALT_COMP_DIR = Path(__file__).resolve().parent / "asphalt_studio_component"
 _asphalt_studio_component = components.declare_component(
@@ -6343,6 +6408,12 @@ def _accept_asphalt_commit(sketch_image_state_key: str, default_loc: str):
             if committed_state.get("fallMeters") is None and isinstance(saved_state, dict) and saved_state.get("fallMeters") is not None:
                 committed_state["fallMeters"] = saved_state.get("fallMeters")
             st.session_state["_saved_asphalt_state"] = committed_state
+            st.session_state["saved_asphalt_state"] = committed_state
+            try:
+                import bayyinah_persistence as _bp
+                _bp.save_full_workspace(reason="sketch_commit")
+            except Exception:
+                pass
             st.toast("✅ تم اعتماد الكروكي في تقرير A4 بنجاح!")
 
 def _normalize_satellite_state(raw_state):
@@ -6474,6 +6545,11 @@ def _render_aerial_reference():
             map_state = _normalize_satellite_state(sat_result.get("state"))
             # حفظ فوري دائم عند الاعتماد (نفس أسلوب الكروكي)
             _remember_aerial_data_url(sat_result["image"], map_state)
+            try:
+                import bayyinah_persistence as _bp
+                _bp.save_full_workspace(reason="aerial_commit")
+            except Exception:
+                pass
             if st.session_state.get(REPORT_MEDIA_MODE_KEY) == "كروكي فقط":
                 _apply_report_media_mode("كلاهما", refresh_ui=True)
                 st.toast("✅ تم اعتماد التصوير الجوي في تقرير A4 بنجاح!")

@@ -1,7 +1,6 @@
 """حفظ/استرجاع كامل لحالة بينة في مجلد محلي مخفي (.bayyinah_persistence/)."""
 from __future__ import annotations
 
-import base64
 import hashlib
 import io
 import json
@@ -16,6 +15,28 @@ import streamlit as st
 _STORE_DIR = Path(__file__).resolve().parent / ".bayyinah_persistence"
 _STORE_FILE = _STORE_DIR / "active_workspace.pkl"
 _META_FILE = _STORE_DIR / "meta.json"
+
+# مفاتيح الوسائط المعتمدة — تُحفظ وتُسترجع صراحة ولا تُمسَح عند التنقل/الحفظ
+MEDIA_KEYS = (
+    "sketch_data_url",
+    "aerial_sketch_data_url",
+    "aerial_data_url",
+    "satellite_img_b64",
+    "_saved_asphalt_state",
+    "saved_asphalt_state",
+    "_saved_satellite_state",
+    "saved_satellite_state",
+    "gallery_photos",
+    "accident_photos_data",
+    "include_sketch",
+    "include_aerial",
+    "aerial_place",
+    "report_media_mode",
+    "studio_layout_mode",
+    "_studio_layout_mode",
+    "_last_sketch_commit_ts",
+    "_last_aerial_commit_ts",
+)
 
 _EPHEMERAL_PREFIXES = (
     "FormSubmitter:",
@@ -50,6 +71,16 @@ def _is_ephemeral_key(key: str) -> bool:
     if key in _EPHEMERAL_KEYS:
         return True
     if any(key.startswith(p) for p in _EPHEMERAL_PREFIXES):
+        return True
+    return False
+
+
+def _is_blank_media(value: Any) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    if isinstance(value, (list, dict, tuple)) and len(value) == 0:
         return True
     return False
 
@@ -99,7 +130,6 @@ def _pack_obj(obj: Any, depth: int = 0) -> Any:
         return out
     if isinstance(obj, (list, tuple)):
         return [_pack_obj(x, depth + 1) for x in obj]
-    # data-url صور كبيرة تُحفظ كنص
     if isinstance(obj, str) and obj.startswith("data:"):
         return obj
     try:
@@ -153,6 +183,23 @@ def _unpack_obj(obj: Any, depth: int = 0) -> Any:
     return obj
 
 
+def _snapshot_media_explicit() -> dict:
+    """لقطة صريحة لمفاتيح الكروكي/الجوي/الصور حتى لا تُسقط من الخزنة."""
+    media = {}
+    for key in MEDIA_KEYS:
+        if key not in st.session_state:
+            continue
+        packed = _pack_obj(st.session_state.get(key))
+        if packed is None and st.session_state.get(key) is not None:
+            continue
+        try:
+            pickle.dumps(packed, protocol=4)
+        except Exception:
+            continue
+        media[key] = packed
+    return media
+
+
 def _snapshot_session() -> dict:
     snap = {}
     for key, value in list(st.session_state.items()):
@@ -169,18 +216,21 @@ def _snapshot_session() -> dict:
         except Exception:
             continue
         snap[ks] = packed
+    # فرض مفاتيح الوسائط فوق اللقطة العامة
+    snap.update(_snapshot_media_explicit())
     return snap
 
 
 def save_full_workspace(reason: str = "manual") -> bool:
-    """يحفظ كل الحالة القابلة للتسلسل بما فيها الصور كـ bytes."""
+    """يحفظ كل الحالة القابلة للتسلسل بما فيها الصور كـ bytes والكروكي/الجوي صراحة."""
     try:
         _ensure_dir()
         snap = _snapshot_session()
         payload = {
-            "version": 1,
+            "version": 2,
             "reason": reason,
             "session": snap,
+            "media": _snapshot_media_explicit(),
         }
         fd, tmp_path = tempfile.mkstemp(dir=str(_STORE_DIR), suffix=".tmp")
         try:
@@ -196,6 +246,10 @@ def save_full_workspace(reason: str = "manual") -> bool:
             "keys": len(snap),
             "has_sketch": bool(str(st.session_state.get("sketch_data_url") or "").startswith("data:")),
             "has_aerial": bool(str(st.session_state.get("aerial_sketch_data_url") or "").startswith("data:")),
+            "has_asphalt_state": bool(st.session_state.get("_saved_asphalt_state")),
+            "has_satellite_state": bool(
+                st.session_state.get("_saved_satellite_state") or st.session_state.get("saved_satellite_state")
+            ),
             "photos": len(st.session_state.get("gallery_photos") or []),
         }
         _META_FILE.write_text(json.dumps(meta, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -209,10 +263,59 @@ def save_full_workspace(reason: str = "manual") -> bool:
         return False
 
 
+def _force_restore_media(session: dict, media: dict | None = None) -> int:
+    """استرجاع قسري لمفاتيح الوسائط حتى لو وُجدت قيم فارغة في الجلسة."""
+    restored = 0
+    merged = dict(session or {})
+    if isinstance(media, dict):
+        merged.update(media)
+    for key in MEDIA_KEYS:
+        if key not in merged:
+            continue
+        try:
+            value = _unpack_obj(merged[key])
+        except Exception:
+            continue
+        current = st.session_state.get(key)
+        if key in st.session_state and not _is_blank_media(current):
+            # لا تستبدل قيمة غنية موجودة بقيمة فارغة من القرص
+            if _is_blank_media(value):
+                continue
+            # استبدل فقط إن الحالية فارغة أو قيمة نصية قصيرة غير data-url
+            if isinstance(current, str) and current.startswith("data:") and isinstance(value, str) and value.startswith("data:"):
+                if len(value) <= len(current):
+                    continue
+            elif not _is_blank_media(current) and not (
+                isinstance(current, str) and not current.startswith("data:") and isinstance(value, str) and value.startswith("data:")
+            ):
+                if key not in ("_saved_asphalt_state", "saved_asphalt_state", "_saved_satellite_state", "saved_satellite_state"):
+                    continue
+                if isinstance(current, dict) and current and isinstance(value, dict) and not value:
+                    continue
+        try:
+            st.session_state[key] = value
+            restored += 1
+        except Exception:
+            continue
+    # مواءمة المفاتيح البديلة
+    if str(st.session_state.get("sketch_data_url") or "").startswith("data:"):
+        pass
+    if str(st.session_state.get("aerial_sketch_data_url") or "").startswith("data:"):
+        st.session_state["aerial_data_url"] = st.session_state.get("aerial_sketch_data_url")
+    asphalt = st.session_state.get("_saved_asphalt_state") or st.session_state.get("saved_asphalt_state")
+    if isinstance(asphalt, dict) and asphalt:
+        st.session_state["_saved_asphalt_state"] = dict(asphalt)
+        st.session_state["saved_asphalt_state"] = dict(asphalt)
+    sat = st.session_state.get("_saved_satellite_state") or st.session_state.get("saved_satellite_state")
+    if isinstance(sat, dict) and sat:
+        st.session_state["_saved_satellite_state"] = dict(sat)
+        st.session_state["saved_satellite_state"] = dict(sat)
+    return restored
+
+
 def restore_full_workspace() -> bool:
-    """يسترجع الحالة المحفوظة إلى session_state إن لم تكن موجودة بعد."""
-    if st.session_state.get("_BAYYINAH_RESTORED_OK_"):
-        return False
+    """يسترجع الحالة المحفوظة إلى session_state؛ الوسائط تُفرض كل دورة عند الحاجة."""
+    first = not st.session_state.get("_BAYYINAH_RESTORED_OK_")
     st.session_state["_BAYYINAH_RESTORED_OK_"] = True
     if not _STORE_FILE.exists():
         return False
@@ -220,23 +323,44 @@ def restore_full_workspace() -> bool:
         with open(_STORE_FILE, "rb") as fh:
             payload = pickle.load(fh)
         session = (payload or {}).get("session") or {}
+        media = (payload or {}).get("media") or {}
         if not isinstance(session, dict):
             return False
         restored = 0
-        for key, packed in session.items():
-            ks = str(key)
-            if _is_ephemeral_key(ks):
-                continue
-            if ks in st.session_state:
-                continue
-            try:
-                st.session_state[ks] = _unpack_obj(packed)
-                restored += 1
-            except Exception:
-                continue
+        if first:
+            for key, packed in session.items():
+                ks = str(key)
+                if _is_ephemeral_key(ks):
+                    continue
+                if ks in MEDIA_KEYS:
+                    continue  # تُعالج قسرياً أدناه
+                if ks in st.session_state and not _is_blank_media(st.session_state.get(ks)):
+                    continue
+                try:
+                    st.session_state[ks] = _unpack_obj(packed)
+                    restored += 1
+                except Exception:
+                    continue
+        restored += _force_restore_media(session, media if isinstance(media, dict) else {})
         return restored > 0
     except Exception:
         return False
+
+
+def ensure_media_every_cycle() -> None:
+    """استرجاع الوسائط المعتمدة في كل دورة تشغيل حتى لا تختفي عند مغادرة التبويب."""
+    if st.session_state.get("_BAYYINAH_SKIP_AUTOSAVE_"):
+        return
+    if not _STORE_FILE.exists():
+        return
+    try:
+        with open(_STORE_FILE, "rb") as fh:
+            payload = pickle.load(fh)
+        session = (payload or {}).get("session") or {}
+        media = (payload or {}).get("media") or {}
+        _force_restore_media(session if isinstance(session, dict) else {}, media if isinstance(media, dict) else {})
+    except Exception:
+        pass
 
 
 def clear_full_workspace() -> None:
@@ -254,23 +378,28 @@ def clear_full_workspace() -> None:
                 child.unlink()
         except Exception:
             pass
+    for key in MEDIA_KEYS:
+        st.session_state.pop(key, None)
+    st.session_state["_BAYYINAH_CLEAR_BROWSER_SKETCH_"] = True
 
 
 def activate(app_file: str | None = None) -> None:
     """يُستدعى بعد set_page_config لاستعادة الحالة قبل بناء الواجهة."""
     _ensure_dir()
     restore_full_workspace()
+    ensure_media_every_cycle()
 
 
 def finalize_run() -> None:
     """حفظ تلقائي خفيف في نهاية كل تشغيل (تنقل تبويبات/إعادة رسم)."""
     if st.session_state.get("_BAYYINAH_SKIP_AUTOSAVE_"):
         return
-    # لا تكتب إن لم توجد أي بيانات ذات معنى بعد
     if not (
         st.session_state.get("p1_acc_number")
         or st.session_state.get("parties")
         or st.session_state.get("sketch_data_url")
+        or st.session_state.get("aerial_sketch_data_url")
+        or st.session_state.get("_saved_asphalt_state")
         or st.session_state.get("gallery_photos")
         or st.session_state.get("selected_articles")
     ):
@@ -279,5 +408,5 @@ def finalize_run() -> None:
 
 
 def on_tab_change() -> None:
-    """يُربط بـ on_change لراديو التبويبات."""
+    """يُربط بـ on_change لراديو التبويبات — يحفظ دون مسح مفاتيح الصور."""
     save_full_workspace(reason="tab_change")
