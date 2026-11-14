@@ -1032,7 +1032,8 @@ def refresh_party_role_titles(parties=None, vehicles=None, force: bool = False):
 SAVED_OPINION_TEXT = "saved_opinion_text"
 _OLD_ZERO_RATIO_ART50_PHRASE = "لقاء استيفاء المادة (50)"
 _OLD_ZERO_RATIO_OPINION_RE = re.compile(
-    r"عدم مسؤولية\s*\(([^)]*)\)\s*عن الحادث\s*\(نسبة المسؤولية\s*0%\s*\)،?\s*"
+    # (.*) جشعة مع تراجع حتى ") عن الحادث" لدعم صفة فيها أقواس مثل (سيدان)
+    r"عدم مسؤولية\s*\((.*)\)\s*عن الحادث\s*\(نسبة المسؤولية\s*0%\s*\)،?\s*"
     r"ويُعفى قائد المركبة من المسؤولية لقاء استيفاء المادة\s*\(\s*50\s*\)\s*من نظام المرور\.?",
     re.UNICODE,
 )
