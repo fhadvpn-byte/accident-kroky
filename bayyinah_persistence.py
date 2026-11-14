@@ -72,6 +72,7 @@ TAB3_KEYS = (
     "p2_reasons",
     *TAB3_LOCKED_TEXT_KEYS,
     "liability_html",
+    "saved_opinion_text",
     "acc_nature_sel",
     "acc_nature_custom",
     "accident_nature",

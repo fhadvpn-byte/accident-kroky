@@ -1028,6 +1028,75 @@ def refresh_party_role_titles(parties=None, vehicles=None, force: bool = False):
             st.session_state["p2_custom_title"] = t2
     return titles
 
+# رأي المسؤولية المحفوظ (A4) + ترحيل صياغة إعفاء 0% القديمة
+SAVED_OPINION_TEXT = "saved_opinion_text"
+_OLD_ZERO_RATIO_ART50_PHRASE = "لقاء استيفاء المادة (50)"
+_OLD_ZERO_RATIO_OPINION_RE = re.compile(
+    r"عدم مسؤولية\s*\(([^)]*)\)\s*عن الحادث\s*\(نسبة المسؤولية\s*0%\s*\)،?\s*"
+    r"ويُعفى قائد المركبة من المسؤولية لقاء استيفاء المادة\s*\(\s*50\s*\)\s*من نظام المرور\.?",
+    re.UNICODE,
+)
+
+
+def _migrate_old_zero_ratio_opinion_text(text: str) -> str:
+    """رحّل صياغة الإعفاء القديمة (المادة 50) إلى استناد المادة (60)."""
+    raw = str(text or "")
+    if not raw or _OLD_ZERO_RATIO_ART50_PHRASE not in raw:
+        return raw
+    updated = _OLD_ZERO_RATIO_OPINION_RE.sub(
+        r"يُعفى \1 من أي مسؤولية تجاه الحادث المروري استناداً للمادة (60) من نظام المرور ولائحته التنفيذية.",
+        raw,
+    )
+    updated = updated.replace(
+        "ويُعفى قائد المركبة من المسؤولية لقاء استيفاء المادة (50) من نظام المرور.",
+        "يُعفى من أي مسؤولية تجاه الحادث المروري استناداً للمادة (60) من نظام المرور ولائحته التنفيذية.",
+    )
+    updated = updated.replace(
+        "لقاء استيفاء المادة (50) من نظام المرور",
+        "استناداً للمادة (60) من نظام المرور ولائحته التنفيذية",
+    )
+    return updated
+
+
+def _refresh_saved_opinion_text(html_out: str) -> str:
+    """حدّث liability_html وsaved_opinion_text بعد ترحيل الصياغة القديمة."""
+    migrated = _migrate_old_zero_ratio_opinion_text(html_out)
+    st.session_state["liability_html"] = migrated
+    st.session_state[SAVED_OPINION_TEXT] = migrated
+    return migrated
+
+
+def _migrate_saved_opinion_texts_in_session() -> None:
+    """حدّث saved_opinion_text / liability_html القديمين في الجلسة والظل."""
+    for key in (SAVED_OPINION_TEXT, "liability_html", "legal_opinion"):
+        if key not in st.session_state:
+            continue
+        cur = st.session_state.get(key)
+        if not isinstance(cur, str) or not cur:
+            continue
+        migrated = _migrate_old_zero_ratio_opinion_text(cur)
+        if migrated != cur:
+            st.session_state[key] = migrated
+    # مزامنة المرآة
+    opinion = st.session_state.get(SAVED_OPINION_TEXT) or st.session_state.get("liability_html")
+    if isinstance(opinion, str) and opinion:
+        st.session_state[SAVED_OPINION_TEXT] = opinion
+        st.session_state["liability_html"] = opinion
+    shadow = st.session_state.get("_PERMANENT_FORM_DATA_")
+    if isinstance(shadow, dict):
+        changed = False
+        for key in (SAVED_OPINION_TEXT, "liability_html", "legal_opinion"):
+            cur = shadow.get(key)
+            if not isinstance(cur, str) or not cur:
+                continue
+            migrated = _migrate_old_zero_ratio_opinion_text(cur)
+            if migrated != cur:
+                shadow[key] = migrated
+                changed = True
+        if changed:
+            st.session_state["_PERMANENT_FORM_DATA_"] = shadow
+
+
 # خيارات الحقوق الخاصة والعامة (صفحة 3 / A4)
 RIGHTS_BOTH_PUBLIC_PRIVATE = "قيام الحقين العام والخاص معاً (إصابات / وفاة / مخالفة جسيمة)"
 RIGHTS_PUBLIC_LAPSE_PRIVATE_STANDS = "انقضاء الحق العام لوفاة المتسبب، وقيام الحق الخاص"
@@ -2123,6 +2192,7 @@ TAB3_PERMANENT_KEYS = (
     *TAB3_LOCKED_MANUAL_KEYS,
     *TAB3_LOCKED_REV_KEYS,
     "liability_html",
+    SAVED_OPINION_TEXT,
     "acc_nature_sel",
     "acc_nature_custom",
     "accident_nature",
@@ -2806,6 +2876,7 @@ def init_and_load_state():
         st.session_state.auto_analyze_video = False
     _ensure_results_extras_defaults()
     _ensure_procedures_defaults()
+    _migrate_saved_opinion_texts_in_session()
     if not isinstance(st.session_state.get(SAVED_HAS_ANIMALS), bool):
         st.session_state[SAVED_HAS_ANIMALS] = bool(st.session_state.get(SAVED_HAS_ANIMALS))
     if not isinstance(st.session_state.get(SAVED_HAS_PROP), bool):
@@ -4600,7 +4671,7 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         )
 
     def _inn(ord_label, ts, unlic):
-        """طرف بريء 0%: يُدمج نص الإعفاء بالمادة (50) في نفس بند أولاً/ثانياً."""
+        """طرف بريء 0%: إعفاء استناداً للمادة (60) بصيغة أولاً/ثانياً — بلا المادة (50)."""
         adm = ""
         if unlic:
             t32 = html.escape(_txt("32"))
@@ -4613,8 +4684,8 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         return (
             "<div class='liability-block liability-innocent-wrap'>"
             f"<div class='liability-heading liability-innocent'><strong>{html.escape(ord_label)}:</strong> "
-            f"عدم مسؤولية ({ts}) عن الحادث (نسبة المسؤولية 0%)، "
-            "ويُعفى قائد المركبة من المسؤولية لقاء استيفاء المادة (50) من نظام المرور.</div>"
+            f"يُعفى {ts} من أي مسؤولية تجاه الحادث المروري "
+            "استناداً للمادة (60) من نظام المرور ولائحته التنفيذية.</div>"
             f"{adm}</div>"
         )
 
@@ -4686,7 +4757,7 @@ def build_liability_html_from_session() -> str:
         p2_ratio=p2_ratio,
         p2_reasons=p2_reasons,
     )
-    st.session_state["liability_html"] = html_out
+    html_out = _refresh_saved_opinion_text(html_out)
     return html_out
 
 def load_a4_report_fields_from_session() -> dict:
@@ -4742,7 +4813,10 @@ def load_a4_report_fields_from_session() -> dict:
         "final_actions_html": final_actions_html or str(get_form_value("final_actions_html") or ""),
         "parties_df": pd.DataFrame(st.session_state.get("parties") or []),
         "vehicles_df": pd.DataFrame(st.session_state.get("vehicles") or []),
-        "liability_html": get_form_value("liability_html") or build_liability_html_from_session(),
+        "liability_html": build_liability_html_from_session()
+        or get_form_value(SAVED_OPINION_TEXT)
+        or get_form_value("liability_html")
+        or "",
     }
     # مزامنة المفاتيح الأساسية في الجلسة لضمان الاتساق
     st.session_state["accident_nature"] = accident_nature
@@ -5336,6 +5410,7 @@ _BAYYINAH_JSON_DATA_WHITELIST = frozenset({
     "p1_parties_records", "p1_vehicles_records", "parties", "vehicles",
     "selected_articles", "accident_results", "technical_description",
     "legal_opinion", "p1_reasons", "p2_reasons", "liability_html",
+    SAVED_OPINION_TEXT,
     "accident_nature", "rights_status", "gallery_photos", "accident_photos_data",
     "active_tab", "last_saved_time", "acc_loc_value",
     *TAB3_LOCKED_SAVED_KEYS,
@@ -7218,15 +7293,16 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         )
     else:
         p2_reasons = _read_tab3_saved_text("p2_reasons")
-    liability_html = build_liability_section_html(
-        p1_title=p1_title,
-        p1_ratio=p1_ratio,
-        p1_reasons=p1_reasons,
-        p2_title=p2_title,
-        p2_ratio=p2_ratio,
-        p2_reasons=p2_reasons,
+    liability_html = _refresh_saved_opinion_text(
+        build_liability_section_html(
+            p1_title=p1_title,
+            p1_ratio=p1_ratio,
+            p1_reasons=p1_reasons,
+            p2_title=p2_title,
+            p2_ratio=p2_ratio,
+            p2_reasons=p2_reasons,
+        )
     )
-    st.session_state["liability_html"] = liability_html
     st.session_state.tab3_content_fingerprint = compute_tab3_content_fingerprint()
     try:
         sync_permanent_form_data(reason="tab3_liability")
