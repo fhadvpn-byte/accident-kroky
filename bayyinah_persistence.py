@@ -112,6 +112,16 @@ _EPHEMERAL_KEYS = frozenset({
     "_p1_save_requested",
 })
 _BUTTONISH = ("btn", "save", "new", "print", "del", "add", "insert", "remove")
+# مفاتيح file_uploader / camera_input — لا تُحفظ ولا تُسترجع (تسبب StreamlitValueAssignmentNotAllowedError)
+_FILE_CAMERA_WIDGET_EXACT = frozenset({
+    "mobile_gallery_uploader",
+    "video_bulk_files",
+})
+_FILE_CAMERA_WIDGET_PREFIXES = (
+    "mobile_gallery_uploader_",
+    "clip_file_",
+    "camera_input_",
+)
 # مفاتيح محمية: لا تُحذف عند التنقل أو الحفظ أو عدم عرض الودجت
 _PROTECTED_KEYS = frozenset(MEDIA_KEYS) | frozenset(TAB3_KEYS) | {FORM_SHADOW_KEY}
 
@@ -120,8 +130,26 @@ def _ensure_dir() -> None:
     _STORE_DIR.mkdir(parents=True, exist_ok=True)
 
 
+def _is_file_or_camera_widget_key(key: str) -> bool:
+    """مفاتيح ودجات الرفع/الكاميرا — ممنوعة من الحفظ والاسترجاع والتعيين في session_state."""
+    if not isinstance(key, str) or not key:
+        return False
+    if key in _FILE_CAMERA_WIDGET_EXACT:
+        return True
+    if any(key.startswith(prefix) for prefix in _FILE_CAMERA_WIDGET_PREFIXES):
+        return True
+    if key.endswith("_camera") or key.endswith("_uploader"):
+        return True
+    if "camera_input" in key:
+        return True
+    return False
+
+
 def _is_ephemeral_key(key: str) -> bool:
     if not isinstance(key, str) or not key:
+        return True
+    # ودجات الملفات/الكاميرا زائلة دائماً حتى لا تُعاد كتابتها في session_state
+    if _is_file_or_camera_widget_key(key):
         return True
     # المفاتيح المحمية (ظل التبويب3 والوسائط) لا تُعامل كزائلة أبداً
     if key in _PROTECTED_KEYS or key in TAB3_KEYS:
@@ -352,6 +380,8 @@ def _force_restore_keys(session: dict, extra: dict | None, keys) -> int:
     for key in keys:
         if key not in merged:
             continue
+        if _is_file_or_camera_widget_key(str(key)):
+            continue
         try:
             value = _unpack_obj(merged[key])
         except Exception:
@@ -441,7 +471,7 @@ def restore_full_workspace() -> bool:
         if first:
             for key, packed in session.items():
                 ks = str(key)
-                if _is_ephemeral_key(ks):
+                if _is_ephemeral_key(ks) or _is_file_or_camera_widget_key(ks):
                     continue
                 if ks in MEDIA_KEYS or ks in TAB3_KEYS:
                     continue  # تُعالج قسرياً أدناه

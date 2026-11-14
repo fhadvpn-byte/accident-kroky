@@ -4497,8 +4497,29 @@ _PERSIST_SKIP_KEYS = frozenset({
     "_save_success_banner",
     "_sidebar_save_ok",
     "confirm_clear",
+    "mobile_gallery_uploader",
+    "video_bulk_files",
 })
-_PERSIST_SKIP_PREFIXES = ("FormSubmitter:", "button", "_persist", "_top_cmd_", "_sidebar_save")
+_PERSIST_SKIP_PREFIXES = (
+    "FormSubmitter:",
+    "button",
+    "_persist",
+    "_top_cmd_",
+    "_sidebar_save",
+    "mobile_gallery_uploader_",
+    "clip_file_",
+    "camera_input_",
+)
+
+def _is_persist_file_camera_key(key: str) -> bool:
+    ks = str(key or "")
+    if ks in ("mobile_gallery_uploader", "video_bulk_files"):
+        return True
+    if ks.startswith("mobile_gallery_uploader_") or ks.startswith("clip_file_") or ks.startswith("camera_input_"):
+        return True
+    if ks.endswith("_uploader") or ks.endswith("_camera") or "camera_input" in ks:
+        return True
+    return False
 
 def _save_bayyinah_state():
     """نسخة احتياطية JSON بعد الحفظ اليدوي — دون كسر مسار المسودة الأساسي."""
@@ -4506,6 +4527,8 @@ def _save_bayyinah_state():
     for k, v in list(st.session_state.items()):
         ks = str(k)
         if ks in _PERSIST_SKIP_KEYS or any(ks.startswith(p) for p in _PERSIST_SKIP_PREFIXES):
+            continue
+        if _is_persist_file_camera_key(ks):
             continue
         if isinstance(v, bool) and any(w in ks.lower() for w in ("btn", "save", "new", "print", "del", "add", "insert")):
             continue
@@ -4544,7 +4567,7 @@ def _load_bayyinah_state_once():
             return
         for k, v in data.items():
             ks = str(k)
-            if ks in _PERSIST_SKIP_KEYS or ks in st.session_state:
+            if ks in _PERSIST_SKIP_KEYS or _is_persist_file_camera_key(ks) or ks in st.session_state:
                 continue
             if isinstance(v, dict) and "__df_records__" in v:
                 try:
@@ -7216,11 +7239,25 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         for entry in st.session_state.gallery_photos:
             if entry.get("id"):
                 st.session_state.uploaded_ids.add(entry["id"])
+    # لا تعيّن session_state["mobile_gallery_uploader"] أبداً — أفرغ الرفع بمفتاح ديناميكي
+    if "uploader_reset_id" not in st.session_state:
+        st.session_state.uploader_reset_id = 0
+    try:
+        st.session_state.uploader_reset_id = int(st.session_state.uploader_reset_id or 0)
+    except (TypeError, ValueError):
+        st.session_state.uploader_reset_id = 0
+    _gallery_uploader_key = f"mobile_gallery_uploader_{int(st.session_state.uploader_reset_id)}"
+    # تنظيف المفتاح الثابت القديم ومفاتيح الرفع القديمة قبل إنشاء الودجت
+    st.session_state.pop("mobile_gallery_uploader", None)
+    for _stale_key in list(st.session_state.keys()):
+        _sk = str(_stale_key)
+        if _sk.startswith("mobile_gallery_uploader_") and _sk != _gallery_uploader_key:
+            st.session_state.pop(_stale_key, None)
     gallery_uploads = st.file_uploader(
         "📸 اضغط هنا لاختيار صور الحادث من معرض الجوال (حتى 15 صورة)",
         type=None,
         accept_multiple_files=True,
-        key="mobile_gallery_uploader",
+        key=_gallery_uploader_key,
     )
     st.components.v1.html(
         """
@@ -7299,6 +7336,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     gallery_photos = st.session_state.gallery_photos
     uploaded_ids = set(st.session_state.uploaded_ids)
     photo_limit_hit = False
+    absorbed_uploads = False
     if gallery_uploads:
         for item in gallery_uploads:
             uid = f"{getattr(item, 'name', '')}_{getattr(item, 'size', 0)}"
@@ -7310,19 +7348,24 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             image_b64 = convert_gallery_image(item)
             if not image_b64:
                 continue
-            number = len(gallery_photos) + 1
             gallery_photos.append({
                 "id": uid,
                 "b64": image_b64,
                 "caption": "",
             })
             uploaded_ids.add(uid)
+            absorbed_uploads = True
+        # حتى التكرارات: أفرغ ودجت الرفع بمفتاح ديناميكي بدل تعيين session_state
+        absorbed_uploads = True
     st.session_state.gallery_photos = gallery_photos
     st.session_state.uploaded_ids = uploaded_ids
     if photo_limit_hit:
         st.warning("تم الوصول للحد الأقصى (15 صورة).")
     # مزامنة قائمة الحفظ/الاسترجاع بنفس الحد
     st.session_state["accident_photos_data"] = list(gallery_photos[:_max_accident_photos])
+    if absorbed_uploads:
+        st.session_state.uploader_reset_id = int(st.session_state.get("uploader_reset_id") or 0) + 1
+        st.rerun()
     pending_remove = None
     for row_start in range(0, len(gallery_photos), 2):
         cols = st.columns(2)
@@ -7341,6 +7384,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         st.session_state.gallery_photos = [
             entry for entry in gallery_photos if entry["id"] != pending_remove
         ]
+        st.session_state["accident_photos_data"] = list(st.session_state.gallery_photos[:_max_accident_photos])
         st.rerun()
     
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
