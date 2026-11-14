@@ -770,25 +770,72 @@ def render_legal_articles_inserter(selected_articles: list, p1_reasons_key: str 
             _append_articles(p2_reasons_key)
             st.rerun()
 
-def _write_actions_editor(cur_acts):
-    if "ACTIONS_SCENARIOS" not in globals():
-        st.session_state["_pending_actions_text"] = True
-        return
+SAVED_PROCEDURES_TEXT = "saved_procedures_text"
+PROCEDURES_IS_MANUAL = "procedures_is_manual"
+PROCEDURES_REV = "procedures_rev"
+PROCEDURES_PERSIST_KEYS = (
+    SAVED_PROCEDURES_TEXT,
+    PROCEDURES_IS_MANUAL,
+    PROCEDURES_REV,
+)
+
+
+def _ensure_procedures_defaults() -> None:
+    st.session_state.setdefault(SAVED_PROCEDURES_TEXT, "")
+    st.session_state.setdefault(PROCEDURES_IS_MANUAL, False)
+    st.session_state.setdefault(PROCEDURES_REV, 0)
+    # ترحيل النص القديم من actions_taken_editor إن وُجد
+    if _is_blank_form_value(st.session_state.get(SAVED_PROCEDURES_TEXT)):
+        legacy = st.session_state.get("actions_taken_editor")
+        if not _is_blank_form_value(legacy):
+            st.session_state[SAVED_PROCEDURES_TEXT] = str(legacy)
+
+
+def _procedures_widget_key() -> str:
+    rev = int(st.session_state.get(PROCEDURES_REV) or 0)
+    return f"procedures_ta_{rev}"
+
+
+def _bump_procedures_rev() -> None:
+    try:
+        st.session_state[PROCEDURES_REV] = int(st.session_state.get(PROCEDURES_REV) or 0) + 1
+    except (TypeError, ValueError):
+        st.session_state[PROCEDURES_REV] = 1
+
+
+def _procedures_is_manual() -> bool:
+    return bool(st.session_state.get(PROCEDURES_IS_MANUAL))
+
+
+def _build_procedures_text_from_selection(selected_keys=None) -> str:
+    """ابنِ نص الإجراءات من المفاتيح المختارة (مع جمع بنود الوفيات)."""
+    if selected_keys is None:
+        selected_keys = [
+            key for key in (st.session_state.get("selected_actions_multi") or [])
+            if "ACTIONS_SCENARIOS" in globals() and key in ACTIONS_SCENARIOS
+        ]
+    else:
+        selected_keys = [
+            key for key in selected_keys
+            if "ACTIONS_SCENARIOS" in globals() and key in ACTIONS_SCENARIOS
+        ]
+    if not selected_keys:
+        return ""
     try:
         deaths_count = int(st.session_state.get("p1_acc_deaths") or 0)
     except (TypeError, ValueError):
         deaths_count = 0
-    lines = []
-    for i, k in enumerate(cur_acts, 1):
-        if k not in ACTIONS_SCENARIOS:
-            continue
-        # تُطبَّق صيغ الجمع لاحقاً عبر action_scenario_text إن وُجدت
-        if "action_scenario_text" in globals():
-            text = action_scenario_text(k, deaths_count)
-        else:
-            text = ACTIONS_SCENARIOS[k]
+    if "action_scenario_text" in globals():
+        lines = [
+            f"{idx}- {action_scenario_text(key, deaths_count)}"
+            for idx, key in enumerate(selected_keys, start=1)
+        ]
+    else:
+        lines = []
+        for idx, key in enumerate(selected_keys, start=1):
+            text = ACTIONS_SCENARIOS[key]
             try:
-                num = int(str(k).strip().split(".", 1)[0].strip())
+                num = int(str(key).strip().split(".", 1)[0].strip())
             except (TypeError, ValueError):
                 num = -1
             if 20 <= num <= 26 and deaths_count >= 2:
@@ -798,9 +845,47 @@ def _write_actions_editor(cur_acts):
                     .replace("للمتوفى", "للمتوفين")
                     .replace("المتوفى", "المتوفين")
                 )
-        lines.append(f"{i}- {text}")
-    st.session_state["actions_taken_editor"] = "\n".join(lines)
+            lines.append(f"{idx}- {text}")
+    return "\n".join(lines)
+
+
+def _write_saved_procedures(
+    text: str,
+    *,
+    mark_manual: bool | None = None,
+    bump_rev: bool = False,
+) -> None:
+    cleaned = str(text or "")
+    st.session_state[SAVED_PROCEDURES_TEXT] = cleaned
+    # مرآة للتوافق مع المسارات القديمة
+    st.session_state["actions_taken_editor"] = cleaned
+    try:
+        st.session_state["final_actions_html"] = build_final_actions_html(cleaned)
+    except Exception:
+        st.session_state["final_actions_html"] = ""
+    if mark_manual is True:
+        st.session_state[PROCEDURES_IS_MANUAL] = True
+    elif mark_manual is False:
+        st.session_state[PROCEDURES_IS_MANUAL] = False
+    if bump_rev:
+        _bump_procedures_rev()
+    try:
+        deaths_count = int(st.session_state.get("p1_acc_deaths") or 0)
+    except (TypeError, ValueError):
+        deaths_count = 0
     st.session_state["_actions_plural_deaths_sig"] = deaths_count
+
+
+def _write_actions_editor(cur_acts):
+    """كتابة من مزامنة الإصابات/الوفيات — لا تُكتب فوق النص إن is_manual."""
+    if "ACTIONS_SCENARIOS" not in globals():
+        st.session_state["_pending_actions_text"] = True
+        return
+    _ensure_procedures_defaults()
+    if _procedures_is_manual():
+        return
+    text = _build_procedures_text_from_selection(cur_acts)
+    _write_saved_procedures(text, mark_manual=False, bump_rev=True)
 
 _VEHICLE_ORDINALS_AR = {
     1: "الأولى",
@@ -2047,6 +2132,7 @@ TAB3_PERMANENT_KEYS = (
     "selected_actions_multi",
     "actions_taken_editor",
     "final_actions_html",
+    *PROCEDURES_PERSIST_KEYS,
     "extra_procedure",
     "has_video",
     "video_clip_count",
@@ -2638,6 +2724,21 @@ def get_form_value(key: str, default=None):
             sh_legacy = shadow.get(key)
             if not _is_blank_form_value(sh_legacy):
                 return sh_legacy
+    # الإجراءات المتخذة: المصدر saved_procedures_text
+    if key in (SAVED_PROCEDURES_TEXT, "actions_taken_editor", "final_actions_html"):
+        if key != "final_actions_html":
+            saved_proc = st.session_state.get(SAVED_PROCEDURES_TEXT)
+            if not _is_blank_form_value(saved_proc):
+                return saved_proc
+            shadow = st.session_state.get("_PERMANENT_FORM_DATA_")
+            if isinstance(shadow, dict):
+                sh_proc = shadow.get(SAVED_PROCEDURES_TEXT)
+                if not _is_blank_form_value(sh_proc):
+                    return sh_proc
+                if key == "actions_taken_editor":
+                    sh_legacy = shadow.get("actions_taken_editor")
+                    if not _is_blank_form_value(sh_legacy):
+                        return sh_legacy
     if key in st.session_state and not _is_blank_form_value(st.session_state.get(key)):
         return st.session_state.get(key)
     shadow = st.session_state.get("_PERMANENT_FORM_DATA_")
@@ -2704,6 +2805,7 @@ def init_and_load_state():
     if not isinstance(st.session_state.get("auto_analyze_video"), bool):
         st.session_state.auto_analyze_video = False
     _ensure_results_extras_defaults()
+    _ensure_procedures_defaults()
     if not isinstance(st.session_state.get(SAVED_HAS_ANIMALS), bool):
         st.session_state[SAVED_HAS_ANIMALS] = bool(st.session_state.get(SAVED_HAS_ANIMALS))
     if not isinstance(st.session_state.get(SAVED_HAS_PROP), bool):
@@ -3340,7 +3442,7 @@ def _report_tab_done_flags():
         or has_party_name
     )
     done_analysis = _filled("accident_results") or _filled("technical_description") or bool(st.session_state.get("selected_articles"))
-    done_actions = _filled("actions_taken_editor")
+    done_actions = _filled(SAVED_PROCEDURES_TEXT) or _filled("actions_taken_editor")
     done_sketch = str(st.session_state.get("sketch_data_url") or "").startswith("data:image/")
     done_print = bool(st.session_state.get("gallery_photos"))
     done_analysis_actions = done_analysis or done_actions
@@ -4609,7 +4711,11 @@ def load_a4_report_fields_from_session() -> dict:
     )
     if rights_status == RIGHTS_CUSTOM_OPTION:
         rights_status = str(get_form_value("rights_custom") or "")
-    actions_raw = str(get_form_value("actions_taken_editor") or "")
+    actions_raw = str(
+        get_form_value(SAVED_PROCEDURES_TEXT)
+        or get_form_value("actions_taken_editor")
+        or ""
+    )
     final_actions_html = build_final_actions_html(actions_raw)
     fields = {
         "acc_num": _read_core_accident_value("p1_acc_number"),
@@ -5236,6 +5342,7 @@ _BAYYINAH_JSON_DATA_WHITELIST = frozenset({
     *TAB3_LOCKED_MANUAL_KEYS,
     *TAB3_LOCKED_REV_KEYS,
     *RESULTS_EXTRA_SAVED_KEYS,
+    *PROCEDURES_PERSIST_KEYS,
 })
 
 def _is_persist_ui_widget_key(key: str) -> bool:
@@ -5246,8 +5353,10 @@ def _is_persist_ui_widget_key(key: str) -> bool:
         return True
     if ks in RESULTS_EXTRA_WIDGET_KEYS:
         return True
-    # ودجات text_area المقفلة + زر الاستعادة — ليست بيانات
+    # ودجات text_area المقفلة + أزرار الحفظ/الاستعادة — ليست بيانات
     if "_ta_" in ks or ks.startswith("restore_auto_"):
+        return True
+    if ks.startswith("procedures_save_") or ks.startswith("procedures_restore_"):
         return True
     kl = ks.lower()
     if ks.startswith("FormSubmitter:") or "download" in kl or "form_submit" in kl:
@@ -7239,20 +7348,16 @@ def action_scenario_text(key: str, deaths_count: int = None) -> str:
     return raw
 
 def sync_selected_actions():
-    selected_keys = [
-        key for key in st.session_state.get("selected_actions_multi", [])
-        if key in ACTIONS_SCENARIOS
-    ]
-    if not selected_keys:
-        st.session_state["actions_taken_editor"] = ""
+    """إعادة توليد نص الإجراءات من القائمة — فقط عبر on_change لـ multiselect."""
+    _ensure_procedures_defaults()
+    if _procedures_is_manual():
         return
-    deaths_count = _accident_deaths_count()
-    lines = [
-        f"{idx}- {action_scenario_text(key, deaths_count)}"
-        for idx, key in enumerate(selected_keys, start=1)
-    ]
-    st.session_state["actions_taken_editor"] = "\n".join(lines)
-    st.session_state["_actions_plural_deaths_sig"] = deaths_count
+    text = _build_procedures_text_from_selection()
+    _write_saved_procedures(text, mark_manual=False, bump_rev=True)
+    try:
+        sync_permanent_form_data(reason="procedures_multiselect")
+    except Exception:
+        pass
 
 flush_pending_casualty_actions()
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
@@ -7286,8 +7391,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     st.session_state.selected_actions_multi = [
         key for key in st.session_state.selected_actions_multi if key in ACTIONS_SCENARIOS
     ]
-    if "actions_taken_editor" not in st.session_state:
-        st.session_state.actions_taken_editor = f"1- {ACTIONS_SCENARIOS['1. صلح وتنازل ميداني نهائي']}"
+    _ensure_procedures_defaults()
+    if _is_blank_form_value(st.session_state.get(SAVED_PROCEDURES_TEXT)):
+        seed = _build_procedures_text_from_selection()
+        if not seed:
+            seed = f"1- {ACTIONS_SCENARIOS['1. صلح وتنازل ميداني نهائي']}"
+        _write_saved_procedures(seed, mark_manual=False, bump_rev=False)
 
     def _on_rights_sel_change() -> None:
         selected = str(st.session_state.get("rights_sel") or "")
@@ -7347,22 +7456,65 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         sync_permanent_form_data(reason="tab3_rights")
     except Exception:
         pass
-    # إعادة توليد صياغات بنود الوفيات 20–26 عند تغيّر عدد الوفيات
-    _deaths_for_actions = _accident_deaths_count()
-    if st.session_state.get("_actions_plural_deaths_sig") != _deaths_for_actions:
-        sync_selected_actions()
+    # إعادة التوليد من القائمة فقط عبر on_change — لا تُفرض عند تغيّر عدد الوفيات هنا
     st.multiselect(
         "اختر إجراءً واحداً أو ادمج عدة إجراءات معاً (تُرقّم تلقائياً بالأسفل):",
         options=list(ACTIONS_SCENARIOS.keys()),
         key="selected_actions_multi",
         on_change=sync_selected_actions,
     )
+    _proc_rev = int(st.session_state.get(PROCEDURES_REV) or 0)
+    _proc_widget_key = _procedures_widget_key()
+    if _proc_widget_key not in st.session_state:
+        st.session_state[_proc_widget_key] = str(
+            st.session_state.get(SAVED_PROCEDURES_TEXT) or ""
+        )
+    _proc_head_l, _proc_head_r = st.columns([3.2, 2.2])
+    with _proc_head_r:
+        if _procedures_is_manual():
+            st.caption("🔒 تعديل يدوي محفوظ")
+        _btn_save, _btn_restore = st.columns(2)
+        with _btn_save:
+            if st.button(
+                "حفظ النص",
+                key=f"procedures_save_{_proc_rev}",
+                use_container_width=True,
+            ):
+                _write_saved_procedures(
+                    st.session_state.get(_proc_widget_key, ""),
+                    mark_manual=True,
+                    bump_rev=False,
+                )
+                try:
+                    sync_permanent_form_data(reason="procedures_save")
+                except Exception:
+                    pass
+                st.rerun()
+        with _btn_restore:
+            if st.button(
+                "استعادة تلقائية",
+                key=f"procedures_restore_{_proc_rev}",
+                use_container_width=True,
+            ):
+                st.session_state[PROCEDURES_IS_MANUAL] = False
+                restored = _build_procedures_text_from_selection()
+                _write_saved_procedures(restored, mark_manual=False, bump_rev=True)
+                try:
+                    sync_permanent_form_data(reason="procedures_restore")
+                except Exception:
+                    pass
+                st.rerun()
+    with _proc_head_l:
+        st.caption("النص النهائي لـ (الإجراءات المتخذة) — احفظ بعد التعديل اليدوي")
     actions_taken_raw = st.text_area(
         "النص النهائي لـ (الإجراءات المتخذة) في التقرير — يمكنك التعديل أو إضافة تفاصيل (مثل نوع العهدة أو اسم المستشفى):",
         height=120,
-        key="actions_taken_editor"
+        key=_proc_widget_key,
     )
-    final_actions_html = build_final_actions_html(actions_taken_raw)
+    # A4 والمعاينة يقرآن saved_procedures_text فقط (بعد حفظ يدوي أو توليد القائمة)
+    final_actions_html = build_final_actions_html(
+        st.session_state.get(SAVED_PROCEDURES_TEXT) or ""
+    )
     st.session_state["final_actions_html"] = final_actions_html
     accident_nature = str(st.session_state.get("accident_nature") or accident_nature_val or "")
     rights_status = str(st.session_state.get("rights_status") or rights_status_val or "")

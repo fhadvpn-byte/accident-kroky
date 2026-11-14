@@ -81,6 +81,9 @@ TAB3_KEYS = (
     "selected_actions_multi",
     "actions_taken_editor",
     "final_actions_html",
+    "saved_procedures_text",
+    "procedures_is_manual",
+    "procedures_rev",
     "extra_procedure",
     "has_video",
     "video_clip_count",
@@ -234,8 +237,10 @@ def _is_ui_widget_key(key: str) -> bool:
         return True
     if key.startswith("FormSubmitter:"):
         return True
-    # ودجات text_area المقفلة في التبويب3: field_ta_{rev} وزر الاستعادة
+    # ودجات text_area المقفلة: field_ta_{rev} وأزرار الحفظ/الاستعادة
     if "_ta_" in key or key.startswith("restore_auto_"):
+        return True
+    if key.startswith("procedures_save_") or key.startswith("procedures_restore_"):
         return True
     kl = key.lower()
     if "download" in kl or "form_submit" in kl:
