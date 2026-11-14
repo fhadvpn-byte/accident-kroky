@@ -5,14 +5,47 @@ import pandas as pd
 from PIL import Image, ImageDraw, ImageFont, ImageOps
 import io
 import base64
+import hashlib
+import hmac
 import os
 import json
 import re
 import math
+import secrets
 import tempfile
+import time
 from datetime import date, datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from pathlib import Path
+
+# === DEPARTMENTS_CONFIG (multi-tenant PIN login) ===
+DEPARTMENTS_CONFIG = {
+    "ardah": {
+        "name": "قسم مرور محافظة العارضة",
+        "pin": "4411",
+        "default_region": "إدارة مرور منطقة جازان",
+        "default_dept": "قسم مرور محافظة العارضة",
+        "manager_title": "مدير قسم مرور محافظة العارضة",
+    },
+    "taif": {
+        "name": "إدارة مرور محافظة الطائف",
+        "pin": "2030",
+        "default_region": "إدارة مرور منطقة مكة المكرمة",
+        "default_dept": "إدارة مرور محافظة الطائف - شعبة الحوادث",
+        "manager_title": "مدير شعبة الحوادث / مدير القسم",
+    },
+}
+# سر توقيع جلسة الدخول (ليس PIN) — يُفضَّل من البيئة، وإلا ثابت محلي مستقر.
+_BAYYINAH_AUTH_SECRET = (
+    os.environ.get("BAYYINAH_AUTH_SECRET")
+    or "bayyinah-stable-local-auth-secret-v1-not-a-pin"
+)
+_APP_DIR = Path(__file__).resolve().parent
+_AUTH_SESSION_KEYS = frozenset({
+    "active_dept_id",
+    "browser_cid",
+    "_auth_verified_ok",
+})
 
 def _fmt_ratio_rtl(opt):
     import re as _re
@@ -25,11 +58,31 @@ def _fmt_ratio_rtl(opt):
             return f"\u200fالطرف الأول ({m1.group(0)}%)  |  الطرف الثاني ({m2.group(0)}%)\u200f"
     return f"\u200f{s}\u200f"
 
-def _select_images_dir():
-    candidates = (
-        Path.cwd() / "saved_accident_images",
-        Path(tempfile.gettempdir()) / "bayyinah_images",
-    )
+def _tenant_root(dept_id: str | None = None) -> Path:
+    """ardah يحتفظ بجذر المشروع (مسارات قديمة)؛ الطائف وغيره تحت workspace_{id}/."""
+    dept = str(dept_id or st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    if dept == "ardah":
+        return _APP_DIR
+    root = _APP_DIR / f"workspace_{dept}"
+    try:
+        root.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    return root
+
+
+def _select_images_dir(dept_id: str | None = None):
+    dept = str(dept_id or st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    if dept == "ardah":
+        candidates = (
+            Path.cwd() / "saved_accident_images",
+            Path(tempfile.gettempdir()) / "bayyinah_images",
+        )
+    else:
+        candidates = (
+            _tenant_root(dept) / "saved_accident_images",
+            Path(tempfile.gettempdir()) / f"bayyinah_images_{dept}",
+        )
     for folder in candidates:
         try:
             folder.mkdir(parents=True, exist_ok=True)
@@ -41,7 +94,7 @@ def _select_images_dir():
             continue
     return candidates[-1]
 
-SAVED_IMAGES_DIR = _select_images_dir()
+SAVED_IMAGES_DIR = _select_images_dir("ardah")
 ARABIC_FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Bold.ttf",
     "/usr/share/fonts/truetype/noto/NotoNaskhArabic-Regular.ttf",
@@ -396,8 +449,20 @@ def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تا
     return str(st.session_state.get(state_key, ""))
 
 KSA_TZ = timezone(timedelta(hours=3))
-DEPT_STAFF_PATH = Path(".bayyinah_dept_staff.json")
-DEPT_STAFF_STORAGE_KEY = "bayyinah_dept_staff"
+def get_dept_staff_path(dept_id: str | None = None) -> Path:
+    dept = str(dept_id or st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    if dept == "ardah":
+        return _APP_DIR / ".bayyinah_dept_staff.json"
+    return _tenant_root(dept) / ".bayyinah_dept_staff.json"
+
+
+def get_dept_staff_storage_key(dept_id: str | None = None) -> str:
+    dept = str(dept_id or st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    return f"bayyinah_dept_staff_{dept}"
+
+
+DEPT_STAFF_PATH = get_dept_staff_path("ardah")
+DEPT_STAFF_STORAGE_KEY = "bayyinah_dept_staff_ardah"
 RANKS_LIST = [
     "جندي", "جندي أول", "عريف", "وكيل رقيب", "رقيب", "رقيب أول", "رئيس رقباء",
     "ملازم", "ملازم أول", "نقيب", "رائد", "مقدم", "عقيد", "عميد",
@@ -408,20 +473,30 @@ ROLE_RANK_DEFAULTS = {
     "manager_rank": "رئيس رقباء",
 }
 MANUAL_OFFICER_OPTION = "✍️ كتابة / تعديل اسم يدوياً..."
-DEFAULT_DEPT_STAFF = {
-    "dept_region": "إدارة مرور منطقة جازان",
-    "dept_section": "قسم مرور محافظة العارضة",
-    "officer_name": "",
-    "officer_rank": "",
-    "supervisor_name": "",
-    "supervisor_rank": "",
-    "director_name": "",
-    "director_rank": "",
-    "saved_officers": [],
-}
+
+
+def default_dept_staff_for(dept_id: str | None = None) -> dict:
+    dept = str(dept_id or st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    cfg = DEPARTMENTS_CONFIG.get(dept) or DEPARTMENTS_CONFIG["ardah"]
+    return {
+        "dept_region": cfg["default_region"],
+        "dept_section": cfg["default_dept"],
+        "manager_title": cfg["manager_title"],
+        "officer_name": "",
+        "officer_rank": "",
+        "supervisor_name": "",
+        "supervisor_rank": "",
+        "director_name": "",
+        "director_rank": "",
+        "saved_officers": [],
+    }
+
+
+DEFAULT_DEPT_STAFF = default_dept_staff_for("ardah")
 SIDEBAR_FIELD_MAP = (
     ("dept_region", "p1_dept_region"),
     ("dept_section", "p1_dept_branch"),
+    ("manager_title", "manager_title"),
     ("officer_name", "officer_1_name"),
     ("officer_rank", "officer_1_rank"),
     ("supervisor_name", "officer_2_name"),
@@ -441,22 +516,35 @@ VEHICLE_SMART_DEFAULTS = {
 }
 
 def load_permanent_dept_staff() -> dict:
-    if "_perm_dept_staff" not in st.session_state:
+    dept_id = str(st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    cache_key = f"_perm_dept_staff_{dept_id}"
+    if cache_key not in st.session_state:
         disk_data = {}
-        if DEPT_STAFF_PATH.exists():
+        staff_path = get_dept_staff_path(dept_id)
+        if staff_path.exists():
             try:
-                disk_data = json.loads(DEPT_STAFF_PATH.read_text(encoding="utf-8"))
+                disk_data = json.loads(staff_path.read_text(encoding="utf-8"))
             except Exception:
                 disk_data = {}
         if not isinstance(disk_data, dict):
             disk_data = {}
-        st.session_state["_perm_dept_staff"] = {**DEFAULT_DEPT_STAFF, **disk_data}
+        seeded = {**default_dept_staff_for(dept_id), **disk_data}
+        if not str(seeded.get("manager_title") or "").strip():
+            seeded["manager_title"] = default_dept_staff_for(dept_id)["manager_title"]
+        st.session_state[cache_key] = seeded
+        st.session_state["_perm_dept_staff"] = seeded
+    else:
+        st.session_state["_perm_dept_staff"] = st.session_state[cache_key]
     return st.session_state["_perm_dept_staff"]
 
 def save_permanent_dept_staff(data: dict) -> bool:
+    dept_id = str(st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
     st.session_state["_perm_dept_staff"] = dict(data)
+    st.session_state[f"_perm_dept_staff_{dept_id}"] = dict(data)
     try:
-        DEPT_STAFF_PATH.write_text(
+        staff_path = get_dept_staff_path(dept_id)
+        staff_path.parent.mkdir(parents=True, exist_ok=True)
+        staff_path.write_text(
             json.dumps(data, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
@@ -477,9 +565,10 @@ def capture_sidebar_before_reset():
 
 def _mirror_dept_staff_local_storage(data: dict):
     payload = json.dumps(data, ensure_ascii=False)
+    storage_key = get_dept_staff_storage_key()
     components.html(
         "<script>(function(){try{var w=window.parent;if(w&&w.localStorage){w.localStorage.setItem(%s,%s);}}catch(e){}})();</script>"
-        % (json.dumps(DEPT_STAFF_STORAGE_KEY), json.dumps(payload)),
+        % (json.dumps(storage_key), json.dumps(payload)),
         height=0,
         width=0,
     )
@@ -564,17 +653,21 @@ def render_persistent_sidebar_settings():
     """إعدادات القسم والمنسوبين: ملف محلي + localStorage، ولا يمسحها حادث جديد."""
     data = load_permanent_dept_staff()
     force = bool(st.session_state.pop("_restore_perm_sidebar", False))
-    file_exists = DEPT_STAFF_PATH.exists()
+    staff_path = get_dept_staff_path()
+    file_exists = staff_path.exists()
+    seed_flag = f"_perm_sidebar_seeded_{st.session_state.get('active_dept_id') or 'ardah'}"
     if force and file_exists:
         for storage_key, widget_key in SIDEBAR_FIELD_MAP:
             st.session_state[widget_key] = str(data.get(storage_key, "") or "")
+        st.session_state[seed_flag] = True
         st.session_state["_perm_sidebar_seeded"] = True
-    elif not st.session_state.get("_perm_sidebar_seeded"):
+    elif not st.session_state.get(seed_flag):
         for storage_key, widget_key in SIDEBAR_FIELD_MAP:
             stored = str(data.get(storage_key, "") or "")
             current = str(st.session_state.get(widget_key) or "").strip()
             if file_exists or not current:
                 st.session_state[widget_key] = stored
+        st.session_state[seed_flag] = True
         st.session_state["_perm_sidebar_seeded"] = True
     def _commit_sidebar_settings():
         current = load_permanent_dept_staff()
@@ -599,10 +692,19 @@ def render_persistent_sidebar_settings():
     def _noop_commit():
         return None
 
+    manager_title_default = str(
+        data.get("manager_title")
+        or default_dept_staff_for().get("manager_title")
+        or "مدير القسم / الشعبة"
+    )
+    if "manager_title" not in st.session_state or not str(st.session_state.get("manager_title") or "").strip():
+        st.session_state["manager_title"] = manager_title_default
+
     with st.container(key="glow-dept"):
         st.header("⚙️ الإعدادات الثابتة للقسم")
         dept_region = st.text_input("إدارة مرور منطقة", key="p1_dept_region")
         dept_branch = st.text_input("القسم / الشعبة", key="p1_dept_branch")
+        st.text_input("المسمى الوظيفي لمدير القسم (جدول التوقيع)", key="manager_title")
     with st.container(key="glow-officers"):
         st.subheader("👮‍♂️ بيانات معدي التقرير المعتمدين")
         presets = data.get("saved_officers") or []
@@ -626,7 +728,7 @@ def render_persistent_sidebar_settings():
         )
         render_signatory_card(
             "officer_role_manager",
-            "3️⃣ مدير القسم / الشعبة",
+            f"3️⃣ {str(st.session_state.get('manager_title') or manager_title_default)}",
             "manager_name",
             "manager_rank",
             presets,
@@ -1226,7 +1328,40 @@ def _blank_vehicles():
         {"الطرف": "الطرف الثاني", "نوع المركبة": "", "رقم اللوحة": "", "الرقم التسلسلي": "", "نوع الترخيص": "", "التأمين": ""},
     ]
 
-P1_AUTOSAVE_PATH = Path(".p1_autosave_draft.json")
+def get_browser_cid() -> str:
+    cid = str(st.session_state.get("browser_cid") or "").strip()
+    if cid:
+        return cid
+    try:
+        cid = str(st.query_params.get("cid") or "").strip()
+    except Exception:
+        cid = ""
+    if not cid:
+        cid = "local"
+    st.session_state["browser_cid"] = cid
+    return cid
+
+
+def get_p1_autosave_path(
+    dept_id: str | None = None,
+    cid: str | None = None,
+    *,
+    for_write: bool = False,
+) -> Path:
+    dept = str(dept_id or st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    browser = str(cid or get_browser_cid() or "local").strip() or "local"
+    safe_cid = re.sub(r"[^A-Za-z0-9_-]", "", browser)[:48] or "local"
+    named = _tenant_root(dept) / f".p1_autosave_draft_{dept}_{safe_cid}.json"
+    if for_write:
+        return named
+    if dept == "ardah":
+        legacy = _APP_DIR / ".p1_autosave_draft.json"
+        if not named.exists() and legacy.exists():
+            return legacy
+    return named
+
+
+P1_AUTOSAVE_PATH = _APP_DIR / ".p1_autosave_draft.json"
 PAGE1_STATIC_KEYS = {
     "p1_hdr_number": "",
     "p1_hdr_date": "",
@@ -1765,9 +1900,10 @@ def _records_from_dynamic_vehicles(vault):
 def init_and_restore_page1_state():
     if "_p1_vault" not in st.session_state:
         loaded_draft = {}
-        if P1_AUTOSAVE_PATH.exists():
+        p1_path = get_p1_autosave_path()
+        if p1_path.exists():
             try:
-                loaded_draft = json.loads(P1_AUTOSAVE_PATH.read_text(encoding="utf-8"))
+                loaded_draft = json.loads(p1_path.read_text(encoding="utf-8"))
             except Exception:
                 loaded_draft = {}
         if not isinstance(loaded_draft, dict):
@@ -1927,7 +2063,7 @@ def sync_page1_to_vault(
     if not write_disk:
         return
     try:
-        P1_AUTOSAVE_PATH.write_text(
+        get_p1_autosave_path(for_write=True).write_text(
             json.dumps(st.session_state["_p1_vault"], ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
@@ -1977,7 +2113,7 @@ def _on_core_accident_field_change() -> None:
     if loc:
         st.session_state["acc_loc_value"] = loc
     try:
-        P1_AUTOSAVE_PATH.write_text(
+        get_p1_autosave_path(for_write=True).write_text(
             json.dumps(st.session_state["_p1_vault"], ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
@@ -2090,13 +2226,41 @@ def reset_page1_payload():
         st.session_state.pop(key, None)
     for day_num in range(1, 31):
         st.session_state.pop(f"hijri_date_d_{day_num}", None)
-    if P1_AUTOSAVE_PATH.exists():
+    p1_path = get_p1_autosave_path(for_write=True)
+    if p1_path.exists():
         try:
-            P1_AUTOSAVE_PATH.unlink()
+            p1_path.unlink()
+        except Exception:
+            pass
+    # امسح أيضاً المسودة القديمة المشتركة للعارضة عند التصفير المحلي
+    legacy_p1 = _APP_DIR / ".p1_autosave_draft.json"
+    if str(st.session_state.get("active_dept_id") or "ardah") == "ardah" and legacy_p1.exists():
+        try:
+            legacy_p1.unlink()
         except Exception:
             pass
 
-DRAFT_FILE_PATH = "bayyinah_autosave_draft.json"
+def get_draft_file_path(
+    dept_id: str | None = None,
+    cid: str | None = None,
+    *,
+    for_write: bool = False,
+) -> str:
+    """مسودة معزولة بالقسم + معرف المتصفح؛ العارضة تقرأ المسودة القديمة إن لم توجد مسودة cid."""
+    dept = str(dept_id or st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    browser = str(cid or get_browser_cid() or "local").strip() or "local"
+    safe_cid = re.sub(r"[^A-Za-z0-9_-]", "", browser)[:48] or "local"
+    named = _tenant_root(dept) / f"draft_{dept}_{safe_cid}.json"
+    if for_write:
+        return str(named)
+    if dept == "ardah":
+        legacy = _APP_DIR / "bayyinah_autosave_draft.json"
+        if not named.exists() and legacy.exists():
+            return str(legacy)
+    return str(named)
+
+
+DRAFT_FILE_PATH = str(_APP_DIR / "bayyinah_autosave_draft.json")
 DEFAULT_REPORT_STATE = {
     "accident_results": "",
     "technical_description": "",
@@ -2264,7 +2428,14 @@ TAB3_PERMANENT_KEYS = (
     "tab3_content_fingerprint",
     "_actions_plural_deaths_sig",
 )
-_PERMANENT_FORM_DISK = Path(__file__).resolve().parent / ".bayyinah_persistence" / "permanent_form.json"
+def get_permanent_form_disk(dept_id: str | None = None) -> Path:
+    dept = str(dept_id or st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    if dept == "ardah":
+        return _APP_DIR / ".bayyinah_persistence" / "permanent_form.json"
+    return _tenant_root(dept) / ".bayyinah_persistence" / "permanent_form.json"
+
+
+_PERMANENT_FORM_DISK = get_permanent_form_disk("ardah")
 
 
 def _is_blank_form_value(value) -> bool:
@@ -2775,8 +2946,9 @@ def sync_permanent_form_data(reason: str = "manual") -> dict:
     shadow["_synced_at"] = datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d | %I:%M:%S %p")
     st.session_state["_PERMANENT_FORM_DATA_"] = shadow
     try:
-        _PERMANENT_FORM_DISK.parent.mkdir(parents=True, exist_ok=True)
-        _PERMANENT_FORM_DISK.write_text(
+        pf = get_permanent_form_disk()
+        pf.parent.mkdir(parents=True, exist_ok=True)
+        pf.write_text(
             json.dumps(shadow, ensure_ascii=False, indent=2, default=str),
             encoding="utf-8",
         )
@@ -2789,9 +2961,10 @@ def reinject_permanent_form_data() -> int:
     """قبل رسم أدوات التبويب 3: أعد حقن المفاتيح الغائبة/الفارغة من الظل."""
     shadow = st.session_state.get("_PERMANENT_FORM_DATA_")
     if not isinstance(shadow, dict) or not shadow:
-        if _PERMANENT_FORM_DISK.is_file():
+        pf = get_permanent_form_disk()
+        if pf.is_file():
             try:
-                shadow = json.loads(_PERMANENT_FORM_DISK.read_text(encoding="utf-8"))
+                shadow = json.loads(pf.read_text(encoding="utf-8"))
                 if isinstance(shadow, dict):
                     st.session_state["_PERMANENT_FORM_DATA_"] = shadow
             except (OSError, json.JSONDecodeError, TypeError):
@@ -2855,8 +3028,9 @@ def get_form_value(key: str, default=None):
 def clear_permanent_form_data() -> None:
     st.session_state.pop("_PERMANENT_FORM_DATA_", None)
     try:
-        if _PERMANENT_FORM_DISK.is_file():
-            _PERMANENT_FORM_DISK.unlink()
+        pf = get_permanent_form_disk()
+        if pf.is_file():
+            pf.unlink()
     except OSError:
         pass
 
@@ -2864,9 +3038,10 @@ def clear_permanent_form_data() -> None:
 def init_and_load_state():
     if "state_initialized" in st.session_state:
         return
-    if os.path.exists(DRAFT_FILE_PATH):
+    draft_path = get_draft_file_path()
+    if os.path.exists(draft_path):
         try:
-            with open(DRAFT_FILE_PATH, "r", encoding="utf-8") as draft_file:
+            with open(draft_path, "r", encoding="utf-8") as draft_file:
                 saved_data = json.load(draft_file)
             for key, default_val in DEFAULT_REPORT_STATE.items():
                 st.session_state[key] = saved_data.get(key, default_val)
@@ -3042,7 +3217,9 @@ def save_current_work():
     st.session_state["last_saved_time"] = now_str
     st.session_state["last_saved_at"] = now_str
     try:
-        with open(DRAFT_FILE_PATH, "w", encoding="utf-8") as draft_file:
+        draft_path = get_draft_file_path(for_write=True)
+        Path(draft_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(draft_path, "w", encoding="utf-8") as draft_file:
             json.dump(data_to_save, draft_file, ensure_ascii=False, indent=2, default=str)
         return True
     except OSError as error:
@@ -3085,11 +3262,12 @@ def perform_manual_save(show_toast: bool = True) -> bool:
 
 def clear_all_work():
     capture_sidebar_before_reset()
-    if os.path.exists(DRAFT_FILE_PATH):
-        try:
-            os.remove(DRAFT_FILE_PATH)
-        except OSError:
-            pass
+    for draft_candidate in (get_draft_file_path(for_write=True), get_draft_file_path()):
+        if os.path.exists(draft_candidate):
+            try:
+                os.remove(draft_candidate)
+            except OSError:
+                pass
     try:
         import bayyinah_persistence as _bp
         _bp.clear_full_workspace()
@@ -4300,11 +4478,17 @@ def render_video_evidence_engine():
 
 def _reset_new_accident():
     capture_sidebar_before_reset()
-    if os.path.exists(DRAFT_FILE_PATH):
-        try:
-            os.remove(DRAFT_FILE_PATH)
-        except OSError:
-            pass
+    preserved_auth = {
+        key: st.session_state.get(key)
+        for key in _AUTH_SESSION_KEYS
+        if key in st.session_state
+    }
+    for draft_candidate in (get_draft_file_path(for_write=True), get_draft_file_path()):
+        if os.path.exists(draft_candidate):
+            try:
+                os.remove(draft_candidate)
+            except OSError:
+                pass
     try:
         import bayyinah_persistence as _bp
         _bp.clear_full_workspace()
@@ -4316,6 +4500,9 @@ def _reset_new_accident():
         pass
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    for key, value in preserved_auth.items():
+        if value is not None:
+            st.session_state[key] = value
     st.session_state["_BAYYINAH_SKIP_AUTOSAVE_"] = True
     st.session_state["_BAYYINAH_CLEAR_BROWSER_SKETCH_"] = True
     try:
@@ -4325,6 +4512,7 @@ def _reset_new_accident():
     reset_page1_payload()
     st.session_state["_restore_perm_sidebar"] = True
     try:
+        images_dir = _select_images_dir(st.session_state.get("active_dept_id"))
         for adopted_name in (
             "adopted_sketch.png",
             "adopted_sketch_uri.txt",
@@ -4332,7 +4520,7 @@ def _reset_new_accident():
             "adopted_aerial_state.json",
             "report_media_mode.txt",
         ):
-            adopted = SAVED_IMAGES_DIR / adopted_name
+            adopted = images_dir / adopted_name
             if adopted.is_file():
                 adopted.unlink()
     except OSError:
@@ -5394,16 +5582,237 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# === MULTI_DEPT_AUTH_START ===
+def _auth_secret_bytes() -> bytes:
+    return str(_BAYYINAH_AUTH_SECRET).encode("utf-8")
+
+
+def _b64url_encode(raw: str) -> str:
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _b64url_decode(token: str) -> str:
+    pad = "=" * (-len(token) % 4)
+    return base64.urlsafe_b64decode((token + pad).encode("ascii")).decode("utf-8")
+
+
+def make_auth_token(dept_id: str, cid: str, ttl_sec: int = 60 * 60 * 24 * 45) -> str:
+    exp = int(time.time()) + int(ttl_sec)
+    payload = f"{dept_id}|{cid}|{exp}"
+    sig = hmac.new(_auth_secret_bytes(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+    return _b64url_encode(f"{payload}|{sig}")
+
+
+def verify_auth_token(token: str, cid: str) -> str | None:
+    """يعيد dept_id عند صحة التوقيع وتطابق cid وعدم انتهاء الصلاحية."""
+    if not token or not cid:
+        return None
+    try:
+        raw = _b64url_decode(str(token).strip())
+        parts = raw.split("|")
+        if len(parts) != 4:
+            return None
+        dept_id, token_cid, exp_s, sig = parts
+        if token_cid != cid:
+            return None
+        if dept_id not in DEPARTMENTS_CONFIG:
+            return None
+        if int(exp_s) < int(time.time()):
+            return None
+        payload = f"{dept_id}|{token_cid}|{exp_s}"
+        expect = hmac.new(_auth_secret_bytes(), payload.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expect, sig):
+            return None
+        return dept_id
+    except Exception:
+        return None
+
+
+def ensure_browser_cid() -> str:
+    try:
+        qp_cid = str(st.query_params.get("cid") or "").strip()
+    except Exception:
+        qp_cid = ""
+    # فضّل cid من الرابط لدعم F5 وعزل المسودات بين المتصفحات
+    cid = str(qp_cid or st.session_state.get("browser_cid") or "").strip()
+    if not cid or len(cid) < 8:
+        cid = secrets.token_urlsafe(16)
+    st.session_state["browser_cid"] = cid
+    return cid
+
+
+def configure_department_workspace(dept_id: str, cid: str) -> None:
+    """يربط مسارات الحفظ/المسودات/الصور بالقسم النشط ومعرف المتصفح."""
+    global SAVED_IMAGES_DIR, DRAFT_FILE_PATH, P1_AUTOSAVE_PATH, DEPT_STAFF_PATH
+    global DEPT_STAFF_STORAGE_KEY, _PERMANENT_FORM_DISK, DEFAULT_DEPT_STAFF
+    dept = str(dept_id or "ardah").strip() or "ardah"
+    st.session_state["active_dept_id"] = dept
+    st.session_state["browser_cid"] = cid
+    st.session_state["_auth_verified_ok"] = True
+    SAVED_IMAGES_DIR = _select_images_dir(dept)
+    try:
+        SAVED_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    DRAFT_FILE_PATH = get_draft_file_path(dept, cid, for_write=True)
+    P1_AUTOSAVE_PATH = get_p1_autosave_path(dept, cid, for_write=True)
+    DEPT_STAFF_PATH = get_dept_staff_path(dept)
+    DEPT_STAFF_STORAGE_KEY = get_dept_staff_storage_key(dept)
+    _PERMANENT_FORM_DISK = get_permanent_form_disk(dept)
+    DEFAULT_DEPT_STAFF = default_dept_staff_for(dept)
+    try:
+        import bayyinah_persistence as _bp_cfg
+        _bp_cfg.set_active_dept(dept)
+    except Exception:
+        pass
+
+
+def _resolve_logged_in_dept() -> str | None:
+    cid = ensure_browser_cid()
+    session_dept = str(st.session_state.get("active_dept_id") or "").strip()
+    if session_dept in DEPARTMENTS_CONFIG and st.session_state.get("_auth_verified_ok"):
+        return session_dept
+    try:
+        token = str(st.query_params.get("auth") or "").strip()
+    except Exception:
+        token = ""
+    dept = verify_auth_token(token, cid)
+    if dept:
+        st.session_state["active_dept_id"] = dept
+        st.session_state["_auth_verified_ok"] = True
+        return dept
+    return None
+
+
+def _render_department_login_gate() -> None:
+    traffic_logo = _APP_DIR / "traffic_logo.png"
+    st.markdown(
+        """
+        <style>
+        [data-testid="stSidebar"] { display: none !important; }
+        .bayyinah-login-wrap {
+            max-width: 460px; margin: 4vh auto 0 auto; text-align: center;
+            padding: 28px 24px 32px; border-radius: 18px;
+            background: linear-gradient(160deg, #0b1f33 0%, #12324d 55%, #0f2740 100%);
+            border: 1px solid rgba(125, 211, 252, 0.35);
+            box-shadow: 0 18px 40px rgba(2, 12, 27, 0.45);
+            color: #e2e8f0;
+        }
+        .bayyinah-login-wrap h1 {
+            font-size: 1.45rem; margin: 12px 0 6px; color: #f8fafc; font-weight: 800;
+        }
+        .bayyinah-login-wrap p { color: #94a3b8; margin: 0 0 8px; font-size: 0.95rem; }
+        </style>
+        """,
+        unsafe_allow_html=True,
+    )
+    left, center, right = st.columns([1, 1.35, 1])
+    with center:
+        st.markdown('<div class="bayyinah-login-wrap">', unsafe_allow_html=True)
+        if traffic_logo.is_file():
+            try:
+                st.image(str(traffic_logo), width=120)
+            except OSError:
+                pass
+        st.markdown("<h1>منظومة بينة الذكي للحوادث المرورية</h1>", unsafe_allow_html=True)
+        st.markdown("<p>بوابة الدخول الرسمية — أدخل رمز القسم المعتمد</p>", unsafe_allow_html=True)
+        with st.form("dept_pin_login_form", clear_on_submit=False):
+            pin_value = st.text_input(
+                "رمز الدخول الخاص بالقسم (PIN)",
+                type="password",
+            )
+            submitted = st.form_submit_button("دخول", use_container_width=True)
+        if submitted:
+            entered = str(pin_value or "").strip()
+            matched = None
+            for dept_id, cfg in DEPARTMENTS_CONFIG.items():
+                expected_pin = str(cfg.get("pin") or "")
+                if len(entered) == len(expected_pin) and hmac.compare_digest(expected_pin, entered):
+                    matched = dept_id
+                    break
+            if matched:
+                cid = ensure_browser_cid()
+                token = make_auth_token(matched, cid)
+                st.session_state["active_dept_id"] = matched
+                st.session_state["browser_cid"] = cid
+                st.session_state["_auth_verified_ok"] = True
+                st.query_params.clear()
+                st.query_params["auth"] = token
+                st.query_params["cid"] = cid
+                configure_department_workspace(matched, cid)
+                st.rerun()
+            else:
+                st.error("رمز الدخول غير صحيح. تحقق من PIN الخاص بقسمك.")
+        st.markdown("</div>", unsafe_allow_html=True)
+
+
+def logout_department_session() -> None:
+    """تسجيل خروج آمن: مسح auth من الرابط وتفريغ الجلسة دون تعيين مفاتيح ودجات."""
+    try:
+        st.query_params.clear()
+    except Exception:
+        pass
+    for key in list(st.session_state.keys()):
+        try:
+            del st.session_state[key]
+        except Exception:
+            st.session_state.pop(key, None)
+
+
+def render_department_sidebar_badge() -> None:
+    dept_id = str(st.session_state.get("active_dept_id") or "").strip()
+    cfg = DEPARTMENTS_CONFIG.get(dept_id) or {}
+    name = cfg.get("name") or dept_id or "—"
+    st.markdown(
+        f"""
+        <div style="margin:4px 0 12px;padding:10px 12px;border-radius:12px;
+        background:linear-gradient(135deg,rgba(14,116,144,0.35),rgba(8,47,73,0.55));
+        border:1px solid rgba(56,189,248,0.4);color:#e0f2fe;font-weight:700;text-align:center;">
+        🏛️ {html.escape(str(name))}
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if st.button("🚪 تسجيل الخروج / تبديل الجهة", key="_dept_logout_btn", use_container_width=True):
+        logout_department_session()
+        st.rerun()
+
+
+_active_login_dept = _resolve_logged_in_dept()
+if not _active_login_dept:
+    _render_department_login_gate()
+    st.stop()
+configure_department_workspace(_active_login_dept, ensure_browser_cid())
+# ثبّت auth+cid في الرابط لدعم F5 — لا تجدّد التوقيع إن كان صالحاً (تفادي تغيّر exp كل دورة)
+try:
+    _cid_now = ensure_browser_cid()
+    _existing_auth = str(st.query_params.get("auth") or "").strip()
+    if verify_auth_token(_existing_auth, _cid_now) != _active_login_dept:
+        st.query_params["auth"] = make_auth_token(_active_login_dept, _cid_now)
+    if str(st.query_params.get("cid") or "") != _cid_now:
+        st.query_params["cid"] = _cid_now
+except Exception:
+    pass
+# === MULTI_DEPT_AUTH_END ===
+
 # === BAYYINAH_PERSIST_HOOK_START ===
 import bayyinah_persistence as _bayyinah_persist
 import bayyinah_a4_fitter as _bayyinah_a4
+_bayyinah_persist.set_active_dept(_active_login_dept)
 _bayyinah_persist.activate(__file__)
 _bayyinah_a4.install_report_fitter()
 # === BAYYINAH_PERSIST_HOOK_END ===
 
 # === PERSISTENT_AUTOSAVE_START ===
-# نسخة احتياطية خفيفة بجانب المسودة اليدوية (bayyinah_autosave_draft.json) — لا تمنع تحميل المسودة.
-_PERSIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".bayyinah_saved_state.json")
+# نسخة احتياطية خفيفة بجانب المسودة اليدوية — مسار معزول لكل قسم.
+def _persist_file_path() -> str:
+    dept = str(st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    if dept == "ardah":
+        return str(_APP_DIR / ".bayyinah_saved_state.json")
+    return str(_tenant_root(dept) / ".bayyinah_saved_state.json")
+
+
+_PERSIST_FILE = _persist_file_path()
 _PERSIST_SKIP_KEYS = frozenset({
     "state_initialized",
     "_persist_restored_ok",
@@ -5502,7 +5911,9 @@ def _save_bayyinah_state():
         except Exception:
             continue
     try:
-        with open(_PERSIST_FILE, "w", encoding="utf-8") as f:
+        persist_path = _persist_file_path()
+        Path(persist_path).parent.mkdir(parents=True, exist_ok=True)
+        with open(persist_path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2, default=str)
         return True
     except Exception:
@@ -5513,13 +5924,14 @@ def _load_bayyinah_state_once():
     if st.session_state.get("_persist_restored_ok"):
         return
     st.session_state["_persist_restored_ok"] = True
-    if not os.path.exists(_PERSIST_FILE):
+    persist_path = _persist_file_path()
+    if not os.path.exists(persist_path):
         return
     # إن وُجدت مسودة يدوية فهي المصدر المعتمد عند init_and_load_state
-    if os.path.exists(DRAFT_FILE_PATH):
+    if os.path.exists(get_draft_file_path()):
         return
     try:
-        with open(_PERSIST_FILE, "r", encoding="utf-8") as f:
+        with open(persist_path, "r", encoding="utf-8") as f:
             data = json.load(f)
         if not isinstance(data, dict):
             return
@@ -5548,17 +5960,20 @@ def _load_bayyinah_state_once():
 
 def _clear_bayyinah_saved_state():
     try:
-        if os.path.exists(_PERSIST_FILE):
-            os.remove(_PERSIST_FILE)
+        persist_path = _persist_file_path()
+        if os.path.exists(persist_path):
+            os.remove(persist_path)
     except Exception:
         pass
-    for stale in ("bayyinah_saved_state.json",):
-        try:
-            p = os.path.join(os.path.dirname(os.path.abspath(__file__)), stale)
-            if os.path.exists(p):
-                os.remove(p)
-        except Exception:
-            pass
+    dept = str(st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
+    if dept == "ardah":
+        for stale in ("bayyinah_saved_state.json",):
+            try:
+                p = os.path.join(os.path.dirname(os.path.abspath(__file__)), stale)
+                if os.path.exists(p):
+                    os.remove(p)
+            except Exception:
+                pass
 
 _load_bayyinah_state_once()
 # === PERSISTENT_AUTOSAVE_END ===
@@ -6149,6 +6564,7 @@ if 'parties' not in st.session_state:
 if 'vehicles' not in st.session_state:
     st.session_state.vehicles = _clone_page1_value(st.session_state.get("p1_vehicles_records") or _blank_vehicles())
 with st.sidebar:
+    render_department_sidebar_badge()
     if _bayyinah_logo_ready():
         try:
             st.image(str(_bayyinah_logo_path), width=148)
@@ -8791,10 +9207,16 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     manager_name = _page1_cell(st.session_state.get("manager_name") or manager_name)
     manager_rank = _page1_cell(st.session_state.get("manager_rank") or manager_rank)
     # أعمدة جدول معد التقرير الفعلية فقط — بلا td/th فارغة يساراً؛ colspan = عدد الأعمدة
+    _mgr_title = str(
+        st.session_state.get("manager_title")
+        or (load_permanent_dept_staff() or {}).get("manager_title")
+        or default_dept_staff_for().get("manager_title")
+        or f"مدير {dept_branch}"
+    ).strip()
     sign_headers = [
         "إجراءات الحوادث",
         "مشرف الحوادث",
-        f"مدير {dept_branch}",
+        _mgr_title,
     ]
     sign_names = [officer_1_name, officer_2_name, manager_name]
     sign_ranks = [officer_1_rank, officer_2_rank, manager_rank]

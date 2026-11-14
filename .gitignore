@@ -6,7 +6,12 @@ saved_logo.png
 .streamlit/
 bayyinah_autosave_draft.json
 .p1_autosave_draft.json
+.p1_autosave_draft_*.json
 .bayyinah_dept_staff.json
+.bayyinah_dept_staff_*.json
+draft_*.json
+workspace_taif/
+workspace_*/
 download/
 UXZJaanG.py
 .bayyinah_persistence/

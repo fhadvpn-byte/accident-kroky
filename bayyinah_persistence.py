@@ -12,9 +12,47 @@ from typing import Any
 
 import streamlit as st
 
-_STORE_DIR = Path(__file__).resolve().parent / ".bayyinah_persistence"
+_APP_ROOT = Path(__file__).resolve().parent
+# العارضة (ardah): المسارات القديمة في جذر المشروع بلا فقدان بيانات.
+# الطائف وغيره: workspace_{dept_id}/.bayyinah_persistence/
+_LEGACY_STORE_DIR = _APP_ROOT / ".bayyinah_persistence"
+_active_dept_id: str = "ardah"
+_STORE_DIR = _LEGACY_STORE_DIR
 _STORE_FILE = _STORE_DIR / "active_workspace.pkl"
 _META_FILE = _STORE_DIR / "meta.json"
+
+
+def get_active_dept_id() -> str:
+    return str(_active_dept_id or "ardah")
+
+
+def tenant_root(dept_id: str | None = None) -> Path:
+    """جذر ملفات القسم: ardah = جذر المشروع (قديم)، غيره = workspace_{id}/."""
+    dept = str(dept_id or _active_dept_id or "ardah").strip() or "ardah"
+    if dept == "ardah":
+        return _APP_ROOT
+    root = _APP_ROOT / f"workspace_{dept}"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def persistence_dir(dept_id: str | None = None) -> Path:
+    dept = str(dept_id or _active_dept_id or "ardah").strip() or "ardah"
+    if dept == "ardah":
+        return _LEGACY_STORE_DIR
+    return tenant_root(dept) / ".bayyinah_persistence"
+
+
+def set_active_dept(dept_id: str) -> Path:
+    """يضبط مجلد الخزنة للقسم النشط قبل أي حفظ/استرجاع."""
+    global _active_dept_id, _STORE_DIR, _STORE_FILE, _META_FILE
+    dept = str(dept_id or "ardah").strip() or "ardah"
+    _active_dept_id = dept
+    _STORE_DIR = persistence_dir(dept)
+    _STORE_FILE = _STORE_DIR / "active_workspace.pkl"
+    _META_FILE = _STORE_DIR / "meta.json"
+    _ensure_dir()
+    return _STORE_DIR
 
 # مفاتيح الوسائط المعتمدة — تُحفظ وتُسترجع صراحة ولا تُمسَح عند التنقل/الحفظ
 MEDIA_KEYS = (
