@@ -1892,6 +1892,23 @@ def _party_result_role_name(party_index: int, party_row: dict) -> str:
     return name or party_label
 
 
+def _strip_results_lead_in(text: str) -> str:
+    """احذف «نتج عن الحادث :» / «نتج عن الحادث:» من بداية نتائج الحادث."""
+    lead_ins = ("نتج عن الحادث :", "نتج عن الحادث:")
+    out_lines = []
+    for line in str(text or "").split("\n"):
+        stripped = line.strip()
+        if stripped in lead_ins or stripped == "نتج عن الحادث":
+            continue
+        for prefix in lead_ins:
+            if stripped.startswith(prefix):
+                stripped = stripped[len(prefix):].lstrip(" \u00a0\t")
+                line = stripped
+                break
+        out_lines.append(line)
+    return "\n".join(out_lines).strip()
+
+
 def build_accident_results_text() -> str:
     """توليد نتائج الحادث من وفيات/إصابات الأطراف ثم تلفيات المركبات والبنود الإضافية."""
     lines = []
@@ -1935,7 +1952,9 @@ def build_accident_results_text() -> str:
         return ""
     numbered = []
     for i, line in enumerate(lines, start=1):
-        clean = line.rstrip(".").strip()
+        clean = _strip_results_lead_in(line.rstrip(".")).strip()
+        if not clean:
+            continue
         numbered.append(f"{i}- {clean}.")
     return "\n".join(numbered)
 
@@ -6184,6 +6203,10 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         kept_results = _extract_marked_block(st.session_state.get("accident_results", ""))
         generated_results = build_accident_results_text()
         st.session_state.accident_results = _upsert_marked_block(generated_results, kept_results)
+    # نظّف البادئة القديمة من النص المعروض/المحفوظ قبل مربع المعاينة
+    _cleaned_results = _strip_results_lead_in(st.session_state.get("accident_results", ""))
+    if _cleaned_results != str(st.session_state.get("accident_results") or ""):
+        st.session_state.accident_results = _cleaned_results
     st.session_state.results_data_fingerprint = results_fp
 
     acc_results = st.text_area(
@@ -7103,6 +7126,7 @@ def build_official_page_footer_html(dept_region: str, dept_section: str) -> str:
     """
 
 def generate_clean_print_html(how_text, results_text, show_numbers=False):
+    results_text = _strip_results_lead_in(results_text)
     page_counter_css = """
         @bottom-center {
             content: "صفحة " counter(page) " من " counter(pages);
@@ -7596,6 +7620,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     shots_fired = _page1_cell(shots_fired)
     contraband_found = _page1_cell(contraband_found)
     road_name_sign = _page1_cell(road_name_sign)
+    acc_results = _strip_results_lead_in(acc_results)
     results_html = "<br>".join(html.escape(line) for line in str(acc_results or "").split("\n") if line.strip())
     acc_how_html = html.escape(str(acc_how or "")).replace("\n", "<br>")
     a4_autofit_base_font_px = _estimate_a4_autofit_base_font_px(
@@ -8779,7 +8804,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             {build_header()}
             <div class="page-body page-body-flex autofit-page-body">
             <div class="section-badge">نتائج الحادث</div>
-            <div class="box-content autofit-box section-box content-box report-box results-box" data-autofit="results">نتج عن الحادث :<br>{results_html}</div>
+            <div class="box-content autofit-box section-box content-box report-box results-box" data-autofit="results">{results_html}</div>
             <div class="section-badge">كيفية وقوع الحادث</div>
             <div class="box-content autofit-box section-box content-box report-box how-happened-box" data-autofit="how">{acc_how_html}</div>
             {liability_html}
