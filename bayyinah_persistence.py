@@ -40,6 +40,20 @@ MEDIA_KEYS = (
 
 # ظل التبويب 3 + مفاتيحه — لا تُحذف أبداً إلا عند حادث جديد
 FORM_SHADOW_KEY = "_PERMANENT_FORM_DATA_"
+TAB3_LOCKED_TEXT_KEYS = (
+    "saved_accident_results_text",
+    "accident_results_is_manual",
+    "accident_results_rev",
+    "saved_technical_description_text",
+    "technical_description_is_manual",
+    "technical_description_rev",
+    "saved_p1_reasons_text",
+    "p1_reasons_is_manual",
+    "p1_reasons_rev",
+    "saved_p2_reasons_text",
+    "p2_reasons_is_manual",
+    "p2_reasons_rev",
+)
 TAB3_KEYS = (
     FORM_SHADOW_KEY,
     "selected_articles",
@@ -56,6 +70,7 @@ TAB3_KEYS = (
     "p2_title",
     "p1_reasons",
     "p2_reasons",
+    *TAB3_LOCKED_TEXT_KEYS,
     "liability_html",
     "acc_nature_sel",
     "acc_nature_custom",
@@ -207,6 +222,9 @@ def _is_ui_widget_key(key: str) -> bool:
         return True
     if key.startswith("FormSubmitter:"):
         return True
+    # ودجات text_area المقفلة في التبويب3: field_ta_{rev} وزر الاستعادة
+    if "_ta_" in key or key.startswith("restore_auto_"):
+        return True
     kl = key.lower()
     if "download" in kl or "form_submit" in kl:
         return True
@@ -219,7 +237,10 @@ def _is_ui_widget_key(key: str) -> bool:
     # مفاتيح منتقي الهجري الداخلية المرتبطة بودجات
     if key.endswith("_manual_in") or key.endswith("_sel_month_ui") or key.endswith("_sel_year_ui"):
         return True
-    if "_lux_" in key or key.endswith("_manual"):
+    if "_lux_" in key:
+        return True
+    # *_is_manual بيانات (قفل النص) وليست ودجت؛ *_manual قديمة للهجري تُستثنى إن انتهت بـ _manual فقط دون is_
+    if key.endswith("_manual") and not key.endswith("_is_manual"):
         return True
     if key in _WIDGET_ACCIDENT_KEYS:
         return True

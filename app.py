@@ -742,14 +742,23 @@ def render_legal_articles_inserter(selected_articles: list, p1_reasons_key: str 
         return
 
     def _append_articles(target_key: str):
-        existing = str(st.session_state.get(target_key, "") or "").strip()
+        # اكتب في saved_* إن كان الحقل من نصوص التبويب3 المقفلة
+        if target_key in TAB3_LOCKED_TEXT_BY_ID:
+            existing = _read_tab3_saved_text(target_key)
+        else:
+            existing = str(st.session_state.get(target_key, "") or "").strip()
         existing_lines = [ln.strip() for ln in existing.splitlines() if ln.strip()]
         for art in selected_articles:
             cite = _format_article_cite_for_report(art)
             formatted_art = f"استناداً إلى {cite} من نظام المرور ولائحته التنفيذية."
             if formatted_art not in existing_lines:
                 existing_lines.append(formatted_art)
-        st.session_state[target_key] = "\n".join(existing_lines)
+        joined = "\n".join(existing_lines)
+        if target_key in TAB3_LOCKED_TEXT_BY_ID:
+            _write_tab3_saved_text(target_key, joined, mark_manual=True)
+            _bump_tab3_text_rev(target_key)
+        else:
+            st.session_state[target_key] = joined
 
     ins_c1, ins_c2 = st.columns(2)
     with ins_c1:
@@ -1912,6 +1921,39 @@ DEFAULT_REPORT_STATE = {
 }
 
 # مفاتيح تبويب 3 الثابتة (مواد / قرائن / نسب / نصوص) — لا تُمسَح عند مغادرة التبويب
+# حقول نص التبويب3 المقفلة: saved_*_text مصدر الحقيقة + *_is_manual + *_rev لمفتاح الودجت
+TAB3_LOCKED_TEXT_SPECS = (
+    {
+        "id": "accident_results",
+        "saved": "saved_accident_results_text",
+        "manual": "accident_results_is_manual",
+        "rev": "accident_results_rev",
+    },
+    {
+        "id": "technical_description",
+        "saved": "saved_technical_description_text",
+        "manual": "technical_description_is_manual",
+        "rev": "technical_description_rev",
+    },
+    {
+        "id": "p1_reasons",
+        "saved": "saved_p1_reasons_text",
+        "manual": "p1_reasons_is_manual",
+        "rev": "p1_reasons_rev",
+        "mirrors": ("legal_opinion",),
+    },
+    {
+        "id": "p2_reasons",
+        "saved": "saved_p2_reasons_text",
+        "manual": "p2_reasons_is_manual",
+        "rev": "p2_reasons_rev",
+    },
+)
+TAB3_LOCKED_TEXT_BY_ID = {spec["id"]: spec for spec in TAB3_LOCKED_TEXT_SPECS}
+TAB3_LOCKED_SAVED_KEYS = tuple(spec["saved"] for spec in TAB3_LOCKED_TEXT_SPECS)
+TAB3_LOCKED_MANUAL_KEYS = tuple(spec["manual"] for spec in TAB3_LOCKED_TEXT_SPECS)
+TAB3_LOCKED_REV_KEYS = tuple(spec["rev"] for spec in TAB3_LOCKED_TEXT_SPECS)
+
 TAB3_PERMANENT_KEYS = (
     "selected_articles",
     "accident_results",
@@ -1927,6 +1969,9 @@ TAB3_PERMANENT_KEYS = (
     "p2_title",
     "p1_reasons",
     "p2_reasons",
+    *TAB3_LOCKED_SAVED_KEYS,
+    *TAB3_LOCKED_MANUAL_KEYS,
+    *TAB3_LOCKED_REV_KEYS,
     "liability_html",
     "acc_nature_sel",
     "acc_nature_custom",
@@ -1982,6 +2027,129 @@ def _clone_form_value(value):
     if isinstance(value, tuple):
         return tuple(value)
     return value
+
+
+def _ensure_tab3_locked_text_defaults() -> None:
+    for spec in TAB3_LOCKED_TEXT_SPECS:
+        st.session_state.setdefault(spec["saved"], "")
+        st.session_state.setdefault(spec["manual"], False)
+        st.session_state.setdefault(spec["rev"], 0)
+        # ترحيل القيم القديمة من مفتاح المرآة إن وُجدت
+        legacy = st.session_state.get(spec["id"])
+        if _is_blank_form_value(st.session_state.get(spec["saved"])) and not _is_blank_form_value(legacy):
+            st.session_state[spec["saved"]] = str(legacy)
+
+
+def _tab3_text_widget_key(field_id: str) -> str:
+    rev = int(st.session_state.get(f"{field_id}_rev") or 0)
+    return f"{field_id}_ta_{rev}"
+
+
+def _read_tab3_saved_text(field_id: str) -> str:
+    spec = TAB3_LOCKED_TEXT_BY_ID.get(field_id)
+    if not spec:
+        return str(st.session_state.get(field_id) or "")
+    saved = st.session_state.get(spec["saved"])
+    if saved is not None and str(saved) != "":
+        return str(saved)
+    if spec["saved"] in st.session_state:
+        return str(saved or "")
+    return str(st.session_state.get(field_id) or "")
+
+
+def _write_tab3_saved_text(field_id: str, text: str, *, mark_manual: bool | None = None) -> None:
+    spec = TAB3_LOCKED_TEXT_BY_ID.get(field_id)
+    if not spec:
+        st.session_state[field_id] = text
+        return
+    st.session_state[spec["saved"]] = str(text or "")
+    # مرآة للتوافق مع الكود القديم/الظل — ليست مفتاح ودجت
+    st.session_state[field_id] = st.session_state[spec["saved"]]
+    for mirror in spec.get("mirrors") or ():
+        st.session_state[mirror] = st.session_state[spec["saved"]]
+    if mark_manual is True:
+        st.session_state[spec["manual"]] = True
+    elif mark_manual is False:
+        st.session_state[spec["manual"]] = False
+
+
+def _tab3_text_is_manual(field_id: str) -> bool:
+    spec = TAB3_LOCKED_TEXT_BY_ID.get(field_id)
+    if not spec:
+        return False
+    return bool(st.session_state.get(spec["manual"]))
+
+
+def _make_tab3_text_on_change(field_id: str, widget_key: str):
+    def _on_change() -> None:
+        _write_tab3_saved_text(
+            field_id,
+            st.session_state.get(widget_key, ""),
+            mark_manual=True,
+        )
+        try:
+            sync_permanent_form_data(reason=f"tab3_text_{field_id}")
+        except Exception:
+            pass
+
+    return _on_change
+
+
+def _bump_tab3_text_rev(field_id: str) -> None:
+    spec = TAB3_LOCKED_TEXT_BY_ID.get(field_id)
+    if not spec:
+        return
+    try:
+        st.session_state[spec["rev"]] = int(st.session_state.get(spec["rev"]) or 0) + 1
+    except (TypeError, ValueError):
+        st.session_state[spec["rev"]] = 1
+
+
+def render_tab3_locked_text_area(field_id: str, label: str, height: int = 110):
+    """text_area مثبت: on_change يحفظ ويقفل؛ زر استعادة تلقائية يرفع rev."""
+    _ensure_tab3_locked_text_defaults()
+    spec = TAB3_LOCKED_TEXT_BY_ID[field_id]
+    rev = int(st.session_state.get(spec["rev"]) or 0)
+    widget_key = _tab3_text_widget_key(field_id)
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = _read_tab3_saved_text(field_id)
+    head_l, head_r = st.columns([4, 1.2])
+    with head_r:
+        if _tab3_text_is_manual(field_id):
+            st.caption("🔒 تعديل يدوي")
+        if st.button(
+            "استعادة تلقائية",
+            key=f"restore_auto_{field_id}_{rev}",
+            use_container_width=True,
+        ):
+            st.session_state[spec["manual"]] = False
+            _bump_tab3_text_rev(field_id)
+            st.rerun()
+    with head_l:
+        st.text_area(
+            label,
+            key=widget_key,
+            height=height,
+            on_change=_make_tab3_text_on_change(field_id, widget_key),
+        )
+    # حافظ على المرآة بعد الرسم
+    _write_tab3_saved_text(
+        field_id,
+        st.session_state.get(widget_key, _read_tab3_saved_text(field_id)),
+        mark_manual=None,
+    )
+    return _read_tab3_saved_text(field_id)
+
+
+def _set_tab3_generated_text(field_id: str, generated: str) -> bool:
+    """ولّد إلى saved_* فقط إن لم يكن النص مقفولاً يدوياً."""
+    if _tab3_text_is_manual(field_id):
+        return False
+    current = _read_tab3_saved_text(field_id)
+    kept = _extract_marked_block(current)
+    merged = _upsert_marked_block(str(generated or ""), kept)
+    _write_tab3_saved_text(field_id, merged, mark_manual=False)
+    return True
 
 
 def compute_tab3_content_fingerprint() -> tuple:
@@ -2180,7 +2348,20 @@ def reinject_permanent_form_data() -> int:
 
 
 def get_form_value(key: str, default=None):
-    """قراءة من session مع fallback لظل _PERMANENT_FORM_DATA_."""
+    """قراءة من session مع fallback لظل _PERMANENT_FORM_DATA_ — نصوص التبويب3 من saved_*."""
+    spec = TAB3_LOCKED_TEXT_BY_ID.get(key)
+    if spec:
+        saved_val = st.session_state.get(spec["saved"])
+        if not _is_blank_form_value(saved_val):
+            return saved_val
+        shadow = st.session_state.get("_PERMANENT_FORM_DATA_")
+        if isinstance(shadow, dict):
+            sh_saved = shadow.get(spec["saved"])
+            if not _is_blank_form_value(sh_saved):
+                return sh_saved
+            sh_legacy = shadow.get(key)
+            if not _is_blank_form_value(sh_legacy):
+                return sh_legacy
     if key in st.session_state and not _is_blank_form_value(st.session_state.get(key)):
         return st.session_state.get(key)
     shadow = st.session_state.get("_PERMANENT_FORM_DATA_")
@@ -3171,23 +3352,19 @@ def _apply_marked_analysis(parsed):
     legal_text = str((parsed or {}).get("legal_opinion") or "").strip()
     if not how_text and not results_text and not legal_text:
         return False
-    if how_text:
-        st.session_state.technical_description = _upsert_marked_block(
-            st.session_state.get("technical_description", ""),
-            how_text,
-        )
-    if results_text:
-        st.session_state.accident_results = _upsert_marked_block(
-            st.session_state.get("accident_results", ""),
-            results_text,
-        )
-    if legal_text:
-        merged_reasons = _upsert_marked_block(
-            st.session_state.get("p1_reasons", st.session_state.get("legal_opinion", "")),
-            legal_text,
-        )
-        st.session_state.p1_reasons = merged_reasons
-        st.session_state.legal_opinion = merged_reasons
+    _ensure_tab3_locked_text_defaults()
+    if how_text and not _tab3_text_is_manual("technical_description"):
+        merged = _upsert_marked_block(_read_tab3_saved_text("technical_description"), how_text)
+        _write_tab3_saved_text("technical_description", merged, mark_manual=False)
+        _bump_tab3_text_rev("technical_description")
+    if results_text and not _tab3_text_is_manual("accident_results"):
+        merged = _upsert_marked_block(_read_tab3_saved_text("accident_results"), results_text)
+        _write_tab3_saved_text("accident_results", merged, mark_manual=False)
+        _bump_tab3_text_rev("accident_results")
+    if legal_text and not _tab3_text_is_manual("p1_reasons"):
+        merged = _upsert_marked_block(_read_tab3_saved_text("p1_reasons"), legal_text)
+        _write_tab3_saved_text("p1_reasons", merged, mark_manual=False)
+        _bump_tab3_text_rev("p1_reasons")
     st.session_state.video_injected_text = how_text or results_text or legal_text
     return True
 
@@ -3200,10 +3377,25 @@ def insert_manual_video_evidence():
     })
 
 def remove_manual_video_evidence():
-    st.session_state.technical_description = _strip_marked_block(st.session_state.get("technical_description", ""))
-    st.session_state.accident_results = _strip_marked_block(st.session_state.get("accident_results", ""))
-    st.session_state.p1_reasons = _strip_marked_block(st.session_state.get("p1_reasons", st.session_state.get("legal_opinion", "")))
-    st.session_state.legal_opinion = st.session_state.p1_reasons
+    _ensure_tab3_locked_text_defaults()
+    _write_tab3_saved_text(
+        "technical_description",
+        _strip_marked_block(_read_tab3_saved_text("technical_description")),
+        mark_manual=None,
+    )
+    _write_tab3_saved_text(
+        "accident_results",
+        _strip_marked_block(_read_tab3_saved_text("accident_results")),
+        mark_manual=None,
+    )
+    _write_tab3_saved_text(
+        "p1_reasons",
+        _strip_marked_block(_read_tab3_saved_text("p1_reasons")),
+        mark_manual=None,
+    )
+    _bump_tab3_text_rev("technical_description")
+    _bump_tab3_text_rev("accident_results")
+    _bump_tab3_text_rev("p1_reasons")
     st.session_state.video_injected_text = ""
 
 def _local_secrets_file():
@@ -3434,16 +3626,15 @@ def _message_content(prompt, frames):
 def _apply_section_analysis(how_text, results_text):
     if not how_text and not results_text:
         return False
-    if how_text:
-        st.session_state.technical_description = _upsert_marked_block(
-            st.session_state.get("technical_description", ""),
-            how_text,
-        )
-    if results_text:
-        st.session_state.accident_results = _upsert_marked_block(
-            st.session_state.get("accident_results", ""),
-            results_text,
-        )
+    _ensure_tab3_locked_text_defaults()
+    if how_text and not _tab3_text_is_manual("technical_description"):
+        merged = _upsert_marked_block(_read_tab3_saved_text("technical_description"), how_text)
+        _write_tab3_saved_text("technical_description", merged, mark_manual=False)
+        _bump_tab3_text_rev("technical_description")
+    if results_text and not _tab3_text_is_manual("accident_results"):
+        merged = _upsert_marked_block(_read_tab3_saved_text("accident_results"), results_text)
+        _write_tab3_saved_text("accident_results", merged, mark_manual=False)
+        _bump_tab3_text_rev("accident_results")
     st.session_state.video_injected_text = how_text or results_text
     return True
 
@@ -4766,6 +4957,9 @@ _BAYYINAH_JSON_DATA_WHITELIST = frozenset({
     "legal_opinion", "p1_reasons", "p2_reasons", "liability_html",
     "accident_nature", "rights_status", "gallery_photos", "accident_photos_data",
     "active_tab", "last_saved_time", "acc_loc_value",
+    *TAB3_LOCKED_SAVED_KEYS,
+    *TAB3_LOCKED_MANUAL_KEYS,
+    *TAB3_LOCKED_REV_KEYS,
 })
 
 def _is_persist_ui_widget_key(key: str) -> bool:
@@ -4773,6 +4967,9 @@ def _is_persist_ui_widget_key(key: str) -> bool:
     if _is_persist_file_camera_key(ks):
         return True
     if ks in WIDGET_TO_SAVED_ACC or ks in ("p1_acc_type_choice", "p1_acc_weather_choice"):
+        return True
+    # ودجات text_area المقفلة + زر الاستعادة — ليست بيانات
+    if "_ta_" in ks or ks.startswith("restore_auto_"):
         return True
     kl = ks.lower()
     if ks.startswith("FormSubmitter:") or "download" in kl or "form_submit" in kl:
@@ -6396,13 +6593,18 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         reinject_permanent_form_data()
     except Exception:
         pass
+    _ensure_tab3_locked_text_defaults()
     st.subheader("📚 محرك المواد النظامية وفروعها")
     if st.session_state.get("acc_how_override"):
-        kept_override = _extract_marked_block(st.session_state.get("technical_description", ""))
-        st.session_state.technical_description = _upsert_marked_block(
-            st.session_state.pop("acc_how_override"),
-            kept_override,
-        )
+        override_text = st.session_state.pop("acc_how_override")
+        if not _tab3_text_is_manual("technical_description"):
+            kept_override = _extract_marked_block(_read_tab3_saved_text("technical_description"))
+            _write_tab3_saved_text(
+                "technical_description",
+                _upsert_marked_block(override_text, kept_override),
+                mark_manual=False,
+            )
+            _bump_tab3_text_rev("technical_description")
     valid_article_ids = [article["id"] for article in TRAFFIC_LAW_ARTICLES]
     stored_articles = st.session_state.get("selected_articles")
     if not isinstance(stored_articles, list):
@@ -6426,13 +6628,13 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         p2_reasons_key="p2_reasons",
     )
     generated_fields = generate_accident_report_fields(selected_law_ids)
-    # لا تعِد توليد كيفية الوقوع/الرأي إلا عند تغير بصمة المواد/القرائن/النسب
+    # لا تعِد توليد كيفية الوقوع/الرأي إلا عند تغير بصمة المواد/القرائن/النسب — وبدون الكتابة فوق النص اليدوي
     st.session_state.law_selection_sig = tuple(selected_law_ids)
     content_fp = compute_tab3_content_fingerprint()
     previous_fp = st.session_state.get("tab3_content_fingerprint")
     texts_already = (
-        not _is_blank_form_value(st.session_state.get("technical_description"))
-        or not _is_blank_form_value(st.session_state.get("p1_reasons"))
+        not _is_blank_form_value(_read_tab3_saved_text("technical_description"))
+        or not _is_blank_form_value(_read_tab3_saved_text("p1_reasons"))
     )
     should_regen = False
     if previous_fp is None:
@@ -6441,12 +6643,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     elif previous_fp != content_fp:
         should_regen = True
     if should_regen:
-        kept_tech = _extract_marked_block(st.session_state.get("technical_description", ""))
-        st.session_state.technical_description = _upsert_marked_block(generated_fields["technicalDraftText"], kept_tech)
-        kept_legal = _extract_marked_block(st.session_state.get("p1_reasons", st.session_state.get("legal_opinion", "")))
-        merged_opinion = _upsert_marked_block(generated_fields["legalOpinionText"], kept_legal)
-        st.session_state.p1_reasons = merged_opinion
-        st.session_state.legal_opinion = merged_opinion
+        _set_tab3_generated_text("technical_description", generated_fields["technicalDraftText"])
+        _set_tab3_generated_text("p1_reasons", generated_fields["legalOpinionText"])
     st.session_state.tab3_content_fingerprint = content_fp
     if generated_fields["hasCriminalSuspicion"]:
         st.warning("تشمل المواد المختارة شقاً جنائياً أو شبه جنائي، وتُحال إلى الشرطة أو النيابة.")
@@ -6489,38 +6687,37 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
                 placeholder="مثلاً: تلفيات عمود إنارة / سياج",
             )
 
-    # نتائج الحادث من الأطراف/المركبات (+ البنود الإضافية) — مستقلة عن مواد النظام
+    # نتائج الحادث من الأطراف/المركبات — لا تُكتب فوق النص إن is_manual
     results_fp = compute_results_data_fingerprint()
     previous_results_fp = st.session_state.get("results_data_fingerprint")
     should_regen_results = previous_results_fp is None or previous_results_fp != results_fp
-    if should_regen_results:
-        kept_results = _extract_marked_block(st.session_state.get("accident_results", ""))
-        generated_results = build_accident_results_text()
-        st.session_state.accident_results = _upsert_marked_block(generated_results, kept_results)
-    # نظّف البادئة القديمة من النص المعروض/المحفوظ قبل مربع المعاينة
-    _cleaned_results = _strip_results_lead_in(st.session_state.get("accident_results", ""))
-    if _cleaned_results != str(st.session_state.get("accident_results") or ""):
-        st.session_state.accident_results = _cleaned_results
+    if should_regen_results and not _tab3_text_is_manual("accident_results"):
+        generated_results = _strip_results_lead_in(build_accident_results_text())
+        _set_tab3_generated_text("accident_results", generated_results)
+    elif not _tab3_text_is_manual("accident_results"):
+        _cleaned_results = _strip_results_lead_in(_read_tab3_saved_text("accident_results"))
+        if _cleaned_results != _read_tab3_saved_text("accident_results"):
+            _write_tab3_saved_text("accident_results", _cleaned_results, mark_manual=False)
     st.session_state.results_data_fingerprint = results_fp
 
-    acc_results = st.text_area(
+    acc_results = render_tab3_locked_text_area(
+        "accident_results",
         "نتائج الحادث (معاينة/تعديل يدوي قبل الطباعة)",
-        key="accident_results",
         height=110,
     )
-    acc_how = st.text_area(
+    acc_how = render_tab3_locked_text_area(
+        "technical_description",
         "كيفية وقوع الحادث (الصياغة الفنية الدقيقة)",
-        key="technical_description",
-        height=140
+        height=140,
     )
     if "p1_title_input" not in st.session_state:
         st.session_state.p1_title_input = DEFAULT_REPORT_STATE["p1_title_input"]
     if "p2_custom_title" not in st.session_state:
         st.session_state.p2_custom_title = DEFAULT_REPORT_STATE["p2_custom_title"]
-    if "p1_reasons" not in st.session_state:
-        st.session_state.p1_reasons = DEFAULT_REPORT_STATE["p1_reasons"]
-    if "p2_reasons" not in st.session_state:
-        st.session_state.p2_reasons = DEFAULT_REPORT_STATE["p2_reasons"]
+    if "p1_reasons" not in st.session_state and _is_blank_form_value(_read_tab3_saved_text("p1_reasons")):
+        _write_tab3_saved_text("p1_reasons", DEFAULT_REPORT_STATE["p1_reasons"], mark_manual=False)
+    if "p2_reasons" not in st.session_state and _is_blank_form_value(_read_tab3_saved_text("p2_reasons")):
+        _write_tab3_saved_text("p2_reasons", DEFAULT_REPORT_STATE["p2_reasons"], mark_manual=False)
     if not isinstance(st.session_state.get("custom_p1_ratio"), int):
         try:
             st.session_state.custom_p1_ratio = int(st.session_state.get("custom_p1_ratio") or 75)
@@ -6607,21 +6804,21 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
             p2_title = p2_role_type
         st.session_state["p2_title"] = p2_title
     if p1_ratio > 0:
-        p1_reasons = st.text_area(
+        p1_reasons = render_tab3_locked_text_area(
+            "p1_reasons",
             f"المواد النظامية وأسباب إدانة {p1_title} ({p1_ratio}%) — (كل سبب في سطر جديد):",
             height=110,
-            key="p1_reasons"
         )
     else:
-        p1_reasons = st.session_state.get("p1_reasons", "")
+        p1_reasons = _read_tab3_saved_text("p1_reasons")
     if p2_ratio > 0:
-        p2_reasons = st.text_area(
+        p2_reasons = render_tab3_locked_text_area(
+            "p2_reasons",
             f"المواد النظامية وأسباب إدانة {p2_title} ({p2_ratio}%) — (كل سبب في سطر جديد):",
             height=110,
-            key="p2_reasons"
         )
     else:
-        p2_reasons = st.session_state.get("p2_reasons", "")
+        p2_reasons = _read_tab3_saved_text("p2_reasons")
     liability_html = build_liability_section_html(
         p1_title=p1_title,
         p1_ratio=p1_ratio,
