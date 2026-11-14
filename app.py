@@ -943,6 +943,31 @@ def refresh_party_role_titles(parties=None, vehicles=None, force: bool = False):
             st.session_state["p2_custom_title"] = t2
     return titles
 
+# خيارات الحقوق الخاصة والعامة (صفحة 3 / A4)
+RIGHTS_BOTH_PUBLIC_PRIVATE = "قيام الحقين العام والخاص معاً (إصابات / وفاة / مخالفة جسيمة)"
+RIGHTS_PUBLIC_LAPSE_PRIVATE_STANDS = "انقضاء الحق العام لوفاة المتسبب، وقيام الحق الخاص"
+RIGHTS_PUBLIC_LAPSE_NO_PRIVATE = "انقضاء الحق العام لوفاة المتسبب، ولا يوجد حق خاص"
+RIGHTS_CUSTOM_OPTION = "تحديد حقوق مخصصة"
+RIGHTS_STATUS_OPTIONS = (
+    "انقضاء الحق الخاص بالتنازل والصلح، ولا يوجد حق عام",
+    "قيام الحق الخاص فقط (تنازل أو صلح)",
+    "قيام الحق الخاص فقط (مطالبة تأمينية / تقدير)",
+    "قيام الحق الخاص فقط (إحالة للمحكمة المرورية)",
+    RIGHTS_BOTH_PUBLIC_PRIVATE,
+    "قيام الحق العام فقط (مع التنازل عن الحق الخاص)",
+    "قيام حق مالي لجهة عامة / خاصة (تلفيات ممتلكات)",
+    RIGHTS_PUBLIC_LAPSE_PRIVATE_STANDS,
+    RIGHTS_PUBLIC_LAPSE_NO_PRIVATE,
+    RIGHTS_CUSTOM_OPTION,
+)
+# لا تُستبدل تلقائياً بـ «قيام الحقين…» عند تغيّر الإصابات/الوفيات
+RIGHTS_USER_LOCKED_OPTIONS = frozenset({
+    RIGHTS_PUBLIC_LAPSE_PRIVATE_STANDS,
+    RIGHTS_PUBLIC_LAPSE_NO_PRIVATE,
+    RIGHTS_CUSTOM_OPTION,
+})
+
+
 def sync_cross_page_smart_links(
     injuries_count: int,
     deaths_count: int,
@@ -967,9 +992,14 @@ def sync_cross_page_smart_links(
         st.session_state["_last_casualty_sig"] = curr_sig
         deaths_n = curr_sig[1]
         injuries_n = curr_sig[0]
+        # لا تُعد فرض «قيام الحقين…» إن اختار المستخدم انقضاء الحق العام لوفاة المتسبب أو حقوقاً مخصصة
+        cur_rights = str(st.session_state.get("rights_sel") or "")
+        rights_locked = cur_rights in RIGHTS_USER_LOCKED_OPTIONS
         if deaths_n > 0:
             st.session_state["acc_nature_sel"] = "حادث مروري جسيم (وفاة)"
-            st.session_state["rights_sel"] = "قيام الحقين العام والخاص معاً (إصابات / وفاة / مخالفة جسيمة)"
+            if not rights_locked:
+                st.session_state["rights_sel"] = RIGHTS_BOTH_PUBLIC_PRIVATE
+                st.session_state["rights_status"] = RIGHTS_BOTH_PUBLIC_PRIVATE
             death_key = "5. حادث وفاة (إيداع الجثمان وتوقيف وإحالة للنيابة العامة)"
             cur_acts = list(st.session_state.get("selected_actions_multi", []))
             if death_key not in cur_acts:
@@ -978,7 +1008,9 @@ def sync_cross_page_smart_links(
             _write_actions_editor(cur_acts)
         elif injuries_n > 0:
             st.session_state["acc_nature_sel"] = "حادث مروري جسيم (إصابات)"
-            st.session_state["rights_sel"] = "قيام الحقين العام والخاص معاً (إصابات / وفاة / مخالفة جسيمة)"
+            if not rights_locked:
+                st.session_state["rights_sel"] = RIGHTS_BOTH_PUBLIC_PRIVATE
+                st.session_state["rights_status"] = RIGHTS_BOTH_PUBLIC_PRIVATE
             inj_key = "4. حادث إصابات (إسعاف وطلب تقارير طبية)"
             cur_acts = list(st.session_state.get("selected_actions_multi", []))
             if inj_key not in cur_acts:
@@ -4575,7 +4607,7 @@ def load_a4_report_fields_from_session() -> dict:
         or get_form_value("rights_custom")
         or ""
     )
-    if rights_status == "تحديد حقوق مخصصة":
+    if rights_status == RIGHTS_CUSTOM_OPTION:
         rights_status = str(get_form_value("rights_custom") or "")
     actions_raw = str(get_form_value("actions_taken_editor") or "")
     final_actions_html = build_final_actions_html(actions_raw)
@@ -7240,16 +7272,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         "حادث مصحوب بشبهة جنائية / حالة غير طبيعية",
         "تحديد تصنيف مخصص",
     ]
-    rights_options = [
-        "انقضاء الحق الخاص بالتنازل والصلح، ولا يوجد حق عام",
-        "قيام الحق الخاص فقط (تنازل أو صلح)",
-        "قيام الحق الخاص فقط (مطالبة تأمينية / تقدير)",
-        "قيام الحق الخاص فقط (إحالة للمحكمة المرورية)",
-        "قيام الحقين العام والخاص معاً (إصابات / وفاة / مخالفة جسيمة)",
-        "قيام الحق العام فقط (مع التنازل عن الحق الخاص)",
-        "قيام حق مالي لجهة عامة / خاصة (تلفيات ممتلكات)",
-        "تحديد حقوق مخصصة",
-    ]
+    rights_options = list(RIGHTS_STATUS_OPTIONS)
     if st.session_state.get("acc_nature_sel") not in accident_nature_options:
         st.session_state.acc_nature_sel = accident_nature_options[0]
     if "acc_nature_custom" not in st.session_state:
@@ -7265,6 +7288,29 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     ]
     if "actions_taken_editor" not in st.session_state:
         st.session_state.actions_taken_editor = f"1- {ACTIONS_SCENARIOS['1. صلح وتنازل ميداني نهائي']}"
+
+    def _on_rights_sel_change() -> None:
+        selected = str(st.session_state.get("rights_sel") or "")
+        if selected == RIGHTS_CUSTOM_OPTION:
+            custom = str(st.session_state.get("rights_custom") or "").strip()
+            st.session_state["rights_status"] = custom
+        else:
+            st.session_state["rights_status"] = selected
+        try:
+            sync_permanent_form_data(reason="rights_sel")
+        except Exception:
+            pass
+
+    def _on_rights_custom_change() -> None:
+        if str(st.session_state.get("rights_sel") or "") == RIGHTS_CUSTOM_OPTION:
+            st.session_state["rights_status"] = str(
+                st.session_state.get("rights_custom") or ""
+            ).strip()
+            try:
+                sync_permanent_form_data(reason="rights_custom")
+            except Exception:
+                pass
+
     col_p3_1, col_p3_2 = st.columns(2)
     with col_p3_1:
         selected_nature = st.selectbox(
@@ -7283,17 +7329,24 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         selected_rights = st.selectbox(
             "الحقوق الخاصة والعامة:",
             options=rights_options,
-            key="rights_sel"
+            key="rights_sel",
+            on_change=_on_rights_sel_change,
         )
-        if selected_rights == "تحديد حقوق مخصصة":
+        if selected_rights == RIGHTS_CUSTOM_OPTION:
             rights_status_val = st.text_input(
                 "اكتب حالة الحقوق الخاصة والعامة:",
-                key="rights_custom"
+                key="rights_custom",
+                on_change=_on_rights_custom_change,
             )
         else:
             rights_status_val = selected_rights
     st.session_state["accident_nature"] = str(accident_nature_val or "")
+    # اطبع حرفياً الخيار المختار (بما فيه انقضاء الحق العام لوفاة المتسبب)
     st.session_state["rights_status"] = str(rights_status_val or "")
+    try:
+        sync_permanent_form_data(reason="tab3_rights")
+    except Exception:
+        pass
     # إعادة توليد صياغات بنود الوفيات 20–26 عند تغيّر عدد الوفيات
     _deaths_for_actions = _accident_deaths_count()
     if st.session_state.get("_actions_plural_deaths_sig") != _deaths_for_actions:
