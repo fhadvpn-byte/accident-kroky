@@ -1722,6 +1722,11 @@ DEFAULT_REPORT_STATE = {
     "video_custom_notes": "",
     "video_injected_text": "",
     "auto_analyze_video": False,
+    "results_animal_loss_enabled": False,
+    "results_animal_loss_text": "",
+    "results_property_damage_enabled": False,
+    "results_property_damage_text": "",
+    "results_data_fingerprint": None,
     "show_page_numbers": False,
     "include_sketch": True,
     "include_aerial": True,
@@ -1770,6 +1775,11 @@ TAB3_PERMANENT_KEYS = (
     "video_custom_notes",
     "video_injected_text",
     "auto_analyze_video",
+    "results_animal_loss_enabled",
+    "results_animal_loss_text",
+    "results_property_damage_enabled",
+    "results_property_damage_text",
+    "results_data_fingerprint",
     "criminal_participating_agency",
     "criminal_escaped_vehicles",
     "criminal_shots_fired",
@@ -1802,7 +1812,7 @@ def _clone_form_value(value):
 
 
 def compute_tab3_content_fingerprint() -> tuple:
-    """بصمة المواد + القرائن + النسب — إعادة توليد النصوص فقط عند تغيّرها."""
+    """بصمة المواد + القرائن + النسب — إعادة توليد كيفية الوقوع والرأي فقط عند تغيّرها."""
     articles = tuple(st.session_state.get("selected_articles") or [])
     try:
         findings = json.dumps(
@@ -1826,6 +1836,108 @@ def compute_tab3_content_fingerprint() -> tuple:
         int(st.session_state.get("p2_ratio") or 0),
     )
     return (articles, evidence, ratios)
+
+
+def compute_results_data_fingerprint() -> tuple:
+    """بصمة بيانات الأطراف/المركبات والبنود الإضافية لتوليد نتائج الحادث."""
+    parties = st.session_state.get("parties") or []
+    vehicles = st.session_state.get("vehicles") or []
+    party_sig = tuple(
+        (
+            str(p.get("الطرف") or ""),
+            str(p.get("الاسم") or ""),
+            str(p.get("المشاركة") or ""),
+            str(p.get("الحالة") or ""),
+            str(st.session_state.get(f"party_role_title_{idx}") or ""),
+        )
+        for idx, p in enumerate(parties, start=1)
+        if isinstance(p, dict)
+    )
+    vehicle_sig = tuple(
+        (
+            str(v.get("الطرف") or ""),
+            str(v.get("نوع المركبة") or ""),
+            str(v.get("رقم اللوحة") or ""),
+            str(v.get("الرقم التسلسلي") or ""),
+        )
+        for v in vehicles
+        if isinstance(v, dict)
+    )
+    extras = (
+        bool(st.session_state.get("results_animal_loss_enabled")),
+        str(st.session_state.get("results_animal_loss_text") or "").strip(),
+        bool(st.session_state.get("results_property_damage_enabled")),
+        str(st.session_state.get("results_property_damage_text") or "").strip(),
+    )
+    return (party_sig, vehicle_sig, extras)
+
+
+def _party_result_role_name(party_index: int, party_row: dict) -> str:
+    """صفة الطرف مع الاسم لبند الوفاة/الإصابة في نتائج الحادث."""
+    name = str(party_row.get("الاسم") or "").strip()
+    participation = str(party_row.get("المشاركة") or "").strip()
+    party_label = str(party_row.get("الطرف") or f"الطرف {party_index}").strip()
+    role = str(st.session_state.get(f"party_role_title_{party_index}") or "").strip()
+    if not role:
+        if participation in ("سائق", "قائد"):
+            role = build_driver_party_title(party_index)
+        elif participation:
+            role = participation
+        else:
+            role = party_label
+    if name and name not in role:
+        return f"{role} / {name}"
+    if role:
+        return role
+    return name or party_label
+
+
+def build_accident_results_text() -> str:
+    """توليد نتائج الحادث من وفيات/إصابات الأطراف ثم تلفيات المركبات والبنود الإضافية."""
+    lines = []
+    parties = st.session_state.get("parties") or []
+    for idx, party in enumerate(parties, start=1):
+        if not isinstance(party, dict):
+            continue
+        health = str(party.get("الحالة") or "").strip()
+        health_norm = health.replace("ى", "ي")
+        label = _party_result_role_name(idx, party)
+        if health_norm in ("متوفي", "وفاة") or "متوف" in health_norm:
+            lines.append(f"وفاة {label}")
+        elif health_norm in ("مصاب", "اصابة", "إصابة") or health_norm.startswith("مصاب"):
+            lines.append(f"إصابة {label}")
+
+    vehicles = st.session_state.get("vehicles") or []
+    for idx, veh in enumerate(vehicles, start=1):
+        if not isinstance(veh, dict):
+            continue
+        vtype = str(veh.get("نوع المركبة") or "").strip()
+        plate = str(veh.get("رقم اللوحة") or "").strip()
+        serial = str(veh.get("الرقم التسلسلي") or "").strip()
+        party_label = str(veh.get("الطرف") or f"الطرف {idx}").strip()
+        if not (vtype or plate or serial):
+            continue
+        item = f"تلفيات مركبة {party_label}"
+        if vtype:
+            item += f" ({vtype})"
+        if plate:
+            item += f" لوحة {plate}"
+        lines.append(item)
+
+    if st.session_state.get("results_animal_loss_enabled"):
+        text = str(st.session_state.get("results_animal_loss_text") or "").strip()
+        lines.append(text or "نفوق حيوانات/مواشي أو حيوان أليف")
+    if st.session_state.get("results_property_damage_enabled"):
+        text = str(st.session_state.get("results_property_damage_text") or "").strip()
+        lines.append(text or "تلفيات ممتلكات عامة أو خاصة")
+
+    if not lines:
+        return ""
+    numbered = []
+    for i, line in enumerate(lines, start=1):
+        clean = line.rstrip(".").strip()
+        numbered.append(f"{i}- {clean}.")
+    return "\n".join(numbered)
 
 
 def sync_permanent_form_data(reason: str = "manual") -> dict:
@@ -1933,6 +2045,14 @@ def init_and_load_state():
         st.session_state.show_page_numbers = False
     if not isinstance(st.session_state.get("auto_analyze_video"), bool):
         st.session_state.auto_analyze_video = False
+    if not isinstance(st.session_state.get("results_animal_loss_enabled"), bool):
+        st.session_state.results_animal_loss_enabled = False
+    if not isinstance(st.session_state.get("results_property_damage_enabled"), bool):
+        st.session_state.results_property_damage_enabled = False
+    if not isinstance(st.session_state.get("results_animal_loss_text"), str):
+        st.session_state.results_animal_loss_text = ""
+    if not isinstance(st.session_state.get("results_property_damage_text"), str):
+        st.session_state.results_property_damage_text = ""
     if not isinstance(st.session_state.get("include_sketch"), bool):
         st.session_state.include_sketch = True
     if not isinstance(st.session_state.get("include_aerial"), bool):
@@ -5903,6 +6023,7 @@ def _join_technical_drafts(drafts) -> str:
     return joined.strip()
 
 def generate_accident_report_fields(selected_article_ids):
+    """توليد كيفية الوقوع والرأي من المواد فقط — نتائج الحادث تُولَّد من الأطراف/المركبات."""
     selected_ids = set(selected_article_ids or [])
     selected_articles = [article for article in TRAFFIC_LAW_ARTICLES if article["id"] in selected_ids]
     if not selected_articles:
@@ -5913,10 +6034,6 @@ def generate_accident_report_fields(selected_article_ids):
             "hasCriminalSuspicion": False,
         }
     has_criminal_suspicion = any(article["isQuasiCriminal"] for article in selected_articles)
-    results_text = "\n".join(
-        f"{index}- {article['resultPoint']} ({_format_article_cite_for_report(article['code'])})."
-        for index, article in enumerate(selected_articles, start=1)
-    )
     technical_draft_text = _join_technical_drafts(
         article["technicalDraft"] for article in selected_articles
     )
@@ -5926,16 +6043,12 @@ def generate_accident_report_fields(selected_article_ids):
             _format_article_cite_for_report(article["code"])
             for article in selected_articles if article["isQuasiCriminal"]
         )
-        legal_opinion_text = (
-            ""
-        )
+        legal_opinion_text = opinion_lines
     else:
         all_codes = "، ".join(_format_article_cite_for_report(article["code"]) for article in selected_articles)
-        legal_opinion_text = (
-            ""
-        )
+        legal_opinion_text = opinion_lines
     return {
-        "resultsText": results_text,
+        "resultsText": "",
         "technicalDraftText": technical_draft_text,
         "legalOpinionText": legal_opinion_text,
         "hasCriminalSuspicion": has_criminal_suspicion,
@@ -5977,13 +6090,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         p2_reasons_key="p2_reasons",
     )
     generated_fields = generate_accident_report_fields(selected_law_ids)
-    # لا تعِد توليد النصوص إلا عند تغير بصمة المواد/القرائن/النسب
+    # لا تعِد توليد كيفية الوقوع/الرأي إلا عند تغير بصمة المواد/القرائن/النسب
     st.session_state.law_selection_sig = tuple(selected_law_ids)
     content_fp = compute_tab3_content_fingerprint()
     previous_fp = st.session_state.get("tab3_content_fingerprint")
     texts_already = (
-        not _is_blank_form_value(st.session_state.get("accident_results"))
-        or not _is_blank_form_value(st.session_state.get("technical_description"))
+        not _is_blank_form_value(st.session_state.get("technical_description"))
         or not _is_blank_form_value(st.session_state.get("p1_reasons"))
     )
     should_regen = False
@@ -5993,9 +6105,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     elif previous_fp != content_fp:
         should_regen = True
     if should_regen:
-        kept_results = _extract_marked_block(st.session_state.get("accident_results", ""))
         kept_tech = _extract_marked_block(st.session_state.get("technical_description", ""))
-        st.session_state.accident_results = _upsert_marked_block(generated_fields["resultsText"], kept_results)
         st.session_state.technical_description = _upsert_marked_block(generated_fields["technicalDraftText"], kept_tech)
         kept_legal = _extract_marked_block(st.session_state.get("p1_reasons", st.session_state.get("legal_opinion", "")))
         merged_opinion = _upsert_marked_block(generated_fields["legalOpinionText"], kept_legal)
@@ -6008,10 +6118,55 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     # بعد محرك القرائن: حدّث البصمة دون إعادة توليد إن تغيّرت القرائن فقط عبر المحرك نفسه
     content_fp = compute_tab3_content_fingerprint()
     st.session_state.tab3_content_fingerprint = content_fp
+
+    # بنود إضافية في نتائج الحادث (تُحفظ دائماً مع تبويب 3)
+    if "results_animal_loss_enabled" not in st.session_state:
+        st.session_state.results_animal_loss_enabled = False
+    if "results_animal_loss_text" not in st.session_state:
+        st.session_state.results_animal_loss_text = ""
+    if "results_property_damage_enabled" not in st.session_state:
+        st.session_state.results_property_damage_enabled = False
+    if "results_property_damage_text" not in st.session_state:
+        st.session_state.results_property_damage_text = ""
+    st.markdown("#### بنود إضافية في نتائج الحادث")
+    _ex1, _ex2 = st.columns(2)
+    with _ex1:
+        st.checkbox(
+            "نفوق حيوانات/مواشي أو حيوان أليف",
+            key="results_animal_loss_enabled",
+        )
+        if st.session_state.get("results_animal_loss_enabled"):
+            st.text_input(
+                "وصف النفوق (يُدرج بنداً في النتائج):",
+                key="results_animal_loss_text",
+                placeholder="مثلاً: نفوق رأسي أغنام في موقع الحادث",
+            )
+    with _ex2:
+        st.checkbox(
+            "تلفيات ممتلكات عامة أو خاصة",
+            key="results_property_damage_enabled",
+        )
+        if st.session_state.get("results_property_damage_enabled"):
+            st.text_input(
+                "وصف التلفيات (يُدرج بنداً في النتائج):",
+                key="results_property_damage_text",
+                placeholder="مثلاً: تلفيات عمود إنارة / سياج",
+            )
+
+    # نتائج الحادث من الأطراف/المركبات (+ البنود الإضافية) — مستقلة عن مواد النظام
+    results_fp = compute_results_data_fingerprint()
+    previous_results_fp = st.session_state.get("results_data_fingerprint")
+    should_regen_results = previous_results_fp is None or previous_results_fp != results_fp
+    if should_regen_results:
+        kept_results = _extract_marked_block(st.session_state.get("accident_results", ""))
+        generated_results = build_accident_results_text()
+        st.session_state.accident_results = _upsert_marked_block(generated_results, kept_results)
+    st.session_state.results_data_fingerprint = results_fp
+
     acc_results = st.text_area(
-        "نتائج الحادث (نقاط مرقمة)",
+        "نتائج الحادث (معاينة/تعديل يدوي قبل الطباعة)",
         key="accident_results",
-        height=110
+        height=110,
     )
     acc_how = st.text_area(
         "كيفية وقوع الحادث (الصياغة الفنية الدقيقة)",
