@@ -1733,6 +1733,169 @@ DEFAULT_REPORT_STATE = {
     "last_saved_time": "لم يتم الحفظ بعد",
 }
 
+# مفاتيح تبويب 3 الثابتة (مواد / قرائن / نسب / نصوص) — لا تُمسَح عند مغادرة التبويب
+TAB3_PERMANENT_KEYS = (
+    "selected_articles",
+    "accident_results",
+    "technical_description",
+    "legal_opinion",
+    "liability_ratio_select",
+    "custom_p1_ratio",
+    "p1_ratio",
+    "p2_ratio",
+    "p1_title_input",
+    "p2_role_select",
+    "p2_custom_title",
+    "p2_title",
+    "p1_reasons",
+    "p2_reasons",
+    "liability_html",
+    "acc_nature_sel",
+    "acc_nature_custom",
+    "accident_nature",
+    "rights_sel",
+    "rights_custom",
+    "rights_status",
+    "selected_actions_multi",
+    "actions_taken_editor",
+    "final_actions_html",
+    "extra_procedure",
+    "has_video",
+    "video_clip_count",
+    "video_clips",
+    "video_source",
+    "video_clarity",
+    "video_timestamp",
+    "video_findings",
+    "video_custom_notes",
+    "video_injected_text",
+    "auto_analyze_video",
+    "criminal_participating_agency",
+    "criminal_escaped_vehicles",
+    "criminal_shots_fired",
+    "criminal_contraband_found",
+    "law_selection_sig",
+    "tab3_content_fingerprint",
+    "_actions_plural_deaths_sig",
+)
+_PERMANENT_FORM_DISK = Path(__file__).resolve().parent / ".bayyinah_persistence" / "permanent_form.json"
+
+
+def _is_blank_form_value(value) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and not value.strip():
+        return True
+    if isinstance(value, (list, tuple, dict)) and len(value) == 0:
+        return True
+    return False
+
+
+def _clone_form_value(value):
+    if isinstance(value, list):
+        return [dict(item) if isinstance(item, dict) else item for item in value]
+    if isinstance(value, dict):
+        return dict(value)
+    if isinstance(value, tuple):
+        return tuple(value)
+    return value
+
+
+def compute_tab3_content_fingerprint() -> tuple:
+    """بصمة المواد + القرائن + النسب — إعادة توليد النصوص فقط عند تغيّرها."""
+    articles = tuple(st.session_state.get("selected_articles") or [])
+    try:
+        findings = json.dumps(
+            st.session_state.get("video_findings") or [],
+            ensure_ascii=False,
+            sort_keys=True,
+            default=str,
+        )
+    except Exception:
+        findings = str(st.session_state.get("video_findings") or [])
+    evidence = (
+        str(st.session_state.get("has_video") or ""),
+        findings,
+        str(st.session_state.get("video_injected_text") or ""),
+        str(st.session_state.get("video_timestamp") or ""),
+        str(st.session_state.get("video_custom_notes") or ""),
+    )
+    ratios = (
+        str(st.session_state.get("liability_ratio_select") or ""),
+        int(st.session_state.get("p1_ratio") or 0),
+        int(st.session_state.get("p2_ratio") or 0),
+    )
+    return (articles, evidence, ratios)
+
+
+def sync_permanent_form_data(reason: str = "manual") -> dict:
+    """ينسخ مفاتيح التبويب 3 إلى الظل ويحفظها للقرص قبل rerun/تنقل/طباعة."""
+    shadow = dict(st.session_state.get("_PERMANENT_FORM_DATA_") or {})
+    for key in TAB3_PERMANENT_KEYS:
+        if key in st.session_state:
+            shadow[key] = _clone_form_value(st.session_state.get(key))
+    shadow["_synced_reason"] = reason
+    shadow["_synced_at"] = datetime.now(ZoneInfo("Asia/Riyadh")).strftime("%Y-%m-%d | %I:%M:%S %p")
+    st.session_state["_PERMANENT_FORM_DATA_"] = shadow
+    try:
+        _PERMANENT_FORM_DISK.parent.mkdir(parents=True, exist_ok=True)
+        _PERMANENT_FORM_DISK.write_text(
+            json.dumps(shadow, ensure_ascii=False, indent=2, default=str),
+            encoding="utf-8",
+        )
+    except OSError:
+        pass
+    return shadow
+
+
+def reinject_permanent_form_data() -> int:
+    """قبل رسم أدوات التبويب 3: أعد حقن المفاتيح الغائبة/الفارغة من الظل."""
+    shadow = st.session_state.get("_PERMANENT_FORM_DATA_")
+    if not isinstance(shadow, dict) or not shadow:
+        if _PERMANENT_FORM_DISK.is_file():
+            try:
+                shadow = json.loads(_PERMANENT_FORM_DISK.read_text(encoding="utf-8"))
+                if isinstance(shadow, dict):
+                    st.session_state["_PERMANENT_FORM_DATA_"] = shadow
+            except (OSError, json.JSONDecodeError, TypeError):
+                shadow = {}
+    if not isinstance(shadow, dict):
+        return 0
+    injected = 0
+    for key in TAB3_PERMANENT_KEYS:
+        if key not in shadow:
+            continue
+        stored = shadow.get(key)
+        if _is_blank_form_value(stored):
+            continue
+        current = st.session_state.get(key) if key in st.session_state else None
+        if key not in st.session_state or _is_blank_form_value(current):
+            st.session_state[key] = _clone_form_value(stored)
+            injected += 1
+    return injected
+
+
+def get_form_value(key: str, default=None):
+    """قراءة من session مع fallback لظل _PERMANENT_FORM_DATA_."""
+    if key in st.session_state and not _is_blank_form_value(st.session_state.get(key)):
+        return st.session_state.get(key)
+    shadow = st.session_state.get("_PERMANENT_FORM_DATA_")
+    if isinstance(shadow, dict) and key in shadow and not _is_blank_form_value(shadow.get(key)):
+        return shadow.get(key)
+    if key in st.session_state:
+        return st.session_state.get(key)
+    return default
+
+
+def clear_permanent_form_data() -> None:
+    st.session_state.pop("_PERMANENT_FORM_DATA_", None)
+    try:
+        if _PERMANENT_FORM_DISK.is_file():
+            _PERMANENT_FORM_DISK.unlink()
+    except OSError:
+        pass
+
+
 def init_and_load_state():
     if "state_initialized" in st.session_state:
         return
@@ -1886,11 +2049,13 @@ def save_current_work():
         return False
 
 def perform_manual_save(show_toast: bool = True) -> bool:
-    """مسار الحفظ اليدوي الموحّد: مزامنة المحررات → خزنة الصفحة1 → مسودة التقرير + حفظ كامل محلي."""
+    """مسار الحفظ اليدوي الموحّد: مزامنة المحررات → ظل التبويب3 كاملاً → مسودة + خزنة محلية."""
     try:
         _flush_page1_editors_to_session()
         _mirror_page1_fields()
         sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=True)
+        # زر «حفظ واعتماد البيانات» يحفظ الظل كاملاً لا وقت فقط
+        sync_permanent_form_data(reason="manual_save")
         ok = save_current_work()
         if ok:
             try:
@@ -1927,6 +2092,8 @@ def clear_all_work():
     for key, default_val in DEFAULT_REPORT_STATE.items():
         st.session_state[key] = default_val
     st.session_state.law_selection_sig = ()
+    st.session_state.pop("tab3_content_fingerprint", None)
+    clear_permanent_form_data()
     st.session_state["confirm_clear"] = False
     reset_page1_payload()
     st.session_state["_restore_perm_sidebar"] = True
@@ -2034,6 +2201,10 @@ def render_direct_print_button(
     btn_id: str = "top",
 ):
     """زر طباعة فوري محصن بتشفير Base64 يمنع تسرب أي وسوم أو أكواد إلى الشاشة ويعمل في أي نسبة إنجاز (0% - 100%)."""
+    try:
+        sync_permanent_form_data(reason="before_print")
+    except Exception:
+        pass
     raw_html = re.sub(r"@page\s*\{[^}]*\}", "", str(full_report_html or ""))
     auto_print_addon = """
     <style>
@@ -3097,6 +3268,10 @@ def _reset_new_accident():
         del st.session_state[key]
     st.session_state["_BAYYINAH_SKIP_AUTOSAVE_"] = True
     st.session_state["_BAYYINAH_CLEAR_BROWSER_SKETCH_"] = True
+    try:
+        clear_permanent_form_data()
+    except Exception:
+        pass
     reset_page1_payload()
     st.session_state["_restore_perm_sidebar"] = True
     try:
@@ -3524,25 +3699,25 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
 _LIABILITY_RATIO_LOOKUP = {"100% الطرف الأول | 0% الطرف الثاني": (100, 0), "75% الطرف الأول | 25% الطرف الثاني": (75, 25), "50% الطرف الأول | 50% الطرف الثاني": (50, 50), "25% الطرف الأول | 75% الطرف الثاني": (25, 75), "0% الطرف الأول | 100% الطرف الثاني": (0, 100)}
 
 def resolve_liability_ratios_from_session():
-    """قراءة نسب المسؤولية وصفات الأطراف من session_state فقط (آمن عبر التبويبات)."""
-    selected = str(st.session_state.get("liability_ratio_select") or "100% الطرف الأول | 0% الطرف الثاني")
+    """قراءة نسب المسؤولية وصفات الأطراف من session مع fallback للظل."""
+    selected = str(get_form_value("liability_ratio_select") or "100% الطرف الأول | 0% الطرف الثاني")
     # نسب الفقرة (60/2) فقط: 100 و75 و50 و25 و0 دون قيم وسيطة
     if selected not in _LIABILITY_RATIO_LOOKUP:
         selected = "100% الطرف الأول | 0% الطرف الثاني"
         st.session_state.liability_ratio_select = selected
     p1_ratio, p2_ratio = _LIABILITY_RATIO_LOOKUP.get(selected, (100, 0))
     p1_title = str(
-        st.session_state.get("p1_title_input")
+        get_form_value("p1_title_input")
         or st.session_state.get("party_role_title_1")
         or "قائد المركبة الأولى"
     )
-    p2_role = str(st.session_state.get("p2_role_select") or "قائد المركبة الثانية")
+    p2_role = str(get_form_value("p2_role_select") or "قائد المركبة الثانية")
     if p2_role == "تحديد صفة مخصصة":
-        p2_title = str(st.session_state.get("p2_custom_title") or p2_role)
+        p2_title = str(get_form_value("p2_custom_title") or p2_role)
     else:
         p2_title = p2_role or str(st.session_state.get("party_role_title_2") or "قائد المركبة الثانية")
-    p1_reasons = str(st.session_state.get("p1_reasons") or "")
-    p2_reasons = str(st.session_state.get("p2_reasons") or "")
+    p1_reasons = str(get_form_value("p1_reasons") or "")
+    p2_reasons = str(get_form_value("p2_reasons") or "")
     st.session_state["p1_ratio"] = int(p1_ratio)
     st.session_state["p2_ratio"] = int(p2_ratio)
     st.session_state["p2_title"] = p2_title
@@ -3562,24 +3737,28 @@ def build_liability_html_from_session() -> str:
     return html_out
 
 def load_a4_report_fields_from_session() -> dict:
-    """تهيئة كل حقول تقرير A4 من session_state دون الاعتماد على متغيرات محلية للتبويبات الأخرى."""
+    """تهيئة كل حقول تقرير A4 من session مع fallback لظل _PERMANENT_FORM_DATA_."""
+    try:
+        reinject_permanent_form_data()
+    except Exception:
+        pass
     accident_nature = str(
-        st.session_state.get("accident_nature")
-        or st.session_state.get("acc_nature_sel")
-        or st.session_state.get("acc_nature_custom")
+        get_form_value("accident_nature")
+        or get_form_value("acc_nature_sel")
+        or get_form_value("acc_nature_custom")
         or ""
     )
     if accident_nature == "تحديد تصنيف مخصص":
-        accident_nature = str(st.session_state.get("acc_nature_custom") or "")
+        accident_nature = str(get_form_value("acc_nature_custom") or "")
     rights_status = str(
-        st.session_state.get("rights_status")
-        or st.session_state.get("rights_sel")
-        or st.session_state.get("rights_custom")
+        get_form_value("rights_status")
+        or get_form_value("rights_sel")
+        or get_form_value("rights_custom")
         or ""
     )
     if rights_status == "تحديد حقوق مخصصة":
-        rights_status = str(st.session_state.get("rights_custom") or "")
-    actions_raw = str(st.session_state.get("actions_taken_editor") or "")
+        rights_status = str(get_form_value("rights_custom") or "")
+    actions_raw = str(get_form_value("actions_taken_editor") or "")
     final_actions_html = "<br>".join(
         html.escape(line.strip()) for line in actions_raw.splitlines() if line.strip()
     )
@@ -3593,22 +3772,22 @@ def load_a4_report_fields_from_session() -> dict:
         "acc_deaths": st.session_state.get("p1_acc_deaths", 0),
         "acc_weather": st.session_state.get("p1_acc_weather_choice") or st.session_state.get("p1_acc_weather", ""),
         "acc_cause": st.session_state.get("p1_acc_cause", ""),
-        "acc_results": st.session_state.get("accident_results", ""),
-        "acc_how": st.session_state.get("technical_description", ""),
+        "acc_results": get_form_value("accident_results", ""),
+        "acc_how": get_form_value("technical_description", ""),
         "accident_nature": accident_nature,
         "accident_nature_val": accident_nature,
         "rights_status": rights_status,
         "rights_status_val": rights_status,
-        "participating_agency": st.session_state.get("criminal_participating_agency", ""),
-        "escaped_vehicles": st.session_state.get("criminal_escaped_vehicles", ""),
-        "shots_fired": st.session_state.get("criminal_shots_fired", ""),
-        "contraband_found": st.session_state.get("criminal_contraband_found", ""),
+        "participating_agency": get_form_value("criminal_participating_agency", ""),
+        "escaped_vehicles": get_form_value("criminal_escaped_vehicles", ""),
+        "shots_fired": get_form_value("criminal_shots_fired", ""),
+        "contraband_found": get_form_value("criminal_contraband_found", ""),
         "road_name_sign": st.session_state.get("sketch_road_name", ""),
         "legend_keys": [str(st.session_state.get(f"legend_key_{index}") or "") for index in range(1, 11)],
-        "final_actions_html": final_actions_html,
+        "final_actions_html": final_actions_html or str(get_form_value("final_actions_html") or ""),
         "parties_df": pd.DataFrame(st.session_state.get("parties") or []),
         "vehicles_df": pd.DataFrame(st.session_state.get("vehicles") or []),
-        "liability_html": build_liability_html_from_session(),
+        "liability_html": get_form_value("liability_html") or build_liability_html_from_session(),
     }
     # مزامنة المفاتيح الأساسية في الجلسة لضمان الاتساق
     st.session_state["accident_nature"] = accident_nature
@@ -4876,6 +5055,11 @@ for _a4_key, _a4_default in (
 ):
     if _a4_key not in st.session_state:
         st.session_state[_a4_key] = _a4_default
+# حقن ظل التبويب3 فوق الافتراضات الفارغة في كل دورة
+try:
+    reinject_permanent_form_data()
+except Exception:
+    pass
 if "parties" not in st.session_state:
     st.session_state.parties = _blank_parties()
 if "vehicles" not in st.session_state:
@@ -4908,6 +5092,10 @@ st.markdown(
     unsafe_allow_html=True,
 )
 def _on_active_tab_change():
+    try:
+        sync_permanent_form_data(reason="tab_change")
+    except Exception:
+        pass
     try:
         import bayyinah_persistence as _bp
         _bp.on_tab_change()
@@ -5726,6 +5914,11 @@ def generate_accident_report_fields(selected_article_ids):
     }
 
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
+    # قبل رسم أدوات التبويب 3: أعد حقن المفاتيح الغائبة من الظل
+    try:
+        reinject_permanent_form_data()
+    except Exception:
+        pass
     st.subheader("📚 محرك المواد النظامية وفروعها")
     if st.session_state.get("acc_how_override"):
         kept_override = _extract_marked_block(st.session_state.get("technical_description", ""))
@@ -5736,7 +5929,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     valid_article_ids = [article["id"] for article in TRAFFIC_LAW_ARTICLES]
     stored_articles = st.session_state.get("selected_articles")
     if not isinstance(stored_articles, list):
-        stored_articles = []
+        stored_articles = list(get_form_value("selected_articles") or [])
     # ترحيل مفاتيح الجلسة القديمة عبر aliases لتفادي KeyError
     migrated_articles = []
     for article_id in stored_articles:
@@ -5756,10 +5949,22 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         p2_reasons_key="p2_reasons",
     )
     generated_fields = generate_accident_report_fields(selected_law_ids)
-    selection_signature = tuple(selected_law_ids)
-    previous_signature = st.session_state.get("law_selection_sig")
-    if previous_signature != selection_signature and not (previous_signature is None and not selected_law_ids):
-        st.session_state.law_selection_sig = selection_signature
+    # لا تعِد توليد النصوص إلا عند تغير بصمة المواد/القرائن/النسب
+    st.session_state.law_selection_sig = tuple(selected_law_ids)
+    content_fp = compute_tab3_content_fingerprint()
+    previous_fp = st.session_state.get("tab3_content_fingerprint")
+    texts_already = (
+        not _is_blank_form_value(st.session_state.get("accident_results"))
+        or not _is_blank_form_value(st.session_state.get("technical_description"))
+        or not _is_blank_form_value(st.session_state.get("p1_reasons"))
+    )
+    should_regen = False
+    if previous_fp is None:
+        # أول مرة: لا تستبدل نصوصاً موجودة؛ ولّد فقط إن كانت فارغة ومواد مختارة
+        should_regen = bool(selected_law_ids) and not texts_already
+    elif previous_fp != content_fp:
+        should_regen = True
+    if should_regen:
         kept_results = _extract_marked_block(st.session_state.get("accident_results", ""))
         kept_tech = _extract_marked_block(st.session_state.get("technical_description", ""))
         st.session_state.accident_results = _upsert_marked_block(generated_fields["resultsText"], kept_results)
@@ -5768,9 +5973,13 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         merged_opinion = _upsert_marked_block(generated_fields["legalOpinionText"], kept_legal)
         st.session_state.p1_reasons = merged_opinion
         st.session_state.legal_opinion = merged_opinion
+    st.session_state.tab3_content_fingerprint = content_fp
     if generated_fields["hasCriminalSuspicion"]:
         st.warning("تشمل المواد المختارة شقاً جنائياً أو شبه جنائي، وتُحال إلى الشرطة أو النيابة.")
     render_video_evidence_engine()
+    # بعد محرك القرائن: حدّث البصمة دون إعادة توليد إن تغيّرت القرائن فقط عبر المحرك نفسه
+    content_fp = compute_tab3_content_fingerprint()
+    st.session_state.tab3_content_fingerprint = content_fp
     acc_results = st.text_area(
         "نتائج الحادث (نقاط مرقمة)",
         key="accident_results",
@@ -5899,6 +6108,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         p2_reasons=p2_reasons,
     )
     st.session_state["liability_html"] = liability_html
+    st.session_state.tab3_content_fingerprint = compute_tab3_content_fingerprint()
+    try:
+        sync_permanent_form_data(reason="tab3_liability")
+    except Exception:
+        pass
 ACTIONS_SCENARIOS = {
     "1. صلح وتنازل ميداني نهائي": (
         "تم إفهام الأطراف بحقوقهم النظامية، وانتهى الحادث بالصلح والتنازل الخطي التام بين الطرفين في الموقع دون أي مطالبات مالية أو حقوقية، وأُخلي سبيل الأطراف والمركبات."
@@ -6152,6 +6366,10 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         escaped_vehicles = str(st.session_state.get("criminal_escaped_vehicles") or "")
         shots_fired = str(st.session_state.get("criminal_shots_fired") or "")
         contraband_found = str(st.session_state.get("criminal_contraband_found") or "")
+    try:
+        sync_permanent_form_data(reason="tab3_actions")
+    except Exception:
+        pass
 _SKETCH_ATTACH_LABEL = "✅ إرفاق صفحة الكروكي"
 _SKETCH_OMIT_LABEL = "❌ حذف صفحة الكروكي - حادث قديم"
 
