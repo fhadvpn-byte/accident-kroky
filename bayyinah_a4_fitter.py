@@ -107,38 +107,35 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
     unlockBoxes(doc);
     var pages = doc.querySelectorAll('.report-page, div.page');
     pages.forEach(function(page) {
+      if (page.classList && page.classList.contains('photo-annex')) return;
       var boxes = page.querySelectorAll(
         '.box-content, .autofit-box, .section-box, .content-box, .report-box, .liability-box, [data-oldfit], td.actions-body'
       );
       if (!boxes.length) return;
       var ruler = doc.createElement('div');
-      ruler.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:294mm;visibility:hidden;pointer-events:none;';
+      ruler.style.cssText = 'position:absolute;top:0;left:0;width:1px;height:295mm;visibility:hidden;pointer-events:none;';
       page.appendChild(ruler);
-      var maxH = ruler.offsetHeight || 1110;
+      var maxH = ruler.offsetHeight || 1116;
       page.removeChild(ruler);
-      var footer = page.querySelector(':scope > [class*="footer"], :scope > footer');
-      var body = page.querySelector('.page-body-flex, .page-body, .p2-body-flex, .p3-body-flex, [class*="-body-flex"]');
+      var footer = page.querySelector(':scope > [class*="footer"], :scope > footer, .official-page-footer, .official-footer, .page-footer');
+      var body = page.querySelector('.page-body-flex, .page-body, .p2-body-flex, .p3-body-flex, .autofit-page-body, [class*="-body-flex"]');
       var badges = page.querySelectorAll('.section-badge');
+      /* قبل الحلقة: صفّر min-height حتى لا يقارن scrollHeight بصفحة 296mm */
+      page.style.setProperty('min-height', '0', 'important');
       page.style.setProperty('height', 'auto', 'important');
       page.style.setProperty('max-height', 'none', 'important');
       page.style.setProperty('overflow', 'visible', 'important');
-      if (footer) footer.style.setProperty('margin-top', '6px', 'important');
-      for (var fs = 12.5; fs >= 5.8 && page.scrollHeight > maxH; fs = +(fs - 0.35).toFixed(2)) {
-        var lh = Math.max(1.12, +(1.55 - (12.5 - fs) * 0.05).toFixed(2));
-        var padV = Math.max(3, Math.round(10 - (12.5 - fs) * 0.7));
-        var padH = Math.max(6, Math.round(12 - (12.5 - fs) * 0.7));
-        var gap = Math.max(2, Math.round(6 - (12.5 - fs) * 0.45));
-        if (body) body.style.setProperty('gap', gap + 'px', 'important');
+      if (footer) footer.style.setProperty('margin-top', '8px', 'important');
+      function applyFs(fs) {
+        var lh = 1.42;
+        if (body) body.style.setProperty('gap', '6px', 'important');
         badges.forEach(function(b) {
-          b.style.setProperty('margin', Math.max(1, gap - 1) + 'px auto', 'important');
-          b.style.setProperty('padding', '2px 10px', 'important');
-          b.style.setProperty('font-size', Math.max(8, fs) + 'px', 'important');
+          b.style.setProperty('font-size', Math.max(12.5, fs) + 'px', 'important');
         });
         boxes.forEach(function(bx) {
           if (bx.closest && bx.closest('.sign-table')) return;
           bx.style.setProperty('font-size', fs + 'px', 'important');
           bx.style.setProperty('line-height', String(lh), 'important');
-          bx.style.setProperty('padding', padV + 'px ' + padH + 'px 10px ' + padH + 'px', 'important');
           bx.style.setProperty('height', 'auto', 'important');
           bx.style.setProperty('max-height', 'none', 'important');
           bx.style.setProperty('overflow', 'visible', 'important');
@@ -150,6 +147,18 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
             ch.style.setProperty('line-height', String(lh), 'important');
           });
         });
+      }
+      var fs = 13.5;
+      var minFont = 10.5;
+      applyFs(fs);
+      /* لا تصغّر إن المحتوى ≤ maxH؛ وإلا قلّل 0.25 وتوقف عند أول مقاس يدخل */
+      if (page.scrollHeight > maxH + 0.5) {
+        while (fs > minFont + 0.001) {
+          fs = Math.max(minFont, +(fs - 0.25).toFixed(2));
+          applyFs(fs);
+          if (page.scrollHeight <= maxH + 0.5) break;
+          if (fs <= minFont + 0.001) break;
+        }
       }
       page.style.setProperty('min-height', '296mm', 'important');
       if (footer) footer.style.setProperty('margin-top', 'auto', 'important');

@@ -1349,9 +1349,9 @@ def _estimate_a4_autofit_base_font_px(
     actions_n = _plain_text_len_for_autofit(actions_html)
     rights_n = _plain_text_len_for_autofit(rights_text)
     score = results_n + how_n + (liability_n * 1.35) + (actions_n * 1.25) + rights_n
-    # أرضية موحدة مع Auto-Fit: لا أقل من 11px ولا أعلى من 13px للصناديق المشتركة
+    # أرضية موحدة مع Auto-Fit: لا أقل من 10.5px ولا أعلى من 13.5 للصناديق المشتركة
     if liability_n >= 2200 or actions_n >= 1100 or score >= 5000:
-        return 11.0
+        return 10.5
     if liability_n >= 1400 or actions_n >= 700 or score >= 3200:
         return 11.5
     if liability_n >= 900 or score >= 2000:
@@ -7189,7 +7189,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         }}
         :root {{
             --shared-box-font: {a4_autofit_base_font_px}px;
-            --shared-line-height: 1.60;
+            --shared-line-height: 1.42;
             --shared-box-pad: 14px;
             --section-gap: 10px;
             --a4-box-pad: 14px;
@@ -7213,7 +7213,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .report-sheet th {{ font-weight: 700; }}
         .page, .report-page, .a4-page {{
             --shared-box-font: {a4_autofit_base_font_px}px;
-            --shared-line-height: 1.60;
+            --shared-line-height: 1.42;
             --shared-box-pad: 14px;
             --section-gap: 10px;
             background: white; width: 210mm; min-width: 210mm; max-width: 210mm;
@@ -7236,8 +7236,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .a4-page .report-box,
         .a4-page .box-content.autofit-box,
         .a4-page .liability-box.autofit-box {{
-            font-size: var(--shared-box-font, 12.5px) !important;
-            line-height: var(--shared-line-height, 1.55) !important;
+            font-size: var(--shared-box-font, 13.5px) !important;
+            line-height: var(--shared-line-height, 1.42) !important;
             padding: var(--shared-box-pad, 12px) !important;
             padding-bottom: 10px !important;
             margin-bottom: var(--section-gap, 8px) !important;
@@ -7968,13 +7968,14 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
       }});
     }}
     function autoBalanceReportPages() {{
-      /* قياس .report-page ~294mm وتقليص الخط/التباعد من 12.5px إلى 5.8px دون zoom على الواجهة */
+      /* قياس .report-page بـ 295mm؛ صفّر min-height قبل القياس؛ ابدأ 13.5/1.42؛ حد أدنى 10.5؛ badge≥12.5 */
       var pages = document.querySelectorAll(".report-page, .a4-page, .page");
-      var initialBase = 12.5;
-      var minFont = 5.8;
-      var step = 0.35;
+      var initialBase = 13.5;
+      var minFont = 10.5;
+      var step = 0.25;
+      var lineHeight = 1.42;
       document.documentElement.style.setProperty("--shared-box-font", initialBase.toFixed(2) + "px");
-      document.documentElement.style.setProperty("--shared-line-height", "1.55");
+      document.documentElement.style.setProperty("--shared-line-height", String(lineHeight));
       for (var p = 0; p < pages.length; p++) {{
         var page = pages[p];
         if (!page || page.classList.contains("photo-annex")) continue;
@@ -7983,8 +7984,6 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         var footer = page.querySelector(".official-page-footer, .official-footer, .page-footer, .footer");
         if (footer) {{
           page.classList.remove("has-absolute-footer");
-          footer.style.setProperty("margin-top", "auto", "important");
-          footer.style.setProperty("padding-top", "6mm", "important");
           footer.style.setProperty("flex-shrink", "0", "important");
         }}
         var boxes = page.querySelectorAll(
@@ -7992,53 +7991,45 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         );
         if (!boxes.length) continue;
         var ruler = document.createElement("div");
-        ruler.style.cssText = "position:absolute;top:0;left:0;width:1px;height:294mm;visibility:hidden;pointer-events:none;";
+        ruler.style.cssText = "position:absolute;top:0;left:0;width:1px;height:295mm;visibility:hidden;pointer-events:none;";
         page.appendChild(ruler);
-        var maxH = ruler.offsetHeight || 1110;
+        var maxH = ruler.offsetHeight || 1116;
         page.removeChild(ruler);
+        /* قبل الحلقة: صفّر min-height وheight auto وهامش تذييل 8px مؤقتاً */
+        page.style.setProperty("min-height", "0", "important");
         page.style.setProperty("height", "auto", "important");
         page.style.setProperty("max-height", "none", "important");
         page.style.setProperty("overflow", "visible", "important");
+        if (footer) footer.style.setProperty("margin-top", "8px", "important");
         var body = page.querySelector(".page-body, .page-body-flex, .autofit-page-body");
         var badges = page.querySelectorAll(".section-badge");
-        var fontPx = initialBase;
-        var lineHeight = 1.55;
-        var padPx = 12;
-        var sectionGap = 8;
-        var badgeMargin = 4;
-        var badgePadY = 5;
-        _a4SetLastBoxGrow(page, 0);
-        _a4ApplySharedFont(page, fontPx, lineHeight);
-        _a4ApplySharedSpacing(page, padPx, sectionGap, badgeMargin, badgePadY);
-        var guard = 0;
-        while (guard < 40 && page.scrollHeight > maxH + 0.5) {{
-          guard += 1;
-          if (fontPx <= minFont + 0.001 && padPx <= 3 && sectionGap <= 2) break;
-          if (fontPx > minFont + 0.001) {{
-            fontPx = Math.max(minFont, +(fontPx - step).toFixed(2));
-          }}
-          var dropped = initialBase - fontPx;
-          lineHeight = Math.max(1.12, +(1.55 - dropped * 0.05).toFixed(2));
-          padPx = Math.max(3, Math.round(12 - dropped * 0.9));
-          sectionGap = Math.max(2, Math.round(8 - dropped * 0.55));
-          badgeMargin = Math.max(1, Math.round(4 - dropped * 0.35));
-          badgePadY = Math.max(2, Math.round(5 - dropped * 0.3));
+        function applyBalanceFont(fontPx) {{
+          _a4SetLastBoxGrow(page, 0);
           _a4ApplySharedFont(page, fontPx, lineHeight);
-          _a4ApplySharedSpacing(page, padPx, sectionGap, badgeMargin, badgePadY);
-          if (body) body.style.setProperty("gap", sectionGap + "px", "important");
+          if (body) body.style.setProperty("gap", "6px", "important");
           for (var bi = 0; bi < boxes.length; bi++) {{
             var bx = boxes[bi];
             if (bx.closest && bx.closest(".sign-table")) continue;
             bx.style.setProperty("font-size", fontPx.toFixed(2) + "px", "important");
             bx.style.setProperty("line-height", String(lineHeight), "important");
-            bx.style.setProperty("padding", padPx + "px " + padPx + "px 10px " + padPx + "px", "important");
             bx.style.setProperty("height", "auto", "important");
             bx.style.setProperty("max-height", "none", "important");
             bx.style.setProperty("overflow", "visible", "important");
             bx.style.setProperty("flex-shrink", "0", "important");
           }}
           for (var b = 0; b < badges.length; b++) {{
-            badges[b].style.setProperty("font-size", Math.max(8, fontPx).toFixed(2) + "px", "important");
+            badges[b].style.setProperty("font-size", Math.max(12.5, fontPx).toFixed(2) + "px", "important");
+          }}
+        }}
+        var fontPx = initialBase;
+        applyBalanceFont(fontPx);
+        /* لا تصغّر إن المحتوى ≤ maxH؛ إن زاد قلّل 0.25px وتوقف عند أول مقاس يدخل */
+        if (page.scrollHeight > maxH + 0.5) {{
+          while (fontPx > minFont + 0.001) {{
+            fontPx = Math.max(minFont, +(fontPx - step).toFixed(2));
+            applyBalanceFont(fontPx);
+            if (page.scrollHeight <= maxH + 0.5) break;
+            if (fontPx <= minFont + 0.001) break;
           }}
         }}
         page.style.setProperty("min-height", "296mm", "important");
