@@ -3599,16 +3599,17 @@ def _admin_violation_lines_for_zero_ratio(
     return lines
 
 def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ratio, p2_reasons):
-    ords = [
-        "أولاً", "ثانياً", "ثالثاً", "رابعاً", "خامساً",
-        "سادساً", "سابعاً", "ثامناً", "تاسعاً", "عاشراً",
-    ]
+    # أولاً/ثانياً للأطراف فقط — مواد المدان تُرقَّم بحروف أ. ب. ج. مع إزاحة
+    party_ords = ("أولاً", "ثانياً")
+    letter_marks = (
+        "أ", "ب", "ج", "د", "هـ", "و", "ز", "ح", "ط", "ي",
+        "ك", "ل", "م", "ن", "س", "ع", "ف", "ص", "ق", "ر",
+        "ش", "ت", "ث", "خ", "ذ", "ض", "ظ", "غ",
+    )
     p1_ratio, p2_ratio = int(p1_ratio or 0), int(p2_ratio or 0)
     t1_def, t2_def = "قائد المركبة الأولى", "قائد المركبة الثانية"
     safe_p1_title = html.escape(str(p1_title or t1_def).strip())
     safe_p2_title = html.escape(str(p2_title or t2_def).strip())
-    is_shared = p1_ratio > 0 and p2_ratio > 0
-    parties = list(st.session_state.get("parties") or [])
 
     def _unlic(idx, t_str):
         ts = str(t_str or "").strip()
@@ -3778,82 +3779,88 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
             out.append(("32", _txt("32")))
         return out
 
-    def _conv(ts, ratio, st_list):
-        rts = []
-        for c, _ in st_list:
-            r0 = c.split("/")[0]
-            if r0 not in rts:
-                rts.append(r0)
-        if "60" not in rts:
-            rts.insert(0, "60")
-        ct = f"للمادة ({rts[0]})" if len(rts) == 1 else "للمواد (" + "، ".join(rts) + ")"
+    def _statute_li(c, tx, letter, cset):
+        """بند مادة بحرف (أ. ب. ج.) مع إزاحة — ليس أولاً/ثانياً."""
+        ec, etx = html.escape(c), html.escape(tx)
+        mark = html.escape(letter)
+        if "/" in c:
+            ra = c.split("/")[0]
+            era = html.escape(ra)
+            rt = _txt(ra) if ra not in cset else ""
+            if rt:
+                cset.add(ra)
+                ert = html.escape(rt)
+                return (
+                    f"<li class='liability-reason'><strong>{mark}.</strong> "
+                    f"المادة ({era}) من نظام المرور والتي تنص على: «{ert}»، "
+                    f"والفقرة ({ec}) من لائحته التنفيذية والتي تنص على: «{etx}».</li>"
+                )
+            return (
+                f"<li class='liability-reason'><strong>{mark}.</strong> "
+                f"الفقرة ({ec}) من اللائحة التنفيذية للمادة ({era}) "
+                f"والتي تنص على: «{etx}».</li>"
+            )
+        return (
+            f"<li class='liability-reason'><strong>{mark}.</strong> "
+            f"المادة ({ec}) من نظام المرور والتي تنص على: «{etx}».</li>"
+        )
+
+    def _conv(ord_label, ts, ratio, st_list):
+        """طرف مدان بنسبة >0: أولاً/ثانياً ثم مواد بحروف."""
         cset = {x[0] for x in st_list}
         li = []
         for i, (c, tx) in enumerate(st_list):
-            ow = ords[i] if i < len(ords) else f"البند ({i+1})"
-            ec, etx = html.escape(c), html.escape(tx)
-            if "/" in c:
-                ra = c.split("/")[0]
-                era = html.escape(ra)
-                rt = _txt(ra) if ra not in cset else ""
-                if rt:
-                    cset.add(ra)
-                    ert = html.escape(rt)
-                    s_li = (
-                        f"<li class='liability-reason'><strong>{ow}:</strong> "
-                        f"المادة ({era}) من نظام المرور والتي تنص على: «{ert}»، "
-                        f"والفقرة ({ec}) من لائحته التنفيذية والتي تنص على: «{etx}».</li>"
-                    )
-                else:
-                    s_li = (
-                        f"<li class='liability-reason'><strong>{ow}:</strong> "
-                        f"الفقرة ({ec}) من اللائحة التنفيذية للمادة ({era}) "
-                        f"والتي تنص على: «{etx}».</li>"
-                    )
-            else:
-                s_li = (
-                    f"<li class='liability-reason'><strong>{ow}:</strong> "
-                    f"المادة ({ec}) من نظام المرور والتي تنص على: «{etx}».</li>"
-                )
-            li.append(s_li)
+            letter = letter_marks[i] if i < len(letter_marks) else str(i + 1)
+            li.append(_statute_li(c, tx, letter, cset))
         ul = f"<ul class='liability-reasons'>{''.join(li)}</ul>" if li else ""
         return (
-            "<div class='liability-block'><div class='liability-heading'>"
-            f"بعد المعاينة ومجريات التحقيق، واستناداً {ct} من نظام المرور ولائحته التنفيذية، "
-            f"جرى إدانة ({ts}) بنسبة ({ratio}%) من المسؤولية، بالآتي:"
-            f"</div>{ul}</div>"
+            "<div class='liability-block'>"
+            f"<div class='liability-heading'><strong>{html.escape(ord_label)}:</strong> "
+            f"جرى إدانة ({ts}) بنسبة ({ratio}%) من المسؤولية، بالآتي:</div>"
+            f"{ul}</div>"
         )
 
-    def _inn(ts, unlic):
+    def _inn(ord_label, ts, unlic):
+        """طرف بريء 0%: يُدمج نص الإعفاء بالمادة (50) في نفس بند أولاً/ثانياً."""
         adm = ""
         if unlic:
             t32 = html.escape(_txt("32"))
             adm = (
-                "<div class='liability-innocent' style='margin-top:4px;'>"
+                "<div class='liability-innocent liability-admin-note' style='margin-top:4px;'>"
                 f"• ثبتت مخالفة إدارية مستقلة على ({ts}) بقيادة المركبة قبل الحصول على "
                 f"رخصة القيادة اللازمة وفق المادة (32) من نظام المرور والتي تنص على: «{t32}»، "
                 "وتُحال للعقوبة النظامية دون أن تؤثر على براءته من مسؤولية وقوع الحادث (0%).</div>"
             )
         return (
             "<div class='liability-block liability-innocent-wrap'>"
-            f"<div class='liability-innocent'>• عدم مسؤولية ({ts}) عن الحادث (نسبة المسؤولية 0%).</div>"
-            "<div class='liability-innocent' style='margin-top:3px;'>• يُعفى قائد المركبة من المسؤولية لقاء استيفاء المادة (50) من نظام المرور.</div>"
+            f"<div class='liability-heading liability-innocent'><strong>{html.escape(ord_label)}:</strong> "
+            f"عدم مسؤولية ({ts}) عن الحادث (نسبة المسؤولية 0%)، "
+            "ويُعفى قائد المركبة من المسؤولية لقاء استيفاء المادة (50) من نظام المرور.</div>"
             f"{adm}</div>"
         )
 
     u1, u2 = _unlic(1, p1_title), _unlic(2, p2_title)
-    c_blks, i_blks = [], []
+    # تمهيد ثابت بالمادة (60) فقط — لا تُدرج مواد الإدانة في الديباجة
+    preamble = (
+        "<div class='liability-heading liability-preamble'>"
+        "بعد المعاينة ومجريات التحقيق، واستناداً إلى المادة (60) من نظام المرور ولائحته التنفيذية، "
+        "تتحدد المسؤولية على النحو الآتي:"
+        "</div>"
+    )
+    blocks = [preamble]
+    # أولاً = الطرف الأول، ثانياً = الطرف الثاني
     if p1_ratio > 0:
-        c_blks.append(_conv(safe_p1_title, p1_ratio, _collect(p1_reasons, u1, p1_ratio == 100)))
+        blocks.append(
+            _conv(party_ords[0], safe_p1_title, p1_ratio, _collect(p1_reasons, u1, p1_ratio == 100))
+        )
     else:
-        i_blks.append(_inn(safe_p1_title, u1))
+        blocks.append(_inn(party_ords[0], safe_p1_title, u1))
     if p2_ratio > 0:
-        c_blks.append(_conv(safe_p2_title, p2_ratio, _collect(p2_reasons, u2, p2_ratio == 100)))
+        blocks.append(
+            _conv(party_ords[1], safe_p2_title, p2_ratio, _collect(p2_reasons, u2, p2_ratio == 100))
+        )
     else:
-        i_blks.append(_inn(safe_p2_title, u2))
-    blocks = c_blks + i_blks
-    p1_party = p2_party = {}
-    append_zero_notes = lambda *a, **k: None
+        blocks.append(_inn(party_ords[1], safe_p2_title, u2))
 
     inner_content = "".join(blocks)
     return (
@@ -7857,15 +7864,21 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             font-weight: 700 !important;
             margin-bottom: 4px;
         }}
+        .page .liability-preamble,
+        .a4-page .liability-preamble {{
+            margin-bottom: 8px;
+        }}
         .page .liability-reasons,
         .a4-page .liability-reasons {{
-            margin: 6px 22px 10px 0;
-            padding: 0;
-            list-style-type: disc;
+            margin: 4px 28px 10px 0;
+            padding: 0 6px 0 0;
+            list-style-type: none;
         }}
         .page .liability-reason,
         .a4-page .liability-reason {{
-            margin-bottom: 8px;
+            margin-bottom: 6px;
+            padding-right: 4px;
+            text-indent: 0;
         }}
         .page .liability-block,
         .a4-page .liability-block {{
