@@ -2279,26 +2279,34 @@ def render_direct_print_button(
             .box-content {
                 margin-bottom: 6px !important;
             }
-            table.sign-table, .sign-table {
+            table.sign-table {
                 display: table !important;
                 table-layout: fixed !important;
                 width: 100% !important;
+                max-width: 100% !important;
+                min-width: 100% !important;
                 border-collapse: collapse !important;
+                border-spacing: 0 !important;
                 border: 1px solid #000 !important;
                 box-shadow: none !important;
                 outline: none !important;
                 margin: 8px 0 0 0 !important;
                 padding: 0 !important;
+                direction: rtl !important;
             }
-            .sign-table tr { display: table-row !important; }
-            .sign-table th, .sign-table td {
+            table.sign-table col { width: 33.33% !important; }
+            table.sign-table thead, table.sign-table tbody { display: table-row-group !important; }
+            table.sign-table tr { display: table-row !important; }
+            table.sign-table th, table.sign-table td {
                 display: table-cell !important;
                 width: 33.33% !important;
                 padding: 8px 6px !important;
                 border: 1px solid #000 !important;
                 vertical-align: top !important;
+                text-align: center !important;
+                float: none !important;
             }
-            .sign-table th[colspan] { width: 100% !important; }
+            table.sign-table th[colspan] { width: auto !important; }
         }
         .bayyinah-print-bar {
             position: sticky; top: 0; z-index: 9999;
@@ -2573,19 +2581,19 @@ OFFICIAL_A4_HIGH_CONTRAST_CSS = """
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
 }
-.page table, .report-page table {
+.page table:not(.sign-table), .report-page table:not(.sign-table) {
     border-collapse: collapse !important;
     border: 1.5px solid #000000 !important;
     width: 100% !important;
 }
-.page th, .report-page th {
+.page table:not(.sign-table) th, .report-page table:not(.sign-table) th {
     background-color: #dcefe4 !important;
     color: #000000 !important;
     font-weight: 800 !important;
     border: 1.1px solid #000000 !important;
     padding: 5px 8px !important;
 }
-.page td, .report-page td {
+.page table:not(.sign-table) td, .report-page table:not(.sign-table) td {
     color: #000000 !important;
     font-weight: 600 !important;
     border: 1px solid #000000 !important;
@@ -7376,10 +7384,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         _signature_box(sig_manager),
     ]
     sign_col_count = len(sign_headers)
+    sign_colgroup = "".join('<col style="width:33.33%">' for _ in range(sign_col_count))
     sign_header_cells = "".join(f"<th>{html.escape(h)}</th>" for h in sign_headers)
     sign_name_cells = "".join(f"<td>الاسم: {html.escape(str(n or ''))}</td>" for n in sign_names)
     sign_rank_cells = "".join(f"<td>الرتبة: {html.escape(str(r or ''))}</td>" for r in sign_ranks)
     sign_sig_cells = "".join(f"<td>{box}</td>" for box in sign_sig_boxes)
+    assert sign_col_count == len(sign_names) == len(sign_ranks) == len(sign_sig_boxes)
     accident_nature_val = _page1_cell(accident_nature_val)
     rights_status_val = _page1_cell(rights_status_val)
     participating_agency = _page1_cell(participating_agency)
@@ -7662,8 +7672,15 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             display: flex; flex-direction: column; justify-content: space-between;
             box-sizing: border-box;
         }}
-        .page-flow th, .page-flow td {{
+        .page-flow table:not(.sign-table) th,
+        .page-flow table:not(.sign-table) td {{
             padding: 4px 7px;
+        }}
+        .page-flow table.sign-table th,
+        .page-flow table.sign-table td {{
+            display: table-cell !important;
+            width: 33.33% !important;
+            padding: 8px 6px !important;
         }}
         .page-body,
         .page-body-flex,
@@ -7751,10 +7768,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             display: block; margin: 0 auto;
             border: 2px solid #1b4332; border-radius: 6px; background: #fff;
         }}
-        /* جدول معد التقرير: جدول حقيقي بعرض كامل دون إطار مزدوج ودون display:block */
-        .page-three .sign-table,
-        table.sign-table,
-        .sign-table {{
+        /* جدول معد التقرير — قواعد أولية؛ القاعدة النهائية بعد OFFICIAL تتفوق على page-p3/page-flow */
+        table.sign-table {{
             display: table !important;
             table-layout: fixed !important;
             width: 100% !important;
@@ -7766,57 +7781,26 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             box-shadow: none !important;
             margin: 8px 0 0 0 !important;
             padding: 0 !important;
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
-            flex-shrink: 0 !important;
             background: #fff;
+            direction: rtl !important;
+            flex-shrink: 0 !important;
         }}
-        .sign-table > tr,
-        .sign-table > tbody > tr,
-        table.sign-table tr {{
-            display: table-row !important;
-        }}
-        .sign-table > tr > th,
-        .sign-table > tr > td,
-        .sign-table > tbody > tr > th,
-        .sign-table > tbody > tr > td,
+        table.sign-table col {{ width: 33.33% !important; }}
+        table.sign-table thead,
+        table.sign-table tbody {{ display: table-row-group !important; }}
+        table.sign-table tr {{ display: table-row !important; }}
         table.sign-table th,
         table.sign-table td {{
             display: table-cell !important;
             width: 33.33% !important;
-            max-width: 33.33% !important;
             padding: 8px 6px !important;
             box-sizing: border-box !important;
             vertical-align: top !important;
             text-align: center !important;
             border: 1.5px solid #444 !important;
-            height: auto !important;
-            max-height: none !important;
-            overflow: visible !important;
             white-space: normal !important;
         }}
-        .sign-table th[colspan] {{
-            width: 100% !important;
-            max-width: none !important;
-        }}
-        .table-scroll:has(> table.sign-table),
-        .table-scroll:has(> .sign-table) {{
-            border: none !important;
-            box-shadow: none !important;
-            padding: 0 !important;
-            margin: 0 !important;
-            overflow: visible !important;
-            background: transparent !important;
-        }}
-        /* استثناء مستطيلات النصوص: لا تُطبَّق display:block على جدول التوقيعات */
-        .autofit-box.sign-table,
-        table.sign-table.autofit-box,
-        [data-autofit="signatures"],
-        table.sign-table[data-autofit] {{
-            display: table !important;
-            padding-bottom: 0 !important;
-        }}
+        table.sign-table th[colspan] {{ width: auto !important; }}
         .photo-card .photo-meta {{
             margin-top: 4px; font-weight: 600; font-size: 15px; line-height: 1.35;
             overflow: visible; white-space: normal;
@@ -7946,14 +7930,18 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             padding: 4mm 0 7mm 0 !important;
             min-height: 0 !important;
         }}
-        .page-p3 table th {{
+        .page-p3 table:not(.sign-table) th {{
             padding: 8px 10px !important;
             font-size: 13px !important;
         }}
-        .page-p3 table td {{
+        .page-p3 table:not(.sign-table) td {{
             padding: 10px 12px !important;
             font-size: 12.5px !important;
             line-height: 1.75 !important;
+        }}
+        .page-p3 table.sign-table th,
+        .page-p3 table.sign-table td {{
+            padding: 8px 6px !important;
         }}
         .page-p3 td.actions-body {{
             min-height: 18mm !important;
@@ -7967,11 +7955,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             line-height: var(--shared-line-height, 1.60) !important;
             overflow: hidden;
         }}
-        .page-p3 tr.sig-row td {{
+        .page-p3 table.sign-table tr.sig-row td {{
             height: 28mm !important;
             min-height: 28mm !important;
             vertical-align: top !important;
-            padding-top: 8px !important;
+            padding: 8px 6px !important;
         }}
         .page-p1 > .official-page-footer,
         .page-p3 > .official-page-footer {{
@@ -8153,11 +8141,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             .report-sheet th,
             .report-sheet td {{ font-size: 14px !important; font-weight: 600; }}
             .report-sheet th {{ font-weight: 700; }}
-            table.sign-table,
-            .sign-table {{
+            table.sign-table {{
                 display: table !important;
                 table-layout: fixed !important;
                 width: 100% !important;
+                max-width: 100% !important;
                 border-collapse: collapse !important;
                 border-spacing: 0 !important;
                 border: 1px solid #000 !important;
@@ -8165,33 +8153,31 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 box-shadow: none !important;
                 margin: 8px 0 0 0 !important;
                 padding: 0 !important;
+                direction: rtl !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
             }}
-            .sign-table tr {{
+            table.sign-table col {{ width: 33.33% !important; }}
+            table.sign-table thead,
+            table.sign-table tbody {{ display: table-row-group !important; }}
+            table.sign-table tr {{
                 display: table-row !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
             }}
-            .sign-table th,
-            .sign-table td {{
+            table.sign-table th,
+            table.sign-table td {{
                 display: table-cell !important;
                 width: 33.33% !important;
                 padding: 8px 6px !important;
                 border: 1px solid #000 !important;
                 vertical-align: top !important;
+                text-align: center !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 page-break-after: avoid !important;
             }}
-            .sign-table th[colspan] {{
-                width: 100% !important;
-            }}
-            .table-scroll:has(> table.sign-table) {{
-                border: none !important;
-                box-shadow: none !important;
-                padding: 0 !important;
-            }}
+            table.sign-table th[colspan] {{ width: auto !important; }}
             .page-flow {{ justify-content: space-between !important; }}
             .page-body, .page-body-flex, .autofit-page-body {{
                 flex: 1 0 auto !important;
@@ -8201,7 +8187,14 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 overflow: visible !important;
             }}
             .page-flow .section-badge {{ margin: 4px auto !important; }}
-            .page-flow th, .page-flow td {{ padding: 4px 7px !important; }}
+            .page-flow table:not(.sign-table) th,
+            .page-flow table:not(.sign-table) td {{ padding: 4px 7px !important; }}
+            .page-flow table.sign-table th,
+            .page-flow table.sign-table td {{
+                display: table-cell !important;
+                width: 33.33% !important;
+                padding: 8px 6px !important;
+            }}
             .official-page-footer, .official-footer, .page-footer, .footer {{
                 position: relative !important;
                 bottom: auto !important;
@@ -8256,11 +8249,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 padding: 4mm 0 7mm 0 !important;
                 min-height: 0 !important;
             }}
-            .page-p3 table th {{
+            .page-p3 table:not(.sign-table) th {{
                 padding: 8px 10px !important;
                 font-size: 13px !important;
             }}
-            .page-p3 table td {{
+            .page-p3 table:not(.sign-table) td {{
                 padding: 10px 12px !important;
                 font-size: 12.5px !important;
                 line-height: 1.75 !important;
@@ -8277,11 +8270,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 line-height: var(--shared-line-height, 1.60) !important;
                 overflow: hidden !important;
             }}
-            .page-p3 tr.sig-row td {{
+            .page-p3 table.sign-table tr.sig-row td {{
                 height: 28mm !important;
                 min-height: 28mm !important;
                 vertical-align: top !important;
-                padding-top: 8px !important;
+                padding: 8px 6px !important;
             }}
             .page-p1 > .official-page-footer,
             .page-p3 > .official-page-footer {{
@@ -8291,6 +8284,57 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         }}
         {page_number_css}
         {OFFICIAL_A4_HIGH_CONTRAST_CSS}
+        /* === SIGN_TABLE_FINAL: يتفوق على page-p3 / page-flow / OFFICIAL لمنع فراغ يسار وإطار مزدوج === */
+        table.sign-table {{
+            display: table !important;
+            table-layout: fixed !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-width: 100% !important;
+            border-collapse: collapse !important;
+            border-spacing: 0 !important;
+            border: 1.5px solid #000 !important;
+            outline: none !important;
+            box-shadow: none !important;
+            margin: 8px 0 0 0 !important;
+            padding: 0 !important;
+            direction: rtl !important;
+            background: #fff !important;
+            flex: 0 0 auto !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            transform: none !important;
+        }}
+        table.sign-table col {{ width: 33.33% !important; }}
+        table.sign-table thead,
+        table.sign-table tbody {{ display: table-row-group !important; width: auto !important; }}
+        table.sign-table tr {{ display: table-row !important; width: auto !important; }}
+        table.sign-table th,
+        table.sign-table td {{
+            display: table-cell !important;
+            width: 33.33% !important;
+            padding: 8px 6px !important;
+            box-sizing: border-box !important;
+            vertical-align: top !important;
+            text-align: center !important;
+            border: 1px solid #000 !important;
+            background-clip: padding-box !important;
+            white-space: normal !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            float: none !important;
+            position: static !important;
+        }}
+        table.sign-table th[colspan] {{
+            width: auto !important;
+        }}
+        table.sign-table tr.sig-row td {{
+            height: 28mm !important;
+            min-height: 28mm !important;
+            padding: 8px 6px !important;
+        }}
     
 </style>
     <script>
@@ -8559,13 +8603,18 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                     <tr><td class="actions-body autofit-box" data-autofit="actions">{final_actions_html}</td></tr>
                 </table></div>
                 {criminal_details_html}
-                <div class="table-scroll sign-table-wrap"><table class="sign-table" role="table">
+                <table class="sign-table" role="table">
+                    <colgroup>{sign_colgroup}</colgroup>
+                    <thead>
                     <tr><th colspan="{sign_col_count}">معد التقرير</th></tr>
                     <tr>{sign_header_cells}</tr>
+                    </thead>
+                    <tbody>
                     <tr>{sign_name_cells}</tr>
                     <tr>{sign_rank_cells}</tr>
                     <tr class="sig-row">{sign_sig_cells}</tr>
-                </table></div>
+                    </tbody>
+                </table>
             </div>
             {official_footer_html}
         </div>

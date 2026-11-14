@@ -33,16 +33,16 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
   justify-content: flex-start !important;
   gap: 5px !important;
 }
-.page.report-page .box-content:not(.sign-table),
-.page.report-page .autofit-box:not(.sign-table):not(table.sign-table),
-.page.report-page .section-box:not(.sign-table),
-.page.report-page .content-box:not(.sign-table),
-.page.report-page .report-box:not(.sign-table),
+.page.report-page .box-content:not(table.sign-table),
+.page.report-page .autofit-box:not(table.sign-table),
+.page.report-page .section-box:not(table.sign-table),
+.page.report-page .content-box:not(table.sign-table),
+.page.report-page .report-box:not(table.sign-table),
 .page.report-page .results-box,
 .page.report-page .how-happened-box,
 .page.report-page .liability-box,
-.page.report-page [data-autofit]:not(.sign-table):not(table.sign-table),
-.page.report-page [data-oldfit]:not(.sign-table):not(table.sign-table) {
+.page.report-page [data-autofit]:not(table.sign-table),
+.page.report-page [data-oldfit]:not(table.sign-table) {
   height: auto !important;
   max-height: none !important;
   overflow: visible !important;
@@ -53,55 +53,67 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
   transform: none !important;
   display: block !important;
 }
+/* جدول معد التقرير: استثناء كامل من display:block على مستطيلات النصوص */
 .page.report-page table.sign-table,
-.page.report-page .sign-table {
+table.sign-table {
   display: table !important;
   table-layout: fixed !important;
   width: 100% !important;
+  max-width: 100% !important;
+  min-width: 100% !important;
   border-collapse: collapse !important;
   border-spacing: 0 !important;
-  border: 1px solid #444 !important;
+  border: 1.5px solid #000 !important;
   box-shadow: none !important;
   outline: none !important;
   height: auto !important;
   max-height: none !important;
   overflow: visible !important;
+  flex: 0 0 auto !important;
   flex-shrink: 0 !important;
   padding: 0 !important;
-  padding-bottom: 0 !important;
   margin: 8px 0 0 0 !important;
   transform: none !important;
+  direction: rtl !important;
+  background: #fff !important;
 }
-.page.report-page .sign-table > tr,
-.page.report-page .sign-table > tbody > tr,
-.page.report-page table.sign-table tr {
+.page.report-page table.sign-table col,
+table.sign-table col {
+  width: 33.33% !important;
+}
+.page.report-page table.sign-table thead,
+.page.report-page table.sign-table tbody,
+table.sign-table thead,
+table.sign-table tbody {
+  display: table-row-group !important;
+}
+.page.report-page table.sign-table tr,
+table.sign-table tr {
   display: table-row !important;
 }
-.page.report-page .sign-table > tr > th,
-.page.report-page .sign-table > tr > td,
-.page.report-page .sign-table > tbody > tr > th,
-.page.report-page .sign-table > tbody > tr > td,
 .page.report-page table.sign-table th,
-.page.report-page table.sign-table td {
+.page.report-page table.sign-table td,
+table.sign-table th,
+table.sign-table td {
   display: table-cell !important;
   width: 33.33% !important;
   padding: 8px 6px !important;
   box-sizing: border-box !important;
   vertical-align: top !important;
+  text-align: center !important;
+  border: 1px solid #000 !important;
   height: auto !important;
   max-height: none !important;
   overflow: visible !important;
+  float: none !important;
+  position: static !important;
 }
-.page.report-page .table-scroll:has(> .sign-table),
-.page.report-page .table-scroll:has(> table.sign-table) {
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0 !important;
-  overflow: visible !important;
+.page.report-page table.sign-table th[colspan],
+table.sign-table th[colspan] {
+  width: auto !important;
 }
 .page.report-page .table-scroll,
-.page.report-page td.actions-body,
-.page.report-page td.autofit-box:not(.sign-table th):not(.sign-table td) {
+.page.report-page td.actions-body {
   height: auto !important;
   max-height: none !important;
   overflow: visible !important;
@@ -128,6 +140,18 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
     page-break-after: always !important;
   }
   .page.report-page:last-of-type { page-break-after: auto !important; }
+  table.sign-table {
+    display: table !important;
+    table-layout: fixed !important;
+    width: 100% !important;
+    border-collapse: collapse !important;
+  }
+  table.sign-table tr { display: table-row !important; }
+  table.sign-table th, table.sign-table td {
+    display: table-cell !important;
+    width: 33.33% !important;
+    padding: 8px 6px !important;
+  }
 }
 </style>
 <script>
@@ -135,6 +159,8 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
   function unlockBoxes(root) {
     if (!root || !root.querySelectorAll) return;
     root.querySelectorAll('[data-autofit]').forEach(function(el) {
+      if (el.classList && el.classList.contains('sign-table')) return;
+      if (el.closest && el.closest('table.sign-table')) return;
       el.setAttribute('data-oldfit', el.getAttribute('data-autofit'));
       el.removeAttribute('data-autofit');
     });
@@ -142,20 +168,51 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
       '.box-content, .autofit-box, .section-box, .content-box, .report-box, .liability-box, [data-oldfit], td.actions-body'
     ).forEach(function(el) {
       if (el.classList && el.classList.contains('sign-table')) return;
-      if (el.closest && el.closest('table.sign-table, .sign-table')) return;
+      if (el.closest && el.closest('table.sign-table')) return;
       el.style.setProperty('height', 'auto', 'important');
       el.style.setProperty('max-height', 'none', 'important');
       el.style.setProperty('overflow', 'visible', 'important');
       el.style.setProperty('flex-shrink', '0', 'important');
       el.style.setProperty('padding-bottom', '10px', 'important');
-      if (el.tagName !== 'TABLE' && el.tagName !== 'TR' && el.tagName !== 'TD' && el.tagName !== 'TH') {
+      if (el.tagName !== 'TABLE' && el.tagName !== 'TR' && el.tagName !== 'TD' && el.tagName !== 'TH' && el.tagName !== 'THEAD' && el.tagName !== 'TBODY' && el.tagName !== 'COL' && el.tagName !== 'COLGROUP') {
         el.style.setProperty('display', 'block', 'important');
       }
+    });
+  }
+  function hardenSignTables(doc) {
+    if (!doc || !doc.querySelectorAll) return;
+    doc.querySelectorAll('table.sign-table').forEach(function(table) {
+      table.style.setProperty('display', 'table', 'important');
+      table.style.setProperty('table-layout', 'fixed', 'important');
+      table.style.setProperty('width', '100%', 'important');
+      table.style.setProperty('max-width', '100%', 'important');
+      table.style.setProperty('min-width', '100%', 'important');
+      table.style.setProperty('border-collapse', 'collapse', 'important');
+      table.style.setProperty('direction', 'rtl', 'important');
+      table.querySelectorAll('col').forEach(function(col) {
+        col.style.setProperty('width', '33.33%', 'important');
+      });
+      table.querySelectorAll('thead, tbody').forEach(function(g) {
+        g.style.setProperty('display', 'table-row-group', 'important');
+      });
+      table.querySelectorAll('tr').forEach(function(tr) {
+        tr.style.setProperty('display', 'table-row', 'important');
+      });
+      table.querySelectorAll('th, td').forEach(function(cell) {
+        cell.style.setProperty('display', 'table-cell', 'important');
+        if (!cell.hasAttribute('colspan')) {
+          cell.style.setProperty('width', '33.33%', 'important');
+        }
+        cell.style.setProperty('padding', '8px 6px', 'important');
+        cell.style.setProperty('float', 'none', 'important');
+        cell.style.setProperty('position', 'static', 'important');
+      });
     });
   }
   function fitReportPages(doc) {
     if (!doc) return;
     unlockBoxes(doc);
+    hardenSignTables(doc);
     var pages = doc.querySelectorAll('.report-page, div.page');
     pages.forEach(function(page) {
       if (page.classList && page.classList.contains('photo-annex')) return;
@@ -171,7 +228,6 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
       var footer = page.querySelector(':scope > [class*="footer"], :scope > footer, .official-page-footer, .official-footer, .page-footer');
       var body = page.querySelector('.page-body-flex, .page-body, .p2-body-flex, .p3-body-flex, .autofit-page-body, [class*="-body-flex"]');
       var badges = page.querySelectorAll('.section-badge');
-      /* قبل الحلقة: صفّر min-height حتى لا يقارن scrollHeight بصفحة 296mm */
       page.style.setProperty('min-height', '0', 'important');
       page.style.setProperty('height', 'auto', 'important');
       page.style.setProperty('max-height', 'none', 'important');
@@ -184,7 +240,7 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
           b.style.setProperty('font-size', Math.max(12.5, fs) + 'px', 'important');
         });
         boxes.forEach(function(bx) {
-          if (bx.closest && bx.closest('.sign-table')) return;
+          if (bx.closest && bx.closest('table.sign-table')) return;
           bx.style.setProperty('font-size', fs + 'px', 'important');
           bx.style.setProperty('line-height', String(lh), 'important');
           bx.style.setProperty('height', 'auto', 'important');
@@ -193,7 +249,7 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
           bx.style.setProperty('flex-shrink', '0', 'important');
           bx.querySelectorAll('p, li, ul, ol, div, span, b, strong, td').forEach(function(ch) {
             if (ch.classList && ch.classList.contains('section-badge')) return;
-            if (ch.closest && ch.closest('.sign-table')) return;
+            if (ch.closest && ch.closest('table.sign-table')) return;
             ch.style.setProperty('font-size', fs + 'px', 'important');
             ch.style.setProperty('line-height', String(lh), 'important');
           });
@@ -202,7 +258,6 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
       var fs = 13.5;
       var minFont = 10.5;
       applyFs(fs);
-      /* لا تصغّر إن المحتوى ≤ maxH؛ وإلا قلّل 0.25 وتوقف عند أول مقاس يدخل */
       if (page.scrollHeight > maxH + 0.5) {
         while (fs > minFont + 0.001) {
           fs = Math.max(minFont, +(fs - 0.25).toFixed(2));
@@ -213,6 +268,7 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
       }
       page.style.setProperty('min-height', '296mm', 'important');
       if (footer) footer.style.setProperty('margin-top', 'auto', 'important');
+      hardenSignTables(page);
     });
   }
   window.__fitBayyinahCleanA4 = fitReportPages;
