@@ -85,6 +85,8 @@ TAB3_KEYS = (
     "saved_procedures_text",
     "procedures_is_manual",
     "procedures_rev",
+    "proc_ta_ver",
+    "prev_selected_procs",
     "extra_procedure",
     "has_video",
     "video_clip_count",

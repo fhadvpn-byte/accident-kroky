@@ -773,10 +773,14 @@ def render_legal_articles_inserter(selected_articles: list, p1_reasons_key: str 
 SAVED_PROCEDURES_TEXT = "saved_procedures_text"
 PROCEDURES_IS_MANUAL = "procedures_is_manual"
 PROCEDURES_REV = "procedures_rev"
+PROC_TA_VER = "proc_ta_ver"
+PREV_SELECTED_PROCS = "prev_selected_procs"
 PROCEDURES_PERSIST_KEYS = (
     SAVED_PROCEDURES_TEXT,
     PROCEDURES_IS_MANUAL,
     PROCEDURES_REV,
+    PROC_TA_VER,
+    PREV_SELECTED_PROCS,
 )
 
 
@@ -784,23 +788,41 @@ def _ensure_procedures_defaults() -> None:
     st.session_state.setdefault(SAVED_PROCEDURES_TEXT, "")
     st.session_state.setdefault(PROCEDURES_IS_MANUAL, False)
     st.session_state.setdefault(PROCEDURES_REV, 0)
+    st.session_state.setdefault(PROC_TA_VER, int(st.session_state.get(PROCEDURES_REV) or 0))
+    st.session_state.setdefault(PREV_SELECTED_PROCS, [])
     # ترحيل النص القديم من actions_taken_editor إن وُجد
     if _is_blank_form_value(st.session_state.get(SAVED_PROCEDURES_TEXT)):
         legacy = st.session_state.get("actions_taken_editor")
         if not _is_blank_form_value(legacy):
             st.session_state[SAVED_PROCEDURES_TEXT] = str(legacy)
+    # مواءمة إصداري مفتاح الودجت
+    try:
+        ver = int(st.session_state.get(PROC_TA_VER) or 0)
+    except (TypeError, ValueError):
+        ver = 0
+    try:
+        rev = int(st.session_state.get(PROCEDURES_REV) or 0)
+    except (TypeError, ValueError):
+        rev = 0
+    synced = max(ver, rev)
+    st.session_state[PROC_TA_VER] = synced
+    st.session_state[PROCEDURES_REV] = synced
+    if not isinstance(st.session_state.get(PREV_SELECTED_PROCS), list):
+        st.session_state[PREV_SELECTED_PROCS] = []
 
 
 def _procedures_widget_key() -> str:
-    rev = int(st.session_state.get(PROCEDURES_REV) or 0)
+    rev = int(st.session_state.get(PROC_TA_VER) or st.session_state.get(PROCEDURES_REV) or 0)
     return f"procedures_ta_{rev}"
 
 
 def _bump_procedures_rev() -> None:
     try:
-        st.session_state[PROCEDURES_REV] = int(st.session_state.get(PROCEDURES_REV) or 0) + 1
+        new_ver = int(st.session_state.get(PROC_TA_VER) or st.session_state.get(PROCEDURES_REV) or 0) + 1
     except (TypeError, ValueError):
-        st.session_state[PROCEDURES_REV] = 1
+        new_ver = 1
+    st.session_state[PROC_TA_VER] = new_ver
+    st.session_state[PROCEDURES_REV] = new_ver
 
 
 def _procedures_is_manual() -> bool:
@@ -877,15 +899,25 @@ def _write_saved_procedures(
 
 
 def _write_actions_editor(cur_acts):
-    """كتابة من مزامنة الإصابات/الوفيات — لا تُكتب فوق النص إن is_manual."""
+    """كتابة من مزامنة الإصابات/الوفيات — مع دمج ذكي إن is_manual."""
     if "ACTIONS_SCENARIOS" not in globals():
         st.session_state["_pending_actions_text"] = True
         return
     _ensure_procedures_defaults()
+    new_keys = [
+        key for key in (cur_acts or [])
+        if key in ACTIONS_SCENARIOS
+    ]
+    prev_keys = list(st.session_state.get(PREV_SELECTED_PROCS) or [])
     if _procedures_is_manual():
-        return
-    text = _build_procedures_text_from_selection(cur_acts)
-    _write_saved_procedures(text, mark_manual=False, bump_rev=True)
+        current = str(st.session_state.get(SAVED_PROCEDURES_TEXT) or "")
+        merged = _smart_merge_procedures_text(prev_keys, new_keys, current)
+        if merged != current:
+            _write_saved_procedures(merged, mark_manual=True, bump_rev=True)
+    else:
+        text = _build_procedures_text_from_selection(new_keys)
+        _write_saved_procedures(text, mark_manual=False, bump_rev=True)
+    st.session_state[PREV_SELECTED_PROCS] = list(new_keys)
 
 _VEHICLE_ORDINALS_AR = {
     1: "الأولى",
@@ -7430,13 +7462,130 @@ def action_scenario_text(key: str, deaths_count: int = None) -> str:
         return pluralize_fatality_action_text(raw, deaths_count)
     return raw
 
-def sync_selected_actions():
-    """إعادة توليد نص الإجراءات من القائمة — فقط عبر on_change لـ multiselect."""
+
+def _normalize_procedure_body(line: str) -> str:
+    s = str(line or "").strip()
+    s = re.sub(r"^\d+\s*[-–—.)]\s*", "", s).strip()
+    return s
+
+
+def _parse_procedure_bodies(text: str) -> list[str]:
+    return [
+        body
+        for body in (_normalize_procedure_body(raw) for raw in str(text or "").splitlines())
+        if body
+    ]
+
+
+def _format_procedure_bodies(bodies: list[str]) -> str:
+    lines = []
+    for idx, body in enumerate(bodies, start=1):
+        clean = _normalize_procedure_body(body)
+        if not clean:
+            continue
+        lines.append(f"{idx}- {clean}")
+    return "\n".join(lines)
+
+
+def _procedures_text_maps() -> tuple[dict, dict, dict]:
+    """خرائط كاملة: مفتاح→نص رسمي، نص→مفتاح، رقم→مفتاح."""
+    by_key: dict[str, str] = {}
+    by_body: dict[str, str] = {}
+    by_num: dict[int, str] = {}
+    if "ACTIONS_SCENARIOS" not in globals():
+        return by_key, by_body, by_num
+    deaths_count = _accident_deaths_count()
+    for key in ACTIONS_SCENARIOS.keys():
+        body = _normalize_procedure_body(action_scenario_text(key, deaths_count))
+        if not body:
+            continue
+        by_key[key] = body
+        by_body[body] = key
+        num = _action_key_number(key)
+        if num >= 0:
+            by_num[num] = key
+    return by_key, by_body, by_num
+
+
+def _smart_merge_procedures_text(prev_keys, new_keys, current_text: str) -> str:
+    """دمج ذكي مع القفل اليدوي: إضافة/حذف وفق prev_selected_procs مع إعادة ترقيم."""
+    by_key, _by_body, _by_num = _procedures_text_maps()
+    prev_list = [k for k in (prev_keys or []) if k in by_key]
+    new_list = [k for k in (new_keys or []) if k in by_key]
+    prev_set = set(prev_list)
+    new_set = set(new_list)
+    removed = prev_set - new_set
+    added = [k for k in new_list if k not in prev_set]
+    remove_bodies = {by_key[k] for k in removed if k in by_key}
+    kept = [
+        body
+        for body in _parse_procedure_bodies(current_text)
+        if body not in remove_bodies
+    ]
+    existing = set(kept)
+    for key in added:
+        body = by_key.get(key) or ""
+        if body and body not in existing:
+            kept.append(body)
+            existing.add(body)
+    return _format_procedure_bodies(kept)
+
+
+def _append_missing_selected_procedures_once() -> bool:
+    """إلحاق مرة عند التحميل إن كان الإجراء محدداً ونصّه غير موجود (حتى مع is_manual)."""
+    if st.session_state.get("_procedures_once_append_done"):
+        return False
+    st.session_state["_procedures_once_append_done"] = True
     _ensure_procedures_defaults()
+    by_key, _by_body, _by_num = _procedures_text_maps()
+    selected = [
+        key
+        for key in (st.session_state.get("selected_actions_multi") or [])
+        if key in by_key
+    ]
+    if not selected:
+        st.session_state[PREV_SELECTED_PROCS] = list(selected)
+        return False
+    current = str(st.session_state.get(SAVED_PROCEDURES_TEXT) or "")
+    bodies = _parse_procedure_bodies(current)
+    existing = set(bodies)
+    changed = False
+    for key in selected:
+        body = by_key.get(key) or ""
+        if body and body not in existing:
+            bodies.append(body)
+            existing.add(body)
+            changed = True
+    if changed:
+        merged = _format_procedure_bodies(bodies)
+        _write_saved_procedures(
+            merged,
+            mark_manual=True if _procedures_is_manual() else None,
+            bump_rev=True,
+        )
+    if not st.session_state.get(PREV_SELECTED_PROCS):
+        st.session_state[PREV_SELECTED_PROCS] = list(selected)
+    return changed
+
+
+def sync_selected_actions():
+    """on_change للقائمة: توليد كامل أو دمج ذكي مع is_manual + رفع proc_ta_ver."""
+    _ensure_procedures_defaults()
+    new_keys = [
+        key
+        for key in (st.session_state.get("selected_actions_multi") or [])
+        if "ACTIONS_SCENARIOS" in globals() and key in ACTIONS_SCENARIOS
+    ]
+    prev_keys = list(st.session_state.get(PREV_SELECTED_PROCS) or [])
     if _procedures_is_manual():
-        return
-    text = _build_procedures_text_from_selection()
-    _write_saved_procedures(text, mark_manual=False, bump_rev=True)
+        current = str(st.session_state.get(SAVED_PROCEDURES_TEXT) or "")
+        merged = _smart_merge_procedures_text(prev_keys, new_keys, current)
+        if merged != current or set(prev_keys) != set(new_keys):
+            _write_saved_procedures(merged, mark_manual=True, bump_rev=True)
+    else:
+        text = _build_procedures_text_from_selection(new_keys)
+        _write_saved_procedures(text, mark_manual=False, bump_rev=True)
+    st.session_state[PREV_SELECTED_PROCS] = list(new_keys)
     try:
         sync_permanent_form_data(reason="procedures_multiselect")
     except Exception:
@@ -7480,6 +7629,19 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         if not seed:
             seed = f"1- {ACTIONS_SCENARIOS['1. صلح وتنازل ميداني نهائي']}"
         _write_saved_procedures(seed, mark_manual=False, bump_rev=False)
+        st.session_state[PREV_SELECTED_PROCS] = [
+            key
+            for key in (st.session_state.get("selected_actions_multi") or [])
+            if key in ACTIONS_SCENARIOS
+        ]
+    # إن كان 27/28 (أو غيرهما) محدداً ونصّه غائب — ألحق مرة حتى مع procedures_is_manual
+    _append_missing_selected_procedures_once()
+    if not st.session_state.get(PREV_SELECTED_PROCS):
+        st.session_state[PREV_SELECTED_PROCS] = [
+            key
+            for key in (st.session_state.get("selected_actions_multi") or [])
+            if key in ACTIONS_SCENARIOS
+        ]
 
     def _on_rights_sel_change() -> None:
         selected = str(st.session_state.get("rights_sel") or "")
@@ -7546,7 +7708,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         key="selected_actions_multi",
         on_change=sync_selected_actions,
     )
-    _proc_rev = int(st.session_state.get(PROCEDURES_REV) or 0)
+    _proc_rev = int(st.session_state.get(PROC_TA_VER) or st.session_state.get(PROCEDURES_REV) or 0)
     _proc_widget_key = _procedures_widget_key()
     if _proc_widget_key not in st.session_state:
         st.session_state[_proc_widget_key] = str(
