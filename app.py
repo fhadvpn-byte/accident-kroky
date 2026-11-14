@@ -2275,10 +2275,30 @@ def render_direct_print_button(
                 page-break-after: auto !important;
                 break-after: auto !important;
             }
-            .page table, .report-page table, .a4-page table,
+            .page table:not(.sign-table), .report-page table:not(.sign-table), .a4-page table:not(.sign-table),
             .box-content {
                 margin-bottom: 6px !important;
             }
+            table.sign-table, .sign-table {
+                display: table !important;
+                table-layout: fixed !important;
+                width: 100% !important;
+                border-collapse: collapse !important;
+                border: 1px solid #000 !important;
+                box-shadow: none !important;
+                outline: none !important;
+                margin: 8px 0 0 0 !important;
+                padding: 0 !important;
+            }
+            .sign-table tr { display: table-row !important; }
+            .sign-table th, .sign-table td {
+                display: table-cell !important;
+                width: 33.33% !important;
+                padding: 8px 6px !important;
+                border: 1px solid #000 !important;
+                vertical-align: top !important;
+            }
+            .sign-table th[colspan] { width: 100% !important; }
         }
         .bayyinah-print-bar {
             position: sticky; top: 0; z-index: 9999;
@@ -7342,6 +7362,24 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     officer_2_rank = _page1_cell(st.session_state.get("officer_2_rank") or officer_2_rank)
     manager_name = _page1_cell(st.session_state.get("manager_name") or manager_name)
     manager_rank = _page1_cell(st.session_state.get("manager_rank") or manager_rank)
+    # أعمدة جدول معد التقرير الفعلية فقط — بلا td/th فارغة يساراً؛ colspan = عدد الأعمدة
+    sign_headers = [
+        "إجراءات الحوادث",
+        "مشرف الحوادث",
+        f"مدير {dept_branch}",
+    ]
+    sign_names = [officer_1_name, officer_2_name, manager_name]
+    sign_ranks = [officer_1_rank, officer_2_rank, manager_rank]
+    sign_sig_boxes = [
+        _signature_box(sig_officer),
+        _signature_box(sig_supervisor),
+        _signature_box(sig_manager),
+    ]
+    sign_col_count = len(sign_headers)
+    sign_header_cells = "".join(f"<th>{html.escape(h)}</th>" for h in sign_headers)
+    sign_name_cells = "".join(f"<td>الاسم: {html.escape(str(n or ''))}</td>" for n in sign_names)
+    sign_rank_cells = "".join(f"<td>الرتبة: {html.escape(str(r or ''))}</td>" for r in sign_ranks)
+    sign_sig_cells = "".join(f"<td>{box}</td>" for box in sign_sig_boxes)
     accident_nature_val = _page1_cell(accident_nature_val)
     rights_status_val = _page1_cell(rights_status_val)
     participating_agency = _page1_cell(participating_agency)
@@ -7679,11 +7717,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             page-break-inside: avoid;
             break-inside: avoid;
         }}
-        .autofit-box,
-        .section-box,
-        .content-box,
-        .report-box,
-        [data-autofit] {{
+        .autofit-box:not(.sign-table):not(table.sign-table),
+        .section-box:not(.sign-table),
+        .content-box:not(.sign-table),
+        .report-box:not(.sign-table),
+        [data-autofit]:not(.sign-table):not(table.sign-table):not([data-autofit="signatures"]) {{
             overflow: visible !important;
             height: auto !important;
             max-height: none !important;
@@ -7713,7 +7751,72 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             display: block; margin: 0 auto;
             border: 2px solid #1b4332; border-radius: 6px; background: #fff;
         }}
-        .page-three .sign-table {{ margin-top: 8px; }}
+        /* جدول معد التقرير: جدول حقيقي بعرض كامل دون إطار مزدوج ودون display:block */
+        .page-three .sign-table,
+        table.sign-table,
+        .sign-table {{
+            display: table !important;
+            table-layout: fixed !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            border-collapse: collapse !important;
+            border-spacing: 0 !important;
+            border: 1.5px solid #444 !important;
+            outline: none !important;
+            box-shadow: none !important;
+            margin: 8px 0 0 0 !important;
+            padding: 0 !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            flex-shrink: 0 !important;
+            background: #fff;
+        }}
+        .sign-table > tr,
+        .sign-table > tbody > tr,
+        table.sign-table tr {{
+            display: table-row !important;
+        }}
+        .sign-table > tr > th,
+        .sign-table > tr > td,
+        .sign-table > tbody > tr > th,
+        .sign-table > tbody > tr > td,
+        table.sign-table th,
+        table.sign-table td {{
+            display: table-cell !important;
+            width: 33.33% !important;
+            max-width: 33.33% !important;
+            padding: 8px 6px !important;
+            box-sizing: border-box !important;
+            vertical-align: top !important;
+            text-align: center !important;
+            border: 1.5px solid #444 !important;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            white-space: normal !important;
+        }}
+        .sign-table th[colspan] {{
+            width: 100% !important;
+            max-width: none !important;
+        }}
+        .table-scroll:has(> table.sign-table),
+        .table-scroll:has(> .sign-table) {{
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            overflow: visible !important;
+            background: transparent !important;
+        }}
+        /* استثناء مستطيلات النصوص: لا تُطبَّق display:block على جدول التوقيعات */
+        .autofit-box.sign-table,
+        table.sign-table.autofit-box,
+        [data-autofit="signatures"],
+        table.sign-table[data-autofit] {{
+            display: table !important;
+            padding-bottom: 0 !important;
+        }}
         .photo-card .photo-meta {{
             margin-top: 4px; font-weight: 600; font-size: 15px; line-height: 1.35;
             overflow: visible; white-space: normal;
@@ -7988,9 +8091,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 height: 294mm !important;
                 max-height: 294mm !important;
             }}
-            .box-content, .box-content.liability-box, .liability-box, .autofit-box,
-            .section-box, .content-box, .report-box, .results-box, .how-happened-box,
-            [data-autofit], td.actions-body {{
+            .box-content, .box-content.liability-box, .liability-box,
+            .autofit-box:not(.sign-table):not(table.sign-table),
+            .section-box:not(.sign-table), .content-box:not(.sign-table), .report-box:not(.sign-table),
+            .results-box, .how-happened-box,
+            [data-autofit]:not(.sign-table):not(table.sign-table):not([data-autofit="signatures"]),
+            td.actions-body {{
                 overflow: visible !important;
                 max-height: none !important;
                 min-height: 0 !important;
@@ -8004,15 +8110,15 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             .report-sheet > .report-page:last-child {{
                 page-break-after: auto !important; break-after: auto !important;
             }}
-            .page table, .report-page table, .a4-page table, .box-content {{
+            .page table:not(.sign-table), .report-page table:not(.sign-table), .a4-page table:not(.sign-table), .box-content {{
                 margin-bottom: 6px !important;
             }}
             .table-scroll {{ overflow: visible; max-width: none; }}
-            table, .table-scroll, .table-scroll table, .box-content, .header-box, .photo-grid {{
+            table:not(.sign-table), .table-scroll, .table-scroll table:not(.sign-table), .box-content, .header-box, .photo-grid {{
                 width: 100% !important; max-width: 100% !important; min-width: 0 !important;
                 box-sizing: border-box; border-collapse: collapse;
             }}
-            table, .table-scroll table {{ border: 1px solid #000; }}
+            table:not(.sign-table), .table-scroll table:not(.sign-table) {{ border: 1px solid #000; }}
             th, td {{ border: 1px solid #000 !important; }}
             .report-sheet .header-Title,
             .report-sheet .section-badge {{
@@ -8047,10 +8153,44 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             .report-sheet th,
             .report-sheet td {{ font-size: 14px !important; font-weight: 600; }}
             .report-sheet th {{ font-weight: 700; }}
-            .sign-table, .sign-table tr, .sign-table td {{
+            table.sign-table,
+            .sign-table {{
+                display: table !important;
+                table-layout: fixed !important;
+                width: 100% !important;
+                border-collapse: collapse !important;
+                border-spacing: 0 !important;
+                border: 1px solid #000 !important;
+                outline: none !important;
+                box-shadow: none !important;
+                margin: 8px 0 0 0 !important;
+                padding: 0 !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }}
+            .sign-table tr {{
+                display: table-row !important;
+                page-break-inside: avoid !important;
+                break-inside: avoid !important;
+            }}
+            .sign-table th,
+            .sign-table td {{
+                display: table-cell !important;
+                width: 33.33% !important;
+                padding: 8px 6px !important;
+                border: 1px solid #000 !important;
+                vertical-align: top !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
                 page-break-after: avoid !important;
+            }}
+            .sign-table th[colspan] {{
+                width: 100% !important;
+            }}
+            .table-scroll:has(> table.sign-table) {{
+                border: none !important;
+                box-shadow: none !important;
+                padding: 0 !important;
             }}
             .page-flow {{ justify-content: space-between !important; }}
             .page-body, .page-body-flex, .autofit-page-body {{
@@ -8254,6 +8394,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
       root.querySelectorAll(
         ".box-content, .autofit-box, .section-box, .content-box, .report-box, .results-box, .how-happened-box, .liability-box, [data-oldfit], td.actions-body"
       ).forEach(function(el) {{
+        if (el.classList && el.classList.contains("sign-table")) return;
+        if (el.closest && el.closest("table.sign-table, .sign-table")) return;
         el.style.setProperty("height", "auto", "important");
         el.style.setProperty("max-height", "none", "important");
         el.style.setProperty("overflow", "visible", "important");
@@ -8417,12 +8559,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                     <tr><td class="actions-body autofit-box" data-autofit="actions">{final_actions_html}</td></tr>
                 </table></div>
                 {criminal_details_html}
-                <div class="table-scroll"><table class="sign-table autofit-box" data-autofit="signatures">
-                    <tr><th colspan="3">معد التقرير</th></tr>
-                    <tr><th>إجراءات الحوادث</th><th>مشرف الحوادث</th><th>مدير {dept_branch}</th></tr>
-                    <tr><td>الاسم: {officer_1_name}</td><td>الاسم: {officer_2_name}</td><td>الاسم: {manager_name}</td></tr>
-                    <tr><td>الرتبة: {officer_1_rank}</td><td>الرتبة: {officer_2_rank}</td><td>الرتبة: {manager_rank}</td></tr>
-                    <tr class="sig-row"><td>{_signature_box(sig_officer)}</td><td>{_signature_box(sig_supervisor)}</td><td>{_signature_box(sig_manager)}</td></tr>
+                <div class="table-scroll sign-table-wrap"><table class="sign-table" role="table">
+                    <tr><th colspan="{sign_col_count}">معد التقرير</th></tr>
+                    <tr>{sign_header_cells}</tr>
+                    <tr>{sign_name_cells}</tr>
+                    <tr>{sign_rank_cells}</tr>
+                    <tr class="sig-row">{sign_sig_cells}</tr>
                 </table></div>
             </div>
             {official_footer_html}

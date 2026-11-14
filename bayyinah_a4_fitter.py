@@ -33,16 +33,16 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
   justify-content: flex-start !important;
   gap: 5px !important;
 }
-.page.report-page .box-content,
-.page.report-page .autofit-box,
-.page.report-page .section-box,
-.page.report-page .content-box,
-.page.report-page .report-box,
+.page.report-page .box-content:not(.sign-table),
+.page.report-page .autofit-box:not(.sign-table):not(table.sign-table),
+.page.report-page .section-box:not(.sign-table),
+.page.report-page .content-box:not(.sign-table),
+.page.report-page .report-box:not(.sign-table),
 .page.report-page .results-box,
 .page.report-page .how-happened-box,
 .page.report-page .liability-box,
-.page.report-page [data-autofit],
-.page.report-page [data-oldfit] {
+.page.report-page [data-autofit]:not(.sign-table):not(table.sign-table),
+.page.report-page [data-oldfit]:not(.sign-table):not(table.sign-table) {
   height: auto !important;
   max-height: none !important;
   overflow: visible !important;
@@ -53,9 +53,55 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
   transform: none !important;
   display: block !important;
 }
+.page.report-page table.sign-table,
+.page.report-page .sign-table {
+  display: table !important;
+  table-layout: fixed !important;
+  width: 100% !important;
+  border-collapse: collapse !important;
+  border-spacing: 0 !important;
+  border: 1px solid #444 !important;
+  box-shadow: none !important;
+  outline: none !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+  flex-shrink: 0 !important;
+  padding: 0 !important;
+  padding-bottom: 0 !important;
+  margin: 8px 0 0 0 !important;
+  transform: none !important;
+}
+.page.report-page .sign-table > tr,
+.page.report-page .sign-table > tbody > tr,
+.page.report-page table.sign-table tr {
+  display: table-row !important;
+}
+.page.report-page .sign-table > tr > th,
+.page.report-page .sign-table > tr > td,
+.page.report-page .sign-table > tbody > tr > th,
+.page.report-page .sign-table > tbody > tr > td,
+.page.report-page table.sign-table th,
+.page.report-page table.sign-table td {
+  display: table-cell !important;
+  width: 33.33% !important;
+  padding: 8px 6px !important;
+  box-sizing: border-box !important;
+  vertical-align: top !important;
+  height: auto !important;
+  max-height: none !important;
+  overflow: visible !important;
+}
+.page.report-page .table-scroll:has(> .sign-table),
+.page.report-page .table-scroll:has(> table.sign-table) {
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+  overflow: visible !important;
+}
 .page.report-page .table-scroll,
 .page.report-page td.actions-body,
-.page.report-page td.autofit-box {
+.page.report-page td.autofit-box:not(.sign-table th):not(.sign-table td) {
   height: auto !important;
   max-height: none !important;
   overflow: visible !important;
@@ -95,11 +141,16 @@ CLEAN_A4_ASSETS = """<!-- BAYYINAH_CLEAN_A4_START -->
     root.querySelectorAll(
       '.box-content, .autofit-box, .section-box, .content-box, .report-box, .liability-box, [data-oldfit], td.actions-body'
     ).forEach(function(el) {
+      if (el.classList && el.classList.contains('sign-table')) return;
+      if (el.closest && el.closest('table.sign-table, .sign-table')) return;
       el.style.setProperty('height', 'auto', 'important');
       el.style.setProperty('max-height', 'none', 'important');
       el.style.setProperty('overflow', 'visible', 'important');
       el.style.setProperty('flex-shrink', '0', 'important');
       el.style.setProperty('padding-bottom', '10px', 'important');
+      if (el.tagName !== 'TABLE' && el.tagName !== 'TR' && el.tagName !== 'TD' && el.tagName !== 'TH') {
+        el.style.setProperty('display', 'block', 'important');
+      }
     });
   }
   function fitReportPages(doc) {
