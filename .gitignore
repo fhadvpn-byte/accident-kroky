@@ -9,3 +9,6 @@ bayyinah_autosave_draft.json
 .bayyinah_dept_staff.json
 download/
 UXZJaanG.py
+.bayyinah_persistence/
+.bayyinah_saved_state.json
+bayyinah_saved_state.json

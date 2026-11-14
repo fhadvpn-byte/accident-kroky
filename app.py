@@ -1875,14 +1875,22 @@ def save_current_work():
         return False
 
 def perform_manual_save(show_toast: bool = True) -> bool:
-    """مسار الحفظ اليدوي الموحّد: مزامنة المحررات → خزنة الصفحة1 → مسودة التقرير."""
+    """مسار الحفظ اليدوي الموحّد: مزامنة المحررات → خزنة الصفحة1 → مسودة التقرير + حفظ كامل محلي."""
     try:
         _flush_page1_editors_to_session()
         _mirror_page1_fields()
         sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=True)
         ok = save_current_work()
         if ok:
-            _save_bayyinah_state()
+            try:
+                _save_bayyinah_state()
+            except Exception:
+                pass
+            try:
+                import bayyinah_persistence as _bp
+                _bp.save_full_workspace(reason="manual_save")
+            except Exception:
+                pass
             st.session_state["_last_persisted_stamp"] = str(st.session_state.get("last_saved_at") or "")
             st.session_state["_save_success_banner"] = st.session_state.get("last_saved_time")
             if show_toast:
@@ -1899,6 +1907,12 @@ def clear_all_work():
             os.remove(DRAFT_FILE_PATH)
         except OSError:
             pass
+    try:
+        import bayyinah_persistence as _bp
+        _bp.clear_full_workspace()
+        st.session_state["_BAYYINAH_SKIP_AUTOSAVE_"] = True
+    except Exception:
+        pass
     for key, default_val in DEFAULT_REPORT_STATE.items():
         st.session_state[key] = default_val
     st.session_state.law_selection_sig = ()
@@ -3054,8 +3068,18 @@ def _reset_new_accident():
             os.remove(DRAFT_FILE_PATH)
         except OSError:
             pass
+    try:
+        import bayyinah_persistence as _bp
+        _bp.clear_full_workspace()
+    except Exception:
+        pass
+    try:
+        _clear_bayyinah_saved_state()
+    except Exception:
+        pass
     for key in list(st.session_state.keys()):
         del st.session_state[key]
+    st.session_state["_BAYYINAH_SKIP_AUTOSAVE_"] = True
     reset_page1_payload()
     st.session_state["_restore_perm_sidebar"] = True
     try:
@@ -4111,6 +4135,13 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# === BAYYINAH_PERSIST_HOOK_START ===
+import bayyinah_persistence as _bayyinah_persist
+import bayyinah_a4_fitter as _bayyinah_a4
+_bayyinah_persist.activate(__file__)
+_bayyinah_a4.install_report_fitter()
+# === BAYYINAH_PERSIST_HOOK_END ===
+
 # === PERSISTENT_AUTOSAVE_START ===
 # نسخة احتياطية خفيفة بجانب المسودة اليدوية (bayyinah_autosave_draft.json) — لا تمنع تحميل المسودة.
 _PERSIST_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".bayyinah_saved_state.json")
@@ -4858,12 +4889,23 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+def _on_active_tab_change():
+    try:
+        import bayyinah_persistence as _bp
+        _bp.on_tab_change()
+    except Exception:
+        try:
+            perform_manual_save(show_toast=False)
+        except Exception:
+            pass
+
 st.radio(
     "أقسام التقرير",
     options=MAIN_TAB_OPTIONS,
     horizontal=True,
     key="active_tab",
     label_visibility="collapsed",
+    on_change=_on_active_tab_change,
 )
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
     st.subheader("معلومات الحادث الأساسية")
@@ -7194,12 +7236,16 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .a4-page .report-box,
         .a4-page .box-content.autofit-box,
         .a4-page .liability-box.autofit-box {{
-            font-size: var(--shared-box-font, 13.5px) !important;
-            line-height: var(--shared-line-height, 1.60) !important;
-            padding: var(--shared-box-pad, 14px) !important;
-            margin-bottom: var(--section-gap, 10px) !important;
+            font-size: var(--shared-box-font, 12.5px) !important;
+            line-height: var(--shared-line-height, 1.55) !important;
+            padding: var(--shared-box-pad, 12px) !important;
+            padding-bottom: 10px !important;
+            margin-bottom: var(--section-gap, 8px) !important;
             box-sizing: border-box;
-            overflow: hidden;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            flex-shrink: 0 !important;
         }}
         .page .section-box *:not(.statute-quote):not(.statute-line),
         .page .content-box *:not(.statute-quote):not(.statute-line),
@@ -7290,13 +7336,15 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .page-body,
         .page-body-flex,
         .autofit-page-body {{
-            flex: 1 1 auto;
+            flex: 1 0 auto;
             min-height: 0;
             display: flex;
             flex-direction: column;
-            justify-content: space-between;
-            gap: var(--section-gap, 10px);
-            overflow: hidden;
+            justify-content: flex-start;
+            gap: var(--section-gap, 8px);
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
             width: 100%;
             box-sizing: border-box;
         }}
@@ -7306,8 +7354,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         .page-body > .box-content,
         .page-body-flex > .table-scroll,
         .page-body-flex > .box-content {{
-            flex: 0 1 auto;
+            flex: 0 0 auto;
             min-height: 0;
+            height: auto !important;
+            max-height: none !important;
+            overflow: visible !important;
+            flex-shrink: 0 !important;
         }}
         .page-body > .section-box:last-of-type,
         .page-body > .content-box:last-of-type,
@@ -7324,15 +7376,25 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             padding-bottom: calc(18mm + 12mm);
         }}
         .liability-box {{
-            overflow: hidden;
-            max-height: none;
+            overflow: visible !important;
+            max-height: none !important;
             min-height: 0;
-            height: auto;
+            height: auto !important;
+            flex-shrink: 0 !important;
+            padding-bottom: 10px !important;
             page-break-inside: avoid;
             break-inside: avoid;
         }}
-        .autofit-box {{
-            overflow: hidden;
+        .autofit-box,
+        .section-box,
+        .content-box,
+        .report-box,
+        [data-autofit] {{
+            overflow: visible !important;
+            height: auto !important;
+            max-height: none !important;
+            flex-shrink: 0 !important;
+            padding-bottom: 10px !important;
             box-sizing: border-box;
         }}
         .photo-annex {{ page-break-before: always; overflow: visible; }}
@@ -7409,10 +7471,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             padding: var(--a4-badge-pad-y, 5px) 25px;
         }}
         .box-content.liability-box {{
-            overflow: hidden;
-            max-height: none;
+            overflow: visible !important;
+            max-height: none !important;
             min-height: 0;
-            height: auto;
+            height: auto !important;
+            flex-shrink: 0 !important;
+            padding-bottom: 10px !important;
         }}
         .page-num {{ display: none !important; }}
         .header-Title, .header-box {{
@@ -7630,11 +7694,15 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 height: 294mm !important;
                 max-height: 294mm !important;
             }}
-            .box-content.liability-box, .liability-box, .autofit-box {{
-                overflow: hidden !important;
+            .box-content, .box-content.liability-box, .liability-box, .autofit-box,
+            .section-box, .content-box, .report-box, .results-box, .how-happened-box,
+            [data-autofit], td.actions-body {{
+                overflow: visible !important;
                 max-height: none !important;
                 min-height: 0 !important;
                 height: auto !important;
+                flex-shrink: 0 !important;
+                padding-bottom: 10px !important;
                 page-break-inside: avoid !important;
                 break-inside: avoid !important;
             }}
@@ -7691,10 +7759,12 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 page-break-after: avoid !important;
             }}
             .page-flow {{ justify-content: space-between !important; }}
-            .page-body-flex {{
-                flex: 1 1 auto !important;
+            .page-body, .page-body-flex, .autofit-page-body {{
+                flex: 1 0 auto !important;
                 min-height: 0 !important;
-                overflow: hidden !important;
+                height: auto !important;
+                max-height: none !important;
+                overflow: visible !important;
             }}
             .page-flow .section-badge {{ margin: 4px auto !important; }}
             .page-flow th, .page-flow td {{ padding: 4px 7px !important; }}
@@ -7879,95 +7949,103 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         boxes[boxes.length - 1].style.flexGrow = String(grow);
       }}
     }}
+    function _a4UnlockTextBoxes(root) {{
+      if (!root || !root.querySelectorAll) return;
+      root.querySelectorAll("[data-autofit]").forEach(function(el) {{
+        if (!el.getAttribute("data-oldfit")) {{
+          el.setAttribute("data-oldfit", el.getAttribute("data-autofit") || "1");
+        }}
+        el.removeAttribute("data-autofit");
+      }});
+      root.querySelectorAll(
+        ".box-content, .autofit-box, .section-box, .content-box, .report-box, .results-box, .how-happened-box, .liability-box, [data-oldfit], td.actions-body"
+      ).forEach(function(el) {{
+        el.style.setProperty("height", "auto", "important");
+        el.style.setProperty("max-height", "none", "important");
+        el.style.setProperty("overflow", "visible", "important");
+        el.style.setProperty("flex-shrink", "0", "important");
+        el.style.setProperty("padding-bottom", "10px", "important");
+      }});
+    }}
     function autoBalanceReportPages() {{
-      /* يستهدف .a4-page / .page فقط — shrink pad/gap ثم font≥11 ثم grow حتى 15.25 ثم flexGrow لآخر صندوق */
-      var pages = document.querySelectorAll(".a4-page, .page");
-      var initialBase = Math.max(11, Math.min(13.5, {a4_autofit_base_font_px}));
-      var minFont = 11;
-      var maxFont = 15.25;
-      var step = 0.25;
-      var safety = 8;
+      /* قياس .report-page ~294mm وتقليص الخط/التباعد من 12.5px إلى 5.8px دون zoom على الواجهة */
+      var pages = document.querySelectorAll(".report-page, .a4-page, .page");
+      var initialBase = 12.5;
+      var minFont = 5.8;
+      var step = 0.35;
       document.documentElement.style.setProperty("--shared-box-font", initialBase.toFixed(2) + "px");
-      document.documentElement.style.setProperty("--shared-line-height", "1.60");
+      document.documentElement.style.setProperty("--shared-line-height", "1.55");
       for (var p = 0; p < pages.length; p++) {{
         var page = pages[p];
         if (!page || page.classList.contains("photo-annex")) continue;
         if (page.classList.contains("report-sheet") || page.classList.contains("report-viewport")) continue;
+        _a4UnlockTextBoxes(page);
         var footer = page.querySelector(".official-page-footer, .official-footer, .page-footer, .footer");
         if (footer) {{
-          var fPos = getComputedStyle(footer).position;
-          if (fPos === "absolute" || fPos === "fixed") {{
-            page.classList.add("has-absolute-footer");
-          }} else {{
-            page.classList.remove("has-absolute-footer");
-            footer.style.setProperty("margin-top", "auto", "important");
-            footer.style.setProperty("padding-top", "6mm", "important");
-            footer.style.setProperty("flex-shrink", "0", "important");
-          }}
+          page.classList.remove("has-absolute-footer");
+          footer.style.setProperty("margin-top", "auto", "important");
+          footer.style.setProperty("padding-top", "6mm", "important");
+          footer.style.setProperty("flex-shrink", "0", "important");
         }}
-        var boxes = _a4CollectBalanceBoxes(page);
+        var boxes = page.querySelectorAll(
+          ".box-content, .autofit-box, .section-box, .content-box, .report-box, .results-box, .how-happened-box, .liability-box, [data-oldfit], td.actions-body"
+        );
         if (!boxes.length) continue;
-
-        var padPx = 14;
-        var sectionGap = 10;
+        var ruler = document.createElement("div");
+        ruler.style.cssText = "position:absolute;top:0;left:0;width:1px;height:294mm;visibility:hidden;pointer-events:none;";
+        page.appendChild(ruler);
+        var maxH = ruler.offsetHeight || 1110;
+        page.removeChild(ruler);
+        page.style.setProperty("height", "auto", "important");
+        page.style.setProperty("max-height", "none", "important");
+        page.style.setProperty("overflow", "visible", "important");
+        var body = page.querySelector(".page-body, .page-body-flex, .autofit-page-body");
+        var badges = page.querySelectorAll(".section-badge");
+        var fontPx = initialBase;
+        var lineHeight = 1.55;
+        var padPx = 12;
+        var sectionGap = 8;
         var badgeMargin = 4;
         var badgePadY = 5;
-        var fontPx = initialBase;
-        var lineHeight = 1.60;
         _a4SetLastBoxGrow(page, 0);
         _a4ApplySharedFont(page, fontPx, lineHeight);
         _a4ApplySharedSpacing(page, padPx, sectionGap, badgeMargin, badgePadY);
-
-        /* 1) تقليص الحشو والمسافات أولاً */
         var guard = 0;
-        while (guard < 24) {{
+        while (guard < 40 && page.scrollHeight > maxH + 0.5) {{
           guard += 1;
-          if (_a4PageOverflow(page, footer, safety) <= 0.5) break;
-          if (padPx <= 6 && sectionGap <= 4 && badgeMargin <= 2 && badgePadY <= 3) break;
-          padPx = Math.max(6, padPx - 1);
-          sectionGap = Math.max(4, sectionGap - 0.75);
-          badgeMargin = Math.max(2, badgeMargin - 0.5);
-          badgePadY = Math.max(3, badgePadY - 0.35);
-          _a4ApplySharedSpacing(page, padPx, sectionGap, badgeMargin, badgePadY);
-        }}
-
-        /* 2) تخفيض الخط الموحّد حتى ≥11px */
-        guard = 0;
-        while (guard < 24) {{
-          guard += 1;
-          if (_a4PageOverflow(page, footer, safety) <= 0.5) break;
-          if (fontPx <= minFont + 0.001) break;
-          fontPx = Math.max(minFont, fontPx - step);
-          var dropped = initialBase - fontPx;
-          lineHeight = Math.max(1.40, 1.60 - dropped * 0.03);
-          _a4ApplySharedFont(page, fontPx, lineHeight);
-        }}
-
-        /* 3) إن بقي فراغ: كبّر الخط حتى 15.25px دون تجاوز */
-        guard = 0;
-        while (guard < 24) {{
-          guard += 1;
-          if (fontPx >= maxFont - 0.001) break;
-          var nextFont = Math.min(maxFont, fontPx + step);
-          var nextLh = Math.min(1.70, lineHeight + 0.01);
-          _a4ApplySharedFont(page, nextFont, nextLh);
-          if (_a4PageOverflow(page, footer, safety) > 0.5) {{
-            _a4ApplySharedFont(page, fontPx, lineHeight);
-            break;
+          if (fontPx <= minFont + 0.001 && padPx <= 3 && sectionGap <= 2) break;
+          if (fontPx > minFont + 0.001) {{
+            fontPx = Math.max(minFont, +(fontPx - step).toFixed(2));
           }}
-          fontPx = nextFont;
-          lineHeight = nextLh;
+          var dropped = initialBase - fontPx;
+          lineHeight = Math.max(1.12, +(1.55 - dropped * 0.05).toFixed(2));
+          padPx = Math.max(3, Math.round(12 - dropped * 0.9));
+          sectionGap = Math.max(2, Math.round(8 - dropped * 0.55));
+          badgeMargin = Math.max(1, Math.round(4 - dropped * 0.35));
+          badgePadY = Math.max(2, Math.round(5 - dropped * 0.3));
+          _a4ApplySharedFont(page, fontPx, lineHeight);
+          _a4ApplySharedSpacing(page, padPx, sectionGap, badgeMargin, badgePadY);
+          if (body) body.style.setProperty("gap", sectionGap + "px", "important");
+          for (var bi = 0; bi < boxes.length; bi++) {{
+            var bx = boxes[bi];
+            if (bx.closest && bx.closest(".sign-table")) continue;
+            bx.style.setProperty("font-size", fontPx.toFixed(2) + "px", "important");
+            bx.style.setProperty("line-height", String(lineHeight), "important");
+            bx.style.setProperty("padding", padPx + "px " + padPx + "px 10px " + padPx + "px", "important");
+            bx.style.setProperty("height", "auto", "important");
+            bx.style.setProperty("max-height", "none", "important");
+            bx.style.setProperty("overflow", "visible", "important");
+            bx.style.setProperty("flex-shrink", "0", "important");
+          }}
+          for (var b = 0; b < badges.length; b++) {{
+            badges[b].style.setProperty("font-size", Math.max(8, fontPx).toFixed(2) + "px", "important");
+          }}
         }}
-
-        /* 4) flexGrow على آخر صندوق لملء الفراغ المتبقي بأناقة */
-        _a4SetLastBoxGrow(page, 1);
-        if (_a4PageOverflow(page, footer, safety) > 0.5) {{
-          _a4SetLastBoxGrow(page, 0);
-        }}
+        page.style.setProperty("min-height", "296mm", "important");
+        if (footer) footer.style.setProperty("margin-top", "auto", "important");
       }}
       fitReportFrame();
     }}
-    /* أوقف autoFit القديم — التوجيه الوحيد عبر autoBalanceReportPages */
     function autoFitReportPages() {{ autoBalanceReportPages(); }}
     function _scheduleAutoBalance() {{
       autoBalanceReportPages();
@@ -8071,9 +8149,17 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     </body>
     </html>
     """
+    try:
+        full_report_html = _bayyinah_a4.inject_into_report_html(full_report_html)
+    except Exception:
+        pass
     st.session_state["_cached_full_report_html"] = full_report_html
 else:
     full_report_html = st.session_state.get("_cached_full_report_html", "")
+    try:
+        full_report_html = _bayyinah_a4.inject_into_report_html(full_report_html)
+    except Exception:
+        pass
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     render_direct_print_button(
         full_report_html,
@@ -8132,4 +8218,8 @@ st.markdown("""<style id="final-red-tags-only">
 
 </style>""", unsafe_allow_html=True)
 
+try:
+    _bayyinah_persist.finalize_run()
+except Exception:
+    pass
 
