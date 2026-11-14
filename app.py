@@ -1575,14 +1575,52 @@ def init_and_restore_page1_state():
     if "vehicles" not in st.session_state:
         st.session_state.vehicles = _clone_page1_value(vehicle_records)
 
-def sync_page1_to_vault(extra_keys: list = None, write_disk: bool = False):
-    """يحدّث الخزنة في الذاكرة فقط. الكتابة للقرص تتم عند الحفظ اليدوي."""
+# مفاتيح أساسية يجب ألا تُمسح بالتنقل أو تُستبدل بـ "" في الحفظ التلقائي
+PAGE1_CORE_TEXT_KEYS = (
+    "p1_acc_number",
+    "p1_acc_location",
+    "p1_acc_cause",
+    "hijri_date",
+    "p1_acc_date",
+    "p1_acc_time",
+)
+
+
+def _is_blank_p1_value(value) -> bool:
+    if value is None:
+        return True
+    if isinstance(value, str) and not str(value).strip():
+        return True
+    if isinstance(value, (list, tuple, dict)) and len(value) == 0:
+        return True
+    return False
+
+
+def sync_page1_to_vault(
+    extra_keys: list = None,
+    write_disk: bool = False,
+    allow_blank_overwrite: bool = False,
+):
+    """يحدّث الخزنة في الذاكرة. الحفظ التلقائي لا يكتب "" فوق قيم موجودة."""
     if "_p1_vault" not in st.session_state:
         st.session_state["_p1_vault"] = dict(ALL_PAGE1_DEFAULTS)
+    vault = st.session_state["_p1_vault"]
     keys_to_sync = list(ALL_PAGE1_DEFAULTS.keys()) + list(PAGE1_EXTRA_SYNC_KEYS) + list(extra_keys or [])
     for key in keys_to_sync:
-        if key in st.session_state:
-            st.session_state["_p1_vault"][key] = _clone_page1_value(st.session_state[key])
+        if key not in st.session_state:
+            continue
+        new_val = st.session_state[key]
+        old_val = vault.get(key)
+        if (
+            not allow_blank_overwrite
+            and key in PAGE1_CORE_TEXT_KEYS
+            and _is_blank_p1_value(new_val)
+            and not _is_blank_p1_value(old_val)
+        ):
+            # أعد حقن القيمة المحفوظة بدل طمسها
+            st.session_state[key] = _clone_page1_value(old_val)
+            continue
+        vault[key] = _clone_page1_value(new_val)
     if not write_disk:
         return
     try:
@@ -1593,16 +1631,58 @@ def sync_page1_to_vault(extra_keys: list = None, write_disk: bool = False):
     except Exception:
         pass
 
+
+def ensure_core_accident_fields_from_vault() -> None:
+    """قبل رسم text_input أو الحفظ التلقائي: أعد رقم/موقع/سبب من الخزنة إن فُرغت الجلسة."""
+    vault = st.session_state.get("_p1_vault")
+    if not isinstance(vault, dict):
+        return
+    for key in PAGE1_CORE_TEXT_KEYS:
+        vault_val = vault.get(key)
+        if _is_blank_p1_value(st.session_state.get(key)) and not _is_blank_p1_value(vault_val):
+            st.session_state[key] = _clone_page1_value(vault_val)
+    # مرايا قديمة لموقع الحادث
+    loc = str(st.session_state.get("p1_acc_location") or "").strip()
+    if loc:
+        st.session_state["acc_loc_value"] = loc
+    elif not loc and not _is_blank_p1_value(st.session_state.get("acc_loc_value")):
+        st.session_state["p1_acc_location"] = st.session_state.get("acc_loc_value")
+
+
+def _on_core_accident_field_change() -> None:
+    """حفظ فوري لرقم/موقع/سبب الحادث عند كل تغيير (خارج st.form)."""
+    if "_p1_vault" not in st.session_state:
+        st.session_state["_p1_vault"] = dict(ALL_PAGE1_DEFAULTS)
+    for key in ("p1_acc_number", "p1_acc_location", "p1_acc_cause"):
+        if key in st.session_state:
+            st.session_state["_p1_vault"][key] = _clone_page1_value(st.session_state.get(key))
+    loc = str(st.session_state.get("p1_acc_location") or "").strip()
+    if loc:
+        st.session_state["acc_loc_value"] = loc
+    try:
+        P1_AUTOSAVE_PATH.write_text(
+            json.dumps(st.session_state["_p1_vault"], ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+    except Exception:
+        pass
+
+
 def _mirror_page1_fields():
     hijri = str(st.session_state.get("hijri_date") or "")
-    st.session_state["p1_acc_date"] = hijri
-    parts = hijri.split("/")
+    if hijri.strip():
+        st.session_state["p1_acc_date"] = hijri
+    parts = str(st.session_state.get("p1_acc_date") or hijri or "").split("/")
     if len(parts) == 3:
         st.session_state["p1_acc_year"] = parts[0]
         st.session_state["p1_acc_month"] = parts[1]
         st.session_state["p1_acc_day"] = parts[2]
-    st.session_state["p1_acc_type"] = st.session_state.get("p1_acc_type_choice") or ""
-    st.session_state["p1_acc_weather"] = st.session_state.get("p1_acc_weather_choice") or ""
+    type_choice = st.session_state.get("p1_acc_type_choice")
+    if type_choice:
+        st.session_state["p1_acc_type"] = type_choice
+    weather_choice = st.session_state.get("p1_acc_weather_choice")
+    if weather_choice:
+        st.session_state["p1_acc_weather"] = weather_choice
     party_rows = list(st.session_state.get("p1_parties_records") or [])
     vehicle_rows = list(st.session_state.get("p1_vehicles_records") or [])
     st.session_state["p1_parties_count"] = max(len(party_rows), len(vehicle_rows))
@@ -1646,11 +1726,19 @@ def queue_load_page1_payload(saved_dict: dict):
         return
     p1_data = saved_dict.get("page1_data", saved_dict)
     if not isinstance(p1_data, dict):
-        return
+        p1_data = {}
     filtered = {key: p1_data[key] for key in ALL_PAGE1_DEFAULTS if key in p1_data}
     for key in PAGE1_EXTRA_SYNC_KEYS:
         if key in p1_data:
             filtered[key] = p1_data[key]
+    # تطابق مفاتيح text_input: اقبل القيم من المستوى الأعلى إن وُجدت وغير فارغة
+    for key in PAGE1_CORE_TEXT_KEYS:
+        top_val = saved_dict.get(key)
+        nested_val = filtered.get(key)
+        if not _is_blank_p1_value(top_val) and _is_blank_p1_value(nested_val):
+            filtered[key] = top_val
+        elif key in saved_dict and key not in filtered and not _is_blank_p1_value(top_val):
+            filtered[key] = top_val
     if filtered:
         st.session_state["_p1_pending_load"] = filtered
 
@@ -2042,6 +2130,11 @@ def init_and_load_state():
                 st.session_state.parties = saved_data.get("parties") or _blank_parties()
             if isinstance(saved_data.get("vehicles"), list):
                 st.session_state.vehicles = saved_data.get("vehicles") or _blank_vehicles()
+            # طبّق مفاتيح رقم/موقع/سبب من جذر المسودة إن طابقت text_input ولم تُملأ بعد
+            for _core_key in PAGE1_CORE_TEXT_KEYS:
+                _top = saved_data.get(_core_key)
+                if not _is_blank_p1_value(_top) and _is_blank_p1_value(st.session_state.get(_core_key)):
+                    st.session_state[_core_key] = _top
             if saved_data.get("last_saved_time"):
                 st.session_state["last_saved_time"] = saved_data.get("last_saved_time")
                 st.session_state["last_saved_at"] = saved_data.get("last_saved_time")
@@ -2143,7 +2236,16 @@ def save_current_work():
     # DataURL الضخم خارج JSON؛ الملفات الدائمة + الخزنة الكاملة تحتفظ به دون مسحه من الجلسة
     data_to_save.pop("aerial_sketch_data_url", None)
     data_to_save.pop("sketch_data_url", None)
-    data_to_save["page1_data"] = export_page1_payload()
+    ensure_core_accident_fields_from_vault()
+    page1_payload = export_page1_payload()
+    data_to_save["page1_data"] = page1_payload
+    # نفس مفاتيح text_input في جذر المسودة لتطابق save/load
+    for key in PAGE1_CORE_TEXT_KEYS:
+        val = st.session_state.get(key)
+        if _is_blank_p1_value(val):
+            val = page1_payload.get(key)
+        if not _is_blank_p1_value(val):
+            data_to_save[key] = val
     aerial_img = str(st.session_state.get("aerial_sketch_data_url") or st.session_state.get("aerial_data_url") or "")
     sat_state = st.session_state.get("saved_satellite_state") or st.session_state.get("_saved_satellite_state") or {}
     if aerial_img.startswith("data:image/"):
@@ -2191,8 +2293,14 @@ def perform_manual_save(show_toast: bool = True) -> bool:
     """مسار الحفظ اليدوي الموحّد: مزامنة المحررات → ظل التبويب3 كاملاً → مسودة + خزنة محلية."""
     try:
         _flush_page1_editors_to_session()
+        ensure_core_accident_fields_from_vault()
         _mirror_page1_fields()
-        sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=True)
+        # الحفظ اليدوي يسمح بالفراغ المقصود؛ الحقول الأساسية تُحقن من الخزنة قبلها إن فُرغت بالتنقل
+        sync_page1_to_vault(
+            extra_keys=list(PAGE1_EXTRA_SYNC_KEYS),
+            write_disk=True,
+            allow_blank_overwrite=True,
+        )
         # زر «حفظ واعتماد البيانات» يحفظ الظل كاملاً لا وقت فقط
         sync_permanent_form_data(reason="manual_save")
         ok = save_current_work()
@@ -5290,6 +5398,15 @@ st.markdown(
 )
 def _on_active_tab_change():
     try:
+        ensure_core_accident_fields_from_vault()
+        sync_page1_to_vault(
+            extra_keys=list(PAGE1_EXTRA_SYNC_KEYS),
+            write_disk=True,
+            allow_blank_overwrite=False,
+        )
+    except Exception:
+        pass
+    try:
         sync_permanent_form_data(reason="tab_change")
     except Exception:
         pass
@@ -5325,6 +5442,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
         st.session_state.p1_acc_location = st.session_state.pop("acc_loc_override")
     elif st.session_state.get("acc_loc_value") and not st.session_state.get("p1_acc_location"):
         st.session_state.p1_acc_location = st.session_state.get("acc_loc_value")
+    # أعد حقن رقم/موقع/سبب من الخزنة قبل رسم text_input حتى لا تُمسح عند التنقل
+    ensure_core_accident_fields_from_vault()
     if st.session_state.get("p1_acc_type_choice") not in _acc_type_options:
         saved_type = st.session_state.get("p1_acc_type")
         if "p1_acc_type" in _loaded_page1_keys and saved_type in _acc_type_options:
@@ -5337,7 +5456,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
             st.session_state.p1_acc_weather_choice = saved_weather
         else:
             st.session_state.pop("p1_acc_weather_choice", None)
-    # منتقيات الوقت والتاريخ خارج النموذج (تحتوي popover/أزرار)
+    # منتقيات الوقت والتاريخ + رقم/موقع/سبب خارج النموذج حتى تُحفظ فوراً ولا تُفقد بالتنقل
     picker_c1, picker_c2 = st.columns(2, gap="medium")
     with picker_c1:
         accident_time = render_smart_time_picker(state_key="p1_acc_time", label="الوقت")
@@ -5345,8 +5464,55 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
     with picker_c2:
         accident_date = render_luxury_hijri_picker(state_key="hijri_date", label="تاريخ الحادث (هجري)")
         acc_date = accident_date
-        st.session_state.p1_acc_date = accident_date
-        st.session_state.hijri_manual_date = accident_date
+        if accident_date:
+            st.session_state.p1_acc_date = accident_date
+            st.session_state.hijri_manual_date = accident_date
+
+    r1_c1, r1_c2, r1_c3 = st.columns(3, gap="medium")
+    with r1_c1:
+        acc_num = st.text_input(
+            "رقم الحادث",
+            key="p1_acc_number",
+            on_change=_on_core_accident_field_change,
+        )
+    with r1_c2:
+        acc_type = st.selectbox(
+            "نوع الحادث",
+            _acc_type_options,
+            index=None,
+            placeholder="اختر نوع الحادث",
+            key="p1_acc_type_choice",
+        ) or ""
+    with r1_c3:
+        acc_injuries = st.number_input("عدد الإصابات", min_value=0, key="p1_acc_injuries")
+    r2_c1, r2_c2, r2_c3 = st.columns(3, gap="medium")
+    with r2_c1:
+        acc_loc = st.text_input(
+            "موقع الحادث",
+            key="p1_acc_location",
+            on_change=_on_core_accident_field_change,
+        )
+    with r2_c2:
+        acc_weather = st.selectbox(
+            "الطقس",
+            _acc_weather_options,
+            index=None,
+            placeholder="اختر الطقس",
+            key="p1_acc_weather_choice",
+        ) or ""
+    with r2_c3:
+        acc_deaths = st.number_input("عدد الوفيات", min_value=0, key="p1_acc_deaths")
+    acc_cause = st.text_input(
+        "سبب الحادث الرئيسي (المختصر)",
+        key="p1_acc_cause",
+        on_change=_on_core_accident_field_change,
+    )
+    # مزامنة فورية للخزنة دون طمس القيم بنص فارغ
+    sync_page1_to_vault(
+        extra_keys=list(PAGE1_EXTRA_SYNC_KEYS),
+        write_disk=True,
+        allow_blank_overwrite=False,
+    )
 
     _party_columns = list(_PARTY_TABLE_COLUMNS)
     _vehicle_columns = list(_VEHICLE_TABLE_COLUMNS)
@@ -5375,34 +5541,6 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
         st.session_state.p1_vehicles_editor = fill_smart_table_defaults(st.session_state.p1_vehicles_editor, VEHICLE_SMART_DEFAULTS)
 
     with st.form("page1_accident_data_form", border=False, clear_on_submit=False):
-        r1_c1, r1_c2, r1_c3 = st.columns(3, gap="medium")
-        with r1_c1:
-            acc_num = st.text_input("رقم الحادث", key="p1_acc_number")
-        with r1_c2:
-            acc_type = st.selectbox(
-                "نوع الحادث",
-                _acc_type_options,
-                index=None,
-                placeholder="اختر نوع الحادث",
-                key="p1_acc_type_choice",
-            ) or ""
-        with r1_c3:
-            acc_injuries = st.number_input("عدد الإصابات", min_value=0, key="p1_acc_injuries")
-        r2_c1, r2_c2, r2_c3 = st.columns(3, gap="medium")
-        with r2_c1:
-            acc_loc = st.text_input("موقع الحادث", key="p1_acc_location")
-        with r2_c2:
-            acc_weather = st.selectbox(
-                "الطقس",
-                _acc_weather_options,
-                index=None,
-                placeholder="اختر الطقس",
-                key="p1_acc_weather_choice",
-            ) or ""
-        with r2_c3:
-            acc_deaths = st.number_input("عدد الوفيات", min_value=0, key="p1_acc_deaths")
-        acc_cause = st.text_input("سبب الحادث الرئيسي (المختصر)", key="p1_acc_cause")
-        st.divider()
         st.subheader("جدول معلومات أطراف الحادث")
         parties_df = st.data_editor(
             parties_df_seed,
@@ -8931,6 +9069,15 @@ st.markdown("""<style id="final-red-tags-only">
 
 </style>""", unsafe_allow_html=True)
 
+try:
+    ensure_core_accident_fields_from_vault()
+    sync_page1_to_vault(
+        extra_keys=list(PAGE1_EXTRA_SYNC_KEYS),
+        write_disk=True,
+        allow_blank_overwrite=False,
+    )
+except Exception:
+    pass
 try:
     _bayyinah_persist.finalize_run()
 except Exception:

@@ -303,14 +303,42 @@ def _snapshot_tab3_explicit() -> dict:
     return out
 
 
+_CORE_ACCIDENT_TEXT_KEYS = frozenset({
+    "p1_acc_number",
+    "p1_acc_location",
+    "p1_acc_cause",
+    "hijri_date",
+    "p1_acc_date",
+    "p1_acc_time",
+})
+
+
 def _snapshot_session() -> dict:
     snap = {}
+    prev_session = {}
+    if _STORE_FILE.exists():
+        try:
+            with open(_STORE_FILE, "rb") as fh:
+                prev_payload = pickle.load(fh) or {}
+            prev_session = prev_payload.get("session") or {}
+            if not isinstance(prev_session, dict):
+                prev_session = {}
+        except Exception:
+            prev_session = {}
     for key, value in list(st.session_state.items()):
         ks = str(key)
         if _is_ephemeral_key(ks):
             continue
         if ks not in _PROTECTED_KEYS and isinstance(value, bool) and any(w in ks.lower() for w in _BUTTONISH):
             continue
+        # لا تكتب "" فوق رقم/موقع/سبب محفوظة مسبقاً في الحفظ التلقائي
+        if ks in _CORE_ACCIDENT_TEXT_KEYS:
+            blank_now = value is None or (isinstance(value, str) and not str(value).strip())
+            if blank_now and ks in prev_session:
+                prev_val = prev_session.get(ks)
+                if prev_val is not None and not (isinstance(prev_val, str) and not str(prev_val).strip()):
+                    snap[ks] = prev_val
+                    continue
         packed = _pack_obj(value)
         if packed is None and value is not None:
             continue
