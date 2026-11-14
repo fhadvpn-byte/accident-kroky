@@ -125,6 +125,60 @@ _FILE_CAMERA_WIDGET_PREFIXES = (
 # مفاتيح محمية: لا تُحذف عند التنقل أو الحفظ أو عدم عرض الودجت
 _PROTECTED_KEYS = frozenset(MEDIA_KEYS) | frozenset(TAB3_KEYS) | {FORM_SHADOW_KEY}
 
+# بيانات فقط — لا تُسترجع مفاتيح button/download/form_submit/file_uploader/camera/data_editor/form
+_DATA_WHITELIST_EXTRA = (
+    "saved_acc_number",
+    "saved_acc_location",
+    "saved_acc_cause",
+    "parties",
+    "vehicles",
+    "active_tab",
+    "hijri_date",
+    "hijri_manual_date",
+    "p1_acc_date",
+    "p1_acc_time",
+    "p1_acc_number",
+    "p1_acc_location",
+    "p1_acc_cause",
+    "p1_acc_type",
+    "p1_acc_weather",
+    "p1_acc_injuries",
+    "p1_acc_deaths",
+    "p1_acc_day",
+    "p1_acc_month",
+    "p1_acc_year",
+    "p1_parties_records",
+    "p1_vehicles_records",
+    "p1_parties_count",
+    "p1_dept_region",
+    "p1_dept_branch",
+    "acc_loc_value",
+    "uploaded_ids",
+    "processed_file_keys",
+    "officer_1_name",
+    "officer_1_rank",
+    "officer_2_name",
+    "officer_2_rank",
+    "manager_name",
+    "manager_rank",
+    "last_saved_time",
+    "last_saved_at",
+    "sig_base64",
+    "sketch_road_name",
+    "_p1_vault",
+    "page1_data",
+)
+_WIDGET_ACCIDENT_KEYS = frozenset({
+    "p1_acc_number",
+    "p1_acc_location",
+    "p1_acc_cause",
+})
+_SAVED_ACC_KEY_MAP = {
+    "p1_acc_number": "saved_acc_number",
+    "p1_acc_location": "saved_acc_location",
+    "p1_acc_cause": "saved_acc_cause",
+}
+
 
 def _ensure_dir() -> None:
     _STORE_DIR.mkdir(parents=True, exist_ok=True)
@@ -145,11 +199,43 @@ def _is_file_or_camera_widget_key(key: str) -> bool:
     return False
 
 
+def _is_ui_widget_key(key: str) -> bool:
+    """تجاهل مفاتيح button/download/form_submit/file_uploader/camera/data_editor/form."""
+    if not isinstance(key, str) or not key:
+        return True
+    if _is_file_or_camera_widget_key(key):
+        return True
+    if key.startswith("FormSubmitter:"):
+        return True
+    kl = key.lower()
+    if "download" in kl or "form_submit" in kl:
+        return True
+    if "_btn_" in kl or kl.endswith("_btn") or kl.startswith("btn_") or "button" in kl:
+        return True
+    if key.endswith("_editor") or "data_editor" in kl:
+        return True
+    if "file_uploader" in kl or "camera_input" in kl:
+        return True
+    # مفاتيح منتقي الهجري الداخلية المرتبطة بودجات
+    if key.endswith("_manual_in") or key.endswith("_sel_month_ui") or key.endswith("_sel_year_ui"):
+        return True
+    if "_lux_" in key or key.endswith("_manual"):
+        return True
+    if key in _WIDGET_ACCIDENT_KEYS:
+        return True
+    if key in ("p1_acc_type_choice", "p1_acc_weather_choice"):
+        return True
+    return False
+
+
+def _data_whitelist() -> frozenset:
+    return frozenset(MEDIA_KEYS) | frozenset(TAB3_KEYS) | frozenset(_DATA_WHITELIST_EXTRA) | {FORM_SHADOW_KEY}
+
+
 def _is_ephemeral_key(key: str) -> bool:
     if not isinstance(key, str) or not key:
         return True
-    # ودجات الملفات/الكاميرا زائلة دائماً حتى لا تُعاد كتابتها في session_state
-    if _is_file_or_camera_widget_key(key):
+    if _is_ui_widget_key(key):
         return True
     # المفاتيح المحمية (ظل التبويب3 والوسائط) لا تُعامل كزائلة أبداً
     if key in _PROTECTED_KEYS or key in TAB3_KEYS:
@@ -304,16 +390,39 @@ def _snapshot_tab3_explicit() -> dict:
 
 
 _CORE_ACCIDENT_TEXT_KEYS = frozenset({
-    "p1_acc_number",
-    "p1_acc_location",
-    "p1_acc_cause",
+    "saved_acc_number",
+    "saved_acc_location",
+    "saved_acc_cause",
     "hijri_date",
     "p1_acc_date",
     "p1_acc_time",
 })
 
 
+def _safe_assign_session(key: str, value: Any) -> bool:
+    """تعيين آمن لمفتاح بيانات فقط — لا يُعيَّن على مفاتيح الودجات."""
+    ks = str(key)
+    if _is_ui_widget_key(ks) or _is_ephemeral_key(ks):
+        # رحّل القيم القديمة لرقم/موقع/سبب إلى saved_acc_*
+        saved_key = _SAVED_ACC_KEY_MAP.get(ks)
+        if saved_key and not (
+            value is None or (isinstance(value, str) and not str(value).strip())
+        ):
+            try:
+                st.session_state[saved_key] = value
+                return True
+            except Exception:
+                return False
+        return False
+    try:
+        st.session_state[ks] = value
+        return True
+    except Exception:
+        return False
+
+
 def _snapshot_session() -> dict:
+    """لقطة whitelist للبيانات فقط — بلا button/download/form/data_editor/..."""
     snap = {}
     prev_session = {}
     if _STORE_FILE.exists():
@@ -325,13 +434,28 @@ def _snapshot_session() -> dict:
                 prev_session = {}
         except Exception:
             prev_session = {}
-    for key, value in list(st.session_state.items()):
-        ks = str(key)
-        if _is_ephemeral_key(ks):
+    whitelist = _data_whitelist()
+    # انقل قيم ودجات الحادث إلى saved_acc_* قبل اللقطة
+    for widget_key, saved_key in _SAVED_ACC_KEY_MAP.items():
+        widget_val = st.session_state.get(widget_key)
+        if widget_val is not None and not (isinstance(widget_val, str) and not str(widget_val).strip()):
+            st.session_state[saved_key] = widget_val
+        elif saved_key not in st.session_state and widget_key in prev_session:
+            prev_val = prev_session.get(widget_key)
+            if prev_val is not None and not (isinstance(prev_val, str) and not str(prev_val).strip()):
+                st.session_state[saved_key] = prev_val
+
+    for ks in sorted(whitelist):
+        if _is_ui_widget_key(ks):
             continue
-        if ks not in _PROTECTED_KEYS and isinstance(value, bool) and any(w in ks.lower() for w in _BUTTONISH):
+        if ks not in st.session_state:
+            # احتفظ بالقيمة السابقة للمفاتيح الأساسية إن فُرغت الجلسة
+            if ks in _CORE_ACCIDENT_TEXT_KEYS and ks in prev_session:
+                prev_val = prev_session.get(ks)
+                if prev_val is not None and not (isinstance(prev_val, str) and not str(prev_val).strip()):
+                    snap[ks] = prev_val
             continue
-        # لا تكتب "" فوق رقم/موقع/سبب محفوظة مسبقاً في الحفظ التلقائي
+        value = st.session_state.get(ks)
         if ks in _CORE_ACCIDENT_TEXT_KEYS:
             blank_now = value is None or (isinstance(value, str) and not str(value).strip())
             if blank_now and ks in prev_session:
@@ -347,7 +471,6 @@ def _snapshot_session() -> dict:
         except Exception:
             continue
         snap[ks] = packed
-    # فرض مفاتيح الوسائط والتبويب3 فوق اللقطة العامة
     snap.update(_snapshot_media_explicit())
     snap.update(_snapshot_tab3_explicit())
     return snap
@@ -442,10 +565,11 @@ def _force_restore_keys(session: dict, extra: dict | None, keys) -> int:
             if key == FORM_SHADOW_KEY and isinstance(current, dict) and isinstance(value, dict):
                 merged_shadow = dict(value)
                 merged_shadow.update({k: v for k, v in current.items() if not _is_blank_media(v)})
-                st.session_state[key] = merged_shadow
+                if _safe_assign_session(key, merged_shadow):
+                    restored += 1
             else:
-                st.session_state[key] = value
-            restored += 1
+                if _safe_assign_session(key, value):
+                    restored += 1
         except Exception:
             continue
     return restored
@@ -482,7 +606,7 @@ def _force_restore_tab3(session: dict, tab3: dict | None = None) -> int:
 
 
 def restore_full_workspace() -> bool:
-    """يسترجع الحالة المحفوظة؛ الوسائط والتبويب3 يُفرضان دون حذف مفاتيح غير معروضة."""
+    """يسترجع whitelist البيانات فقط — بلا حلقة تعيين على كل session_state."""
     first = not st.session_state.get("_BAYYINAH_RESTORED_OK_")
     st.session_state["_BAYYINAH_RESTORED_OK_"] = True
     if not _STORE_FILE.exists():
@@ -496,20 +620,45 @@ def restore_full_workspace() -> bool:
         if not isinstance(session, dict):
             return False
         restored = 0
+        whitelist = _data_whitelist()
         if first:
-            for key, packed in session.items():
-                ks = str(key)
-                if _is_ephemeral_key(ks) or _is_file_or_camera_widget_key(ks):
-                    continue
+            for ks in whitelist:
                 if ks in MEDIA_KEYS or ks in TAB3_KEYS:
                     continue  # تُعالج قسرياً أدناه
+                if _is_ui_widget_key(ks):
+                    # رحّل القيم القديمة إن وُجدت
+                    if ks in _SAVED_ACC_KEY_MAP and ks in session:
+                        try:
+                            val = _unpack_obj(session[ks])
+                        except Exception:
+                            continue
+                        if _safe_assign_session(ks, val):
+                            restored += 1
+                    continue
+                if ks not in session:
+                    continue
                 if ks in st.session_state and not _is_blank_media(st.session_state.get(ks)):
                     continue
                 try:
-                    st.session_state[ks] = _unpack_obj(packed)
-                    restored += 1
+                    val = _unpack_obj(session[ks])
                 except Exception:
                     continue
+                if _safe_assign_session(ks, val):
+                    restored += 1
+            # ترحيل p1_acc_* القديمة → saved_acc_*
+            for widget_key, saved_key in _SAVED_ACC_KEY_MAP.items():
+                if saved_key in st.session_state and not _is_blank_media(st.session_state.get(saved_key)):
+                    continue
+                src = session.get(saved_key, session.get(widget_key))
+                if src is None:
+                    continue
+                try:
+                    val = _unpack_obj(src)
+                except Exception:
+                    continue
+                if not _is_blank_media(val):
+                    st.session_state[saved_key] = val
+                    restored += 1
         restored += _force_restore_media(session, media if isinstance(media, dict) else {})
         restored += _force_restore_tab3(session, tab3 if isinstance(tab3, dict) else {})
         return restored > 0
@@ -567,7 +716,8 @@ def finalize_run() -> None:
     if st.session_state.get("_BAYYINAH_SKIP_AUTOSAVE_"):
         return
     if not (
-        st.session_state.get("p1_acc_number")
+        st.session_state.get("saved_acc_number")
+        or st.session_state.get("p1_acc_number")
         or st.session_state.get("parties")
         or st.session_state.get("sketch_data_url")
         or st.session_state.get("aerial_sketch_data_url")

@@ -234,12 +234,14 @@ def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تا
     sel_m_key = f"{state_key}_lux_m"
     sel_d_key = f"{state_key}_lux_d"
     manual_key = f"{state_key}_manual_in"
+    # مفاتيح داخلية غير مرتبطة بودجات: آمنة للتعيين قبل الرسم
     if parsed:
         st.session_state[sel_y_key], st.session_state[sel_m_key], st.session_state[sel_d_key] = parsed
     else:
         st.session_state.setdefault(sel_y_key, today_y)
         st.session_state.setdefault(sel_m_key, today_m)
         st.session_state.setdefault(sel_d_key, None)
+    # لا تعيّن على مفتاح text_input إن وُجد مسبقاً
     if manual_key not in st.session_state:
         st.session_state[manual_key] = current_val
 
@@ -249,8 +251,9 @@ def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تا
         st.session_state[sel_m_key] = int(month)
         st.session_state[sel_d_key] = int(day)
         st.session_state[state_key] = formatted
-        st.session_state[manual_key] = formatted
+        # علّم للمزامنة قبل إنشاء ودجات الشهر/السنة/الإدخال في الـ rerun التالي
         st.session_state[f"{state_key}_sync_parts"] = True
+        st.session_state[f"{state_key}_pending_manual"] = formatted
         st.session_state.hijri_date = formatted
         st.session_state.hijri_manual_date = formatted
         st.session_state.p1_acc_date = formatted
@@ -314,7 +317,8 @@ def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تا
             if st.button("✖ مسح", key=f"{state_key}_btn_clear", use_container_width=True):
                 st.session_state[sel_d_key] = None
                 st.session_state[state_key] = ""
-                st.session_state[manual_key] = ""
+                st.session_state[f"{state_key}_pending_manual"] = ""
+                st.session_state[f"{state_key}_sync_parts"] = True
                 st.session_state.hijri_date = ""
                 st.session_state.hijri_manual_date = ""
                 st.session_state.p1_acc_date = ""
@@ -326,10 +330,20 @@ def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تا
         month_ui_key = f"{state_key}_sel_month_ui"
         year_ui_key = f"{state_key}_sel_year_ui"
         sync_parts = st.session_state.pop(f"{state_key}_sync_parts", False)
-        if sync_parts or st.session_state.get(month_ui_key) not in HIJRI_MONTHS:
+        pending_manual = st.session_state.pop(f"{state_key}_pending_manual", None)
+        # قبل إنشاء الودجات فقط: عيّن عند الغياب أو بعد مزامنة صريحة من commit/مسح
+        if month_ui_key not in st.session_state:
             st.session_state[month_ui_key] = active_m
-        if sync_parts or st.session_state.get(year_ui_key) not in years_list:
+        elif sync_parts:
+            st.session_state[month_ui_key] = active_m
+        if year_ui_key not in st.session_state:
             st.session_state[year_ui_key] = active_y
+        elif sync_parts:
+            st.session_state[year_ui_key] = active_y
+        if pending_manual is not None:
+            st.session_state[manual_key] = pending_manual
+        elif manual_key not in st.session_state:
+            st.session_state[manual_key] = current_val
         month_col, year_col = st.columns([1.25, 1])
         with month_col:
             chosen_m = st.selectbox(
@@ -1529,8 +1543,17 @@ def init_and_restore_page1_state():
                 if key in SIDEBAR_SESSION_KEYS:
                     continue
                 cloned = _clone_page1_value(value)
+                if "_p1_vault" not in st.session_state:
+                    st.session_state["_p1_vault"] = dict(ALL_PAGE1_DEFAULTS)
                 st.session_state["_p1_vault"][key] = cloned
-                st.session_state[key] = _clone_page1_value(cloned)
+                # رقم/موقع/سبب → saved_acc_* فقط؛ لا تستبدل مفتاح ودجت موجود
+                if key in WIDGET_TO_SAVED_ACC:
+                    st.session_state[WIDGET_TO_SAVED_ACC[key]] = cloned
+                    if key not in st.session_state:
+                        st.session_state[key] = _clone_page1_value(cloned)
+                    continue
+                if key not in st.session_state:
+                    st.session_state[key] = _clone_page1_value(cloned)
     for key, default_val in ALL_PAGE1_DEFAULTS.items():
         if key in SIDEBAR_SESSION_KEYS and key in st.session_state:
             continue
@@ -1575,11 +1598,27 @@ def init_and_restore_page1_state():
     if "vehicles" not in st.session_state:
         st.session_state.vehicles = _clone_page1_value(vehicle_records)
 
-# مفاتيح أساسية يجب ألا تُمسح بالتنقل أو تُستبدل بـ "" في الحفظ التلقائي
+# مفاتيح بيانات منفصلة عن ودجات text_input — لا تُعيَّن على مفاتيح الودجت مباشرة
+SAVED_ACC_NUMBER = "saved_acc_number"
+SAVED_ACC_LOCATION = "saved_acc_location"
+SAVED_ACC_CAUSE = "saved_acc_cause"
+WIDGET_TO_SAVED_ACC = {
+    "p1_acc_number": SAVED_ACC_NUMBER,
+    "p1_acc_location": SAVED_ACC_LOCATION,
+    "p1_acc_cause": SAVED_ACC_CAUSE,
+}
 PAGE1_CORE_TEXT_KEYS = (
     "p1_acc_number",
     "p1_acc_location",
     "p1_acc_cause",
+    "hijri_date",
+    "p1_acc_date",
+    "p1_acc_time",
+)
+PAGE1_CORE_SAVED_KEYS = (
+    SAVED_ACC_NUMBER,
+    SAVED_ACC_LOCATION,
+    SAVED_ACC_CAUSE,
     "hijri_date",
     "p1_acc_date",
     "p1_acc_time",
@@ -1596,6 +1635,15 @@ def _is_blank_p1_value(value) -> bool:
     return False
 
 
+def _read_core_accident_value(widget_key: str):
+    """اقرأ من saved_acc_* أولاً ثم الودجت."""
+    saved_key = WIDGET_TO_SAVED_ACC.get(widget_key, widget_key)
+    saved_val = st.session_state.get(saved_key)
+    if not _is_blank_p1_value(saved_val):
+        return saved_val
+    return st.session_state.get(widget_key, "")
+
+
 def sync_page1_to_vault(
     extra_keys: list = None,
     write_disk: bool = False,
@@ -1605,8 +1653,25 @@ def sync_page1_to_vault(
     if "_p1_vault" not in st.session_state:
         st.session_state["_p1_vault"] = dict(ALL_PAGE1_DEFAULTS)
     vault = st.session_state["_p1_vault"]
+    # ادفع قيم الودجات إلى saved_acc_* دون تعيين عكسي على الودجت
+    for widget_key, saved_key in WIDGET_TO_SAVED_ACC.items():
+        if widget_key in st.session_state and not _is_blank_p1_value(st.session_state.get(widget_key)):
+            st.session_state[saved_key] = st.session_state.get(widget_key)
     keys_to_sync = list(ALL_PAGE1_DEFAULTS.keys()) + list(PAGE1_EXTRA_SYNC_KEYS) + list(extra_keys or [])
     for key in keys_to_sync:
+        if key in WIDGET_TO_SAVED_ACC:
+            new_val = _read_core_accident_value(key)
+            old_val = vault.get(key)
+            if (
+                not allow_blank_overwrite
+                and _is_blank_p1_value(new_val)
+                and not _is_blank_p1_value(old_val)
+            ):
+                st.session_state[WIDGET_TO_SAVED_ACC[key]] = _clone_page1_value(old_val)
+                continue
+            vault[key] = _clone_page1_value(new_val)
+            st.session_state[WIDGET_TO_SAVED_ACC[key]] = _clone_page1_value(new_val)
+            continue
         if key not in st.session_state:
             continue
         new_val = st.session_state[key]
@@ -1617,8 +1682,7 @@ def sync_page1_to_vault(
             and _is_blank_p1_value(new_val)
             and not _is_blank_p1_value(old_val)
         ):
-            # أعد حقن القيمة المحفوظة بدل طمسها
-            st.session_state[key] = _clone_page1_value(old_val)
+            # لا تعيّن على مفتاح ودجت — خزّن في الخزنة/saved فقط
             continue
         vault[key] = _clone_page1_value(new_val)
     if not write_disk:
@@ -1633,30 +1697,44 @@ def sync_page1_to_vault(
 
 
 def ensure_core_accident_fields_from_vault() -> None:
-    """قبل رسم text_input أو الحفظ التلقائي: أعد رقم/موقع/سبب من الخزنة إن فُرغت الجلسة."""
+    """أعد رقم/موقع/سبب إلى saved_acc_* فقط؛ ازرع الودجت بـ setdefault دون استبدال."""
     vault = st.session_state.get("_p1_vault")
     if not isinstance(vault, dict):
-        return
-    for key in PAGE1_CORE_TEXT_KEYS:
+        vault = {}
+    for widget_key, saved_key in WIDGET_TO_SAVED_ACC.items():
+        candidates = (
+            st.session_state.get(saved_key),
+            vault.get(widget_key),
+            vault.get(saved_key),
+            st.session_state.get("acc_loc_value") if widget_key == "p1_acc_location" else None,
+        )
+        best = next((c for c in candidates if not _is_blank_p1_value(c)), None)
+        if best is not None and _is_blank_p1_value(st.session_state.get(saved_key)):
+            st.session_state[saved_key] = _clone_page1_value(best)
+        # لا تُعيّن على مفتاح الودجت إن وُجد — فقط عند الغياب التام
+        if widget_key not in st.session_state and not _is_blank_p1_value(st.session_state.get(saved_key)):
+            st.session_state[widget_key] = st.session_state.get(saved_key)
+    for key in ("hijri_date", "p1_acc_date", "p1_acc_time"):
         vault_val = vault.get(key)
-        if _is_blank_p1_value(st.session_state.get(key)) and not _is_blank_p1_value(vault_val):
+        if key not in st.session_state and not _is_blank_p1_value(vault_val):
             st.session_state[key] = _clone_page1_value(vault_val)
-    # مرايا قديمة لموقع الحادث
-    loc = str(st.session_state.get("p1_acc_location") or "").strip()
+        elif _is_blank_p1_value(st.session_state.get(key)) and not _is_blank_p1_value(vault_val):
+            st.session_state[key] = _clone_page1_value(vault_val)
+    loc = str(_read_core_accident_value("p1_acc_location") or "").strip()
     if loc:
         st.session_state["acc_loc_value"] = loc
-    elif not loc and not _is_blank_p1_value(st.session_state.get("acc_loc_value")):
-        st.session_state["p1_acc_location"] = st.session_state.get("acc_loc_value")
+        st.session_state[SAVED_ACC_LOCATION] = loc
 
 
 def _on_core_accident_field_change() -> None:
-    """حفظ فوري لرقم/موقع/سبب الحادث عند كل تغيير (خارج st.form)."""
+    """حفظ فوري عبر saved_acc_* (لا تعيين قسري على مفاتيح text_input)."""
     if "_p1_vault" not in st.session_state:
         st.session_state["_p1_vault"] = dict(ALL_PAGE1_DEFAULTS)
-    for key in ("p1_acc_number", "p1_acc_location", "p1_acc_cause"):
-        if key in st.session_state:
-            st.session_state["_p1_vault"][key] = _clone_page1_value(st.session_state.get(key))
-    loc = str(st.session_state.get("p1_acc_location") or "").strip()
+    for widget_key, saved_key in WIDGET_TO_SAVED_ACC.items():
+        if widget_key in st.session_state:
+            st.session_state[saved_key] = st.session_state.get(widget_key)
+            st.session_state["_p1_vault"][widget_key] = _clone_page1_value(st.session_state.get(widget_key))
+    loc = str(st.session_state.get(SAVED_ACC_LOCATION) or "").strip()
     if loc:
         st.session_state["acc_loc_value"] = loc
     try:
@@ -1731,8 +1809,15 @@ def queue_load_page1_payload(saved_dict: dict):
     for key in PAGE1_EXTRA_SYNC_KEYS:
         if key in p1_data:
             filtered[key] = p1_data[key]
-    # تطابق مفاتيح text_input: اقبل القيم من المستوى الأعلى إن وُجدت وغير فارغة
-    for key in PAGE1_CORE_TEXT_KEYS:
+    # تطابق مفاتيح البيانات: saved_acc_* + p1_acc_* للتوافق
+    for widget_key, saved_key in WIDGET_TO_SAVED_ACC.items():
+        top_saved = saved_dict.get(saved_key)
+        top_widget = saved_dict.get(widget_key)
+        best = top_saved if not _is_blank_p1_value(top_saved) else top_widget
+        if not _is_blank_p1_value(best):
+            filtered[widget_key] = best
+            st.session_state[saved_key] = best
+    for key in ("hijri_date", "p1_acc_date", "p1_acc_time"):
         top_val = saved_dict.get(key)
         nested_val = filtered.get(key)
         if not _is_blank_p1_value(top_val) and _is_blank_p1_value(nested_val):
@@ -2130,8 +2215,12 @@ def init_and_load_state():
                 st.session_state.parties = saved_data.get("parties") or _blank_parties()
             if isinstance(saved_data.get("vehicles"), list):
                 st.session_state.vehicles = saved_data.get("vehicles") or _blank_vehicles()
-            # طبّق مفاتيح رقم/موقع/سبب من جذر المسودة إن طابقت text_input ولم تُملأ بعد
-            for _core_key in PAGE1_CORE_TEXT_KEYS:
+            # طبّق رقم/موقع/سبب على saved_acc_* فقط (لا تعيين قسري على ودجات text_input)
+            for _widget_key, _saved_key in WIDGET_TO_SAVED_ACC.items():
+                _top = saved_data.get(_saved_key, saved_data.get(_widget_key))
+                if not _is_blank_p1_value(_top) and _is_blank_p1_value(st.session_state.get(_saved_key)):
+                    st.session_state[_saved_key] = _top
+            for _core_key in ("hijri_date", "p1_acc_date", "p1_acc_time"):
                 _top = saved_data.get(_core_key)
                 if not _is_blank_p1_value(_top) and _is_blank_p1_value(st.session_state.get(_core_key)):
                     st.session_state[_core_key] = _top
@@ -2239,8 +2328,15 @@ def save_current_work():
     ensure_core_accident_fields_from_vault()
     page1_payload = export_page1_payload()
     data_to_save["page1_data"] = page1_payload
-    # نفس مفاتيح text_input في جذر المسودة لتطابق save/load
-    for key in PAGE1_CORE_TEXT_KEYS:
+    # مفاتيح البيانات saved_acc_* + توافق خلفي مع p1_acc_*
+    for widget_key, saved_key in WIDGET_TO_SAVED_ACC.items():
+        val = _read_core_accident_value(widget_key)
+        if _is_blank_p1_value(val):
+            val = page1_payload.get(widget_key)
+        if not _is_blank_p1_value(val):
+            data_to_save[saved_key] = val
+            data_to_save[widget_key] = val
+    for key in ("hijri_date", "p1_acc_date", "p1_acc_time"):
         val = st.session_state.get(key)
         if _is_blank_p1_value(val):
             val = page1_payload.get(key)
@@ -2708,7 +2804,7 @@ def render_compact_command_header(on_save_callback=None, on_reset_callback=None,
     )
     col_brand, col_save, col_print, col_new = st.columns([3.4, 1, 1.15, 1])
     with col_brand:
-        acc_no = str(st.session_state.get("p1_acc_number", "") or "").strip()
+        acc_no = str(_read_core_accident_value("p1_acc_number") or "").strip()
         acc_badge = f"رقم الحادث: {acc_no}" if acc_no else "معاملة قيد الإعداد"
         saved_at = html.escape(str(st.session_state.get("last_saved_time") or "لم يتم الحفظ بعد"))
         st.markdown(
@@ -2779,7 +2875,12 @@ def _report_tab_done_flags():
         isinstance(row, dict) and str(row.get("الاسم") or "").strip()
         for row in party_rows
     )
-    done_tab1 = _filled("p1_acc_number") or _filled("hijri_date") or _filled("p1_acc_location") or has_party_name
+    done_tab1 = (
+        bool(str(_read_core_accident_value("p1_acc_number") or "").strip())
+        or _filled("hijri_date")
+        or bool(str(_read_core_accident_value("p1_acc_location") or "").strip())
+        or has_party_name
+    )
     done_analysis = _filled("accident_results") or _filled("technical_description") or bool(st.session_state.get("selected_articles"))
     done_actions = _filled("actions_taken_editor")
     done_sketch = str(st.session_state.get("sketch_data_url") or "").startswith("data:image/")
@@ -4045,15 +4146,15 @@ def load_a4_report_fields_from_session() -> dict:
         html.escape(line.strip()) for line in actions_raw.splitlines() if line.strip()
     )
     fields = {
-        "acc_num": st.session_state.get("p1_acc_number", ""),
+        "acc_num": _read_core_accident_value("p1_acc_number"),
         "acc_date": st.session_state.get("hijri_date") or st.session_state.get("p1_acc_date", ""),
         "acc_time": st.session_state.get("p1_acc_time", ""),
-        "acc_loc": st.session_state.get("p1_acc_location", ""),
+        "acc_loc": _read_core_accident_value("p1_acc_location"),
         "acc_type": st.session_state.get("p1_acc_type_choice") or st.session_state.get("p1_acc_type", ""),
         "acc_injuries": st.session_state.get("p1_acc_injuries", 0),
         "acc_deaths": st.session_state.get("p1_acc_deaths", 0),
         "acc_weather": st.session_state.get("p1_acc_weather_choice") or st.session_state.get("p1_acc_weather", ""),
-        "acc_cause": st.session_state.get("p1_acc_cause", ""),
+        "acc_cause": _read_core_accident_value("p1_acc_cause"),
         "acc_results": get_form_value("accident_results", ""),
         "acc_how": get_form_value("technical_description", ""),
         "accident_nature": accident_nature,
@@ -4655,17 +4756,48 @@ def _is_persist_file_camera_key(key: str) -> bool:
         return True
     return False
 
+_BAYYINAH_JSON_DATA_WHITELIST = frozenset({
+    SAVED_ACC_NUMBER, SAVED_ACC_LOCATION, SAVED_ACC_CAUSE,
+    "p1_acc_number", "p1_acc_location", "p1_acc_cause",
+    "hijri_date", "p1_acc_date", "p1_acc_time", "hijri_manual_date",
+    "p1_acc_type", "p1_acc_weather", "p1_acc_injuries", "p1_acc_deaths",
+    "p1_parties_records", "p1_vehicles_records", "parties", "vehicles",
+    "selected_articles", "accident_results", "technical_description",
+    "legal_opinion", "p1_reasons", "p2_reasons", "liability_html",
+    "accident_nature", "rights_status", "gallery_photos", "accident_photos_data",
+    "active_tab", "last_saved_time", "acc_loc_value",
+})
+
+def _is_persist_ui_widget_key(key: str) -> bool:
+    ks = str(key or "")
+    if _is_persist_file_camera_key(ks):
+        return True
+    if ks in WIDGET_TO_SAVED_ACC or ks in ("p1_acc_type_choice", "p1_acc_weather_choice"):
+        return True
+    kl = ks.lower()
+    if ks.startswith("FormSubmitter:") or "download" in kl or "form_submit" in kl:
+        return True
+    if "_btn_" in kl or "button" in kl or ks.endswith("_editor") or "data_editor" in kl:
+        return True
+    if ks.endswith("_manual_in") or ks.endswith("_sel_month_ui") or ks.endswith("_sel_year_ui"):
+        return True
+    if "_lux_" in ks:
+        return True
+    return False
+
 def _save_bayyinah_state():
-    """نسخة احتياطية JSON بعد الحفظ اليدوي — دون كسر مسار المسودة الأساسي."""
+    """نسخة احتياطية JSON — whitelist بيانات فقط بلا مفاتيح ودجات."""
     data = {}
-    for k, v in list(st.session_state.items()):
-        ks = str(k)
-        if ks in _PERSIST_SKIP_KEYS or any(ks.startswith(p) for p in _PERSIST_SKIP_PREFIXES):
+    # ادفع الودجات → saved_acc_* قبل الحفظ
+    for widget_key, saved_key in WIDGET_TO_SAVED_ACC.items():
+        if widget_key in st.session_state and not _is_blank_p1_value(st.session_state.get(widget_key)):
+            st.session_state[saved_key] = st.session_state.get(widget_key)
+    for ks in _BAYYINAH_JSON_DATA_WHITELIST:
+        if ks not in st.session_state:
             continue
-        if _is_persist_file_camera_key(ks):
+        if _is_persist_ui_widget_key(ks):
             continue
-        if isinstance(v, bool) and any(w in ks.lower() for w in ("btn", "save", "new", "print", "del", "add", "insert")):
-            continue
+        v = st.session_state.get(ks)
         if hasattr(v, "to_dict"):
             try:
                 data[ks] = {"__df_records__": v.to_dict("records")}
@@ -4685,7 +4817,7 @@ def _save_bayyinah_state():
         return False
 
 def _load_bayyinah_state_once():
-    """استعادة احتياطية فقط للمفاتيح الغائبة — لا تضبط state_initialized حتى لا تُتخطى المسودة."""
+    """استعادة whitelist فقط — بلا حلقة تعيين على كل مفاتيح الجلسة."""
     if st.session_state.get("_persist_restored_ok"):
         return
     st.session_state["_persist_restored_ok"] = True
@@ -4701,7 +4833,16 @@ def _load_bayyinah_state_once():
             return
         for k, v in data.items():
             ks = str(k)
-            if ks in _PERSIST_SKIP_KEYS or _is_persist_file_camera_key(ks) or ks in st.session_state:
+            if ks not in _BAYYINAH_JSON_DATA_WHITELIST:
+                continue
+            if _is_persist_ui_widget_key(ks) or ks in _PERSIST_SKIP_KEYS:
+                # رحّل p1_acc_* → saved_acc_*
+                if ks in WIDGET_TO_SAVED_ACC and not _is_blank_p1_value(v):
+                    saved_key = WIDGET_TO_SAVED_ACC[ks]
+                    if saved_key not in st.session_state or _is_blank_p1_value(st.session_state.get(saved_key)):
+                        st.session_state[saved_key] = v
+                continue
+            if ks in st.session_state and not _is_blank_p1_value(st.session_state.get(ks)):
                 continue
             if isinstance(v, dict) and "__df_records__" in v:
                 try:
@@ -5439,11 +5580,19 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
         st.session_state.pop("hijri_date_manual_in", None)
         st.session_state.p1_acc_date = st.session_state.hijri_date
     if st.session_state.get("acc_loc_override"):
-        st.session_state.p1_acc_location = st.session_state.pop("acc_loc_override")
-    elif st.session_state.get("acc_loc_value") and not st.session_state.get("p1_acc_location"):
-        st.session_state.p1_acc_location = st.session_state.get("acc_loc_value")
-    # أعد حقن رقم/موقع/سبب من الخزنة قبل رسم text_input حتى لا تُمسح عند التنقل
+        _loc_ov = st.session_state.pop("acc_loc_override")
+        st.session_state[SAVED_ACC_LOCATION] = _loc_ov
+        if "p1_acc_location" not in st.session_state:
+            st.session_state.p1_acc_location = _loc_ov
+    elif st.session_state.get("acc_loc_value") and _is_blank_p1_value(st.session_state.get(SAVED_ACC_LOCATION)):
+        st.session_state[SAVED_ACC_LOCATION] = st.session_state.get("acc_loc_value")
+        if "p1_acc_location" not in st.session_state:
+            st.session_state.p1_acc_location = st.session_state.get("acc_loc_value")
+    # أعد حقن رقم/موقع/سبب إلى saved_acc_* وازرع الودجت بـ setdefault فقط
     ensure_core_accident_fields_from_vault()
+    for _wk, _sk in WIDGET_TO_SAVED_ACC.items():
+        if _wk not in st.session_state and not _is_blank_p1_value(st.session_state.get(_sk)):
+            st.session_state[_wk] = st.session_state.get(_sk)
     if st.session_state.get("p1_acc_type_choice") not in _acc_type_options:
         saved_type = st.session_state.get("p1_acc_type")
         if "p1_acc_type" in _loaded_page1_keys and saved_type in _acc_type_options:
@@ -7218,7 +7367,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[1]:
         location_state_key="p1_acc_location",
     )
     if "sketch_road_name" not in st.session_state:
-        st.session_state["sketch_road_name"] = str(st.session_state.get("p1_acc_location") or "")
+        st.session_state["sketch_road_name"] = str(_read_core_accident_value("p1_acc_location") or "")
     road_name_sign = st.text_input("اسم الطريق الرئيسي", key="sketch_road_name")
     render_compact_sketch_legends(key_prefix="legend_key_")
     legend_keys = [str(st.session_state.get(f"legend_key_{index}") or "") for index in range(1, 11)]
