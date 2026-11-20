@@ -72,6 +72,31 @@
             font-weight: 900;
             box-shadow: 0 0 14px rgba(16, 185, 129, 0.45);
         }
+        .evidence-markers-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            align-items: center;
+            width: 100%;
+        }
+        .ev-marker-btn {
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            padding: 0;
+            font-size: 13px;
+            font-weight: 900;
+            background: #fef08a;
+            color: #0f172a;
+            border: 2.2px solid #0f172a;
+            box-shadow: 0 1px 0 #fff inset;
+            line-height: 1;
+        }
+        .ev-marker-btn:hover {
+            background: #fde047;
+            border-color: #ffffff;
+            color: #000;
+        }
         #cloneCarSourceSel {
             width: 150px;
             max-width: 42vw;
@@ -163,6 +188,9 @@
                 <button class="t-btn" onclick="addExtraItem('obstacle')">🚧 حاجز خرساني</button>
                 <button class="t-btn" onclick="addExtraItem('pole')">💡 عمود إنارة</button>
                 <button class="t-btn" onclick="addExtraItem('skid')">〰️ أثر فرامل</button>
+                <button class="t-btn" onclick="addExtraItem('free_skid')">🛞 أثر فرامل مستقل</button>
+                <button class="t-btn" onclick="addExtraItem('grass')">🌿 حشائش</button>
+                <button class="t-btn" onclick="addExtraItem('blood')">🩸 أثر دماء</button>
                 <button class="t-btn" onclick="addExtraItem('signal')">🚦 إشارة ضوئية</button>
                 <button class="t-btn" onclick="addExtraItem('cliff_fall')">📉 مسار سقوط بالمتر</button>
                 <button class="t-btn" onclick="addExtraItem('overturned_car')">🚗💥 مركبة منقلبة</button>
@@ -176,6 +204,21 @@
                 <button class="t-btn" onclick="rotateSelected(-15)">↺ تدوير يسار</button>
                 <button class="t-btn" onclick="rotateSelected(15)">↻ تدوير يمين</button>
                 <button class="t-btn commit" onclick="commitToStreamlit(true)">✅ اعتماد الكروكي في التقرير</button>
+            </div>
+        </div>
+        <div class="toolbar-row">
+            <div class="evidence-markers-row">
+                <span style="font-size:11.5px;color:#fde68a;font-weight:800;margin-left:4px;">🔢 أرقام استدلال للكروكي:</span>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(1)" title="رقم استدلال 1">1</button>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(2)" title="رقم استدلال 2">2</button>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(3)" title="رقم استدلال 3">3</button>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(4)" title="رقم استدلال 4">4</button>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(5)" title="رقم استدلال 5">5</button>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(6)" title="رقم استدلال 6">6</button>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(7)" title="رقم استدلال 7">7</button>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(8)" title="رقم استدلال 8">8</button>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(9)" title="رقم استدلال 9">9</button>
+                <button class="t-btn ev-marker-btn" type="button" onclick="addEvidenceMarker(10)" title="رقم استدلال 10">10</button>
             </div>
         </div>
         <div class="toolbar-row">
@@ -1542,7 +1585,8 @@
             if (!it) continue;
             if (it.tailX !== undefined && Math.hypot(p.x - it.tailX, p.y - it.tailY) <= 14) return true;
             if (it.type === "cliff_fall" && Math.hypot(p.x - it.x, p.y - it.y) <= 18) return true;
-            if (it.type !== "cliff_fall" && Math.hypot(p.x - it.x, p.y - it.y) <= itemHitRadius(it)) return true;
+            if (it.type === "free_skid" && freeSkidHitsPoint(it, p)) return true;
+            if (it.type !== "cliff_fall" && it.type !== "free_skid" && Math.hypot(p.x - it.x, p.y - it.y) <= itemHitRadius(it)) return true;
         }
         return false;
     }
@@ -1929,6 +1973,177 @@
         ctx.beginPath(); ctx.arc(x1, y1, 6.5, 0, Math.PI*2); ctx.fill(); ctx.stroke();
         ctx.restore();
     }
+    function nextSpawnPoint(baseX, baseY) {
+        const n = items.filter(it => it && it.type !== "compass").length;
+        return {
+            x: Math.max(40, Math.min(920, baseX + (n % 6) * 16)),
+            y: Math.max(40, Math.min(420, baseY + (n % 5) * 12))
+        };
+    }
+    function drawGrassItem(it, isSelected, hideHandles) {
+        ctx.save();
+        ctx.translate(it.x, it.y);
+        ctx.rotate(((it.angle || 0) * Math.PI) / 180);
+        const sc = Number(it.scale) || 1;
+        ctx.scale(sc, sc);
+        ctx.fillStyle = "rgba(0,0,0,0.22)";
+        ctx.beginPath(); ctx.ellipse(2, 14, 28, 8, 0, 0, Math.PI * 2); ctx.fill();
+        const tufts = [
+            [-18, 6], [-8, 8], [2, 5], [12, 8], [20, 4],
+            [-14, -2], [-2, -4], [10, -1], [0, 10]
+        ];
+        tufts.forEach(function(pt, idx) {
+            const px = pt[0], py = pt[1];
+            ctx.strokeStyle = idx % 2 ? "#166534" : "#14532d";
+            ctx.fillStyle = idx % 2 ? "#22c55e" : "#16a34a";
+            ctx.lineWidth = 1.6;
+            ctx.beginPath();
+            ctx.moveTo(px - 4, py + 8);
+            ctx.quadraticCurveTo(px - 8, py - 6, px - 1, py - 18);
+            ctx.quadraticCurveTo(px + 2, py - 4, px + 5, py + 8);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(px, py + 8);
+            ctx.quadraticCurveTo(px + 1, py - 10, px + 6, py - 20);
+            ctx.strokeStyle = "#052e16";
+            ctx.lineWidth = 1.2;
+            ctx.stroke();
+        });
+        ctx.strokeStyle = "#052e16";
+        ctx.lineWidth = 2.2;
+        ctx.beginPath(); ctx.ellipse(0, 8, 26, 10, 0, 0, Math.PI * 2); ctx.stroke();
+        if (isSelected && !hideHandles) {
+            ctx.setLineDash([4, 3]);
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-30, -24, 60, 42);
+            ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(30, 0); ctx.lineTo(44, 0); ctx.stroke();
+            ctx.fillStyle = "#38bdf8"; ctx.strokeStyle = "#ffffff";
+            ctx.beginPath(); ctx.arc(46, 0, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+    }
+    function drawFreeSkidItem(it, isSelected, hideHandles) {
+        ctx.save();
+        ctx.translate(it.x, it.y);
+        const ang = ((it.angle || 0) * Math.PI) / 180;
+        ctx.rotate(ang);
+        const len = Math.max(40, Math.min(360, Number(it.length) || 140));
+        const half = len / 2;
+        const gap = 8;
+        ctx.strokeStyle = "rgba(15, 23, 42, 0.55)";
+        ctx.lineWidth = 7;
+        ctx.lineCap = "round";
+        ctx.beginPath();
+        ctx.moveTo(-half, -gap); ctx.lineTo(half, -gap);
+        ctx.moveTo(-half, gap); ctx.lineTo(half, gap);
+        ctx.stroke();
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 3.6;
+        ctx.setLineDash([7, 5]);
+        ctx.beginPath();
+        ctx.moveTo(-half, -gap); ctx.lineTo(half, -gap);
+        ctx.moveTo(-half, gap); ctx.lineTo(half, gap);
+        ctx.stroke();
+        ctx.setLineDash([]);
+        ctx.strokeStyle = "#020617";
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.moveTo(-half, -gap); ctx.lineTo(half, -gap);
+        ctx.moveTo(-half, gap); ctx.lineTo(half, gap);
+        ctx.stroke();
+        if (isSelected && !hideHandles) {
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 2;
+            ctx.setLineDash([4, 3]);
+            ctx.strokeRect(-half - 8, -18, len + 16, 36);
+            ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(half + 6, 0); ctx.lineTo(half + 22, 0); ctx.stroke();
+            ctx.fillStyle = "#38bdf8"; ctx.strokeStyle = "#ffffff";
+            ctx.beginPath(); ctx.arc(half + 24, 0, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.fillStyle = "#fbbf24";
+            ctx.strokeStyle = "#0f172a";
+            ctx.beginPath(); ctx.arc(half, 0, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+    }
+    function drawBloodItem(it, isSelected, hideHandles) {
+        ctx.save();
+        ctx.translate(it.x, it.y);
+        ctx.rotate(((it.angle || 0) * Math.PI) / 180);
+        const sc = Number(it.scale) || 1;
+        ctx.scale(sc, sc);
+        ctx.fillStyle = "rgba(0,0,0,0.28)";
+        ctx.beginPath(); ctx.ellipse(2, 6, 22, 12, 0.2, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#7f1d1d";
+        ctx.strokeStyle = "#450a0a";
+        ctx.lineWidth = 2.4;
+        ctx.beginPath();
+        ctx.moveTo(-16, 2);
+        ctx.bezierCurveTo(-22, -10, -6, -18, 2, -14);
+        ctx.bezierCurveTo(12, -20, 24, -8, 18, 2);
+        ctx.bezierCurveTo(26, 10, 10, 18, 0, 14);
+        ctx.bezierCurveTo(-12, 20, -22, 10, -16, 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#991b1b";
+        ctx.beginPath(); ctx.ellipse(-4, -2, 7, 5, -0.3, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(8, 4, 5, 3.5, 0.4, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#b91c1c";
+        ctx.beginPath(); ctx.ellipse(3, -6, 3.2, 2.4, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.ellipse(-10, 6, 2.6, 2, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = "#1c1917";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(-16, 2);
+        ctx.bezierCurveTo(-22, -10, -6, -18, 2, -14);
+        ctx.bezierCurveTo(12, -20, 24, -8, 18, 2);
+        ctx.bezierCurveTo(26, 10, 10, 18, 0, 14);
+        ctx.bezierCurveTo(-12, 20, -22, 10, -16, 2);
+        ctx.stroke();
+        if (isSelected && !hideHandles) {
+            ctx.setLineDash([4, 3]);
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 2;
+            ctx.strokeRect(-26, -22, 52, 42);
+            ctx.setLineDash([]);
+            ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(40, 0); ctx.stroke();
+            ctx.fillStyle = "#38bdf8"; ctx.strokeStyle = "#ffffff";
+            ctx.beginPath(); ctx.arc(42, 0, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        }
+        ctx.restore();
+    }
+    function drawEvidenceMarkerItem(it, isSelected, hideHandles) {
+        ctx.save();
+        ctx.translate(it.x, it.y);
+        const num = String(it.number || it.label || "1");
+        ctx.fillStyle = "rgba(0,0,0,0.28)";
+        ctx.beginPath(); ctx.arc(1.5, 2.5, 16, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = "#fef08a";
+        ctx.strokeStyle = "#0f172a";
+        ctx.lineWidth = 3.4;
+        ctx.beginPath(); ctx.arc(0, 0, 15, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        ctx.strokeStyle = "#ffffff";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath(); ctx.arc(0, 0, 11.5, 0, Math.PI * 2); ctx.stroke();
+        ctx.fillStyle = "#0f172a";
+        ctx.font = "900 " + (num.length > 1 ? "13px" : "15px") + " Tahoma, Arial";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(num, 0, 1);
+        if (isSelected && !hideHandles) {
+            ctx.strokeStyle = "#38bdf8";
+            ctx.lineWidth = 2.2;
+            ctx.setLineDash([4, 3]);
+            ctx.beginPath(); ctx.arc(0, 0, 20, 0, Math.PI * 2); ctx.stroke();
+            ctx.setLineDash([]);
+        }
+        ctx.restore();
+    }
     function drawVehicleShape(it, isSelected, hideHandles) {
         ctx.save();
         ctx.translate(it.x, it.y);
@@ -2277,14 +2492,19 @@
         drawAsphaltRoad(currentRoad);
         ctx.restore();
         items.forEach(it => {
-            if (it.tailX !== undefined && it.tailY !== undefined && !["cliff_fall", "overturned_car"].includes(it.type)) {
+            if (it.tailX !== undefined && it.tailY !== undefined && !["cliff_fall", "overturned_car", "free_skid"].includes(it.type)) {
                 drawArrowLine(it.tailX, it.tailY, it.x, it.y, it.color || "#ef4444", Boolean(it.skid));
             }
         });
         items.forEach((it, idx) => {
-            if (["impact", "compass", "traffic_light", "cliff_fall", "overturned_car", "mountain", "slope_arrow"].includes(it.type)) return;
+            if (["impact", "compass", "traffic_light", "cliff_fall", "overturned_car", "mountain", "slope_arrow", "grass", "blood", "free_skid", "marker"].includes(it.type)) return;
             if (["car","truck","bike"].includes(it.type)) drawVehicleShape(it, idx === selectedIdx, hideSelectionHandles);
             else drawSpecialItem(it, idx === selectedIdx, hideSelectionHandles);
+        });
+        items.forEach((it, idx) => {
+            if (it.type === "free_skid") drawFreeSkidItem(it, idx === selectedIdx, hideSelectionHandles);
+            else if (it.type === "grass") drawGrassItem(it, idx === selectedIdx, hideSelectionHandles);
+            else if (it.type === "blood") drawBloodItem(it, idx === selectedIdx, hideSelectionHandles);
         });
         items.forEach((it, idx) => {
             if (it.type === "cliff_fall") drawCliffFallItem(it, idx === selectedIdx, hideSelectionHandles);
@@ -2294,6 +2514,9 @@
         });
         items.forEach((it, idx) => {
             if (it.type === "impact") drawSpecialItem(it, idx === selectedIdx, hideSelectionHandles);
+        });
+        items.forEach((it, idx) => {
+            if (it.type === "marker") drawEvidenceMarkerItem(it, idx === selectedIdx, hideSelectionHandles);
         });
         items.forEach((it, idx) => {
             if (it.type === "traffic_light") drawTrafficLightItem(it, idx === selectedIdx, hideSelectionHandles);
@@ -2320,10 +2543,10 @@
         };
     }
     function isVectorShape(type) {
-        return ["pedestrian","animal","camel","livestock","obstacle","barrier","pole"].includes(type);
+        return ["pedestrian","animal","camel","livestock","obstacle","barrier","pole","grass","blood"].includes(type);
     }
     function canRotateItem(type) {
-        return ["car","truck","bike","compass","traffic_light","overturned_car","mountain","slope_arrow"].includes(type) || isVectorShape(type);
+        return ["car","truck","bike","compass","traffic_light","overturned_car","mountain","slope_arrow","free_skid"].includes(type) || isVectorShape(type);
     }
     function itemHitRadius(it) {
         let r = 32;
@@ -2334,8 +2557,21 @@
         else if (it.type === "overturned_car") r = 40;
         else if (it.type === "mountain") r = 48;
         else if (it.type === "slope_arrow") r = 28;
+        else if (it.type === "free_skid") r = Math.max(36, Math.min(120, (Number(it.length) || 140) * 0.42));
+        else if (it.type === "marker") r = 20;
+        else if (it.type === "grass" || it.type === "blood") r = 34;
         else if (isVectorShape(it.type)) r = 36;
         return Math.max(24, r);
+    }
+    function freeSkidHitsPoint(it, p) {
+        if (!it || it.type !== "free_skid") return false;
+        const len = Math.max(40, Number(it.length) || 140);
+        const ang = ((it.angle || 0) * Math.PI) / 180;
+        const dx = p.x - it.x;
+        const dy = p.y - it.y;
+        const localX = dx * Math.cos(ang) + dy * Math.sin(ang);
+        const localY = -dx * Math.sin(ang) + dy * Math.cos(ang);
+        return Math.abs(localX) <= len / 2 + 10 && Math.abs(localY) <= 18;
     }
     const TOUCH_HIT = 24;
     function setDraggingTouch(on) {
@@ -2438,6 +2674,17 @@
                 break;
             }
         }
+        if (!hit && selectedIdx >= 0 && items[selectedIdx] && items[selectedIdx].type === "free_skid") {
+            const sel = items[selectedIdx];
+            const rad = (sel.angle || 0) * Math.PI / 180;
+            const half = Math.max(40, Number(sel.length) || 140) / 2;
+            const lx = sel.x + Math.cos(rad) * half;
+            const ly = sel.y + Math.sin(rad) * half;
+            if (Math.hypot(p.x - lx, p.y - ly) <= TOUCH_HIT) {
+                dragMode = "skid_length";
+                hit = true;
+            }
+        }
         if (!hit && selectedIdx >= 0 && canRotateItem(items[selectedIdx].type)) {
             const sel = items[selectedIdx];
             const rad = (sel.angle || 0) * Math.PI / 180;
@@ -2459,6 +2706,10 @@
             } else if (sel.type === "slope_arrow") {
                 hx = sel.x + Math.cos(rad) * 30;
                 hy = sel.y + Math.sin(rad) * 30;
+            } else if (sel.type === "free_skid") {
+                const half = Math.max(40, Number(sel.length) || 140) / 2;
+                hx = sel.x + Math.cos(rad) * (half + 24);
+                hy = sel.y + Math.sin(rad) * (half + 24);
             } else {
                 const w = sel.type === "truck" ? 104 : (sel.type === "bike" ? 44 : 68);
                 hx = sel.x + Math.cos(rad) * (w/2 + 26);
@@ -2485,7 +2736,10 @@
                 const it = items[i];
                 const hitR = itemHitRadius(it);
                 if (it.type === "cliff_fall") continue;
-                if (Math.hypot(p.x - it.x, p.y - it.y) <= hitR) {
+                const onItem = it.type === "free_skid"
+                    ? freeSkidHitsPoint(it, p)
+                    : Math.hypot(p.x - it.x, p.y - it.y) <= hitR;
+                if (onItem) {
                     selectedIdx = i;
                     dragMode = "body";
                     dragOffset = { x: p.x - it.x, y: p.y - it.y };
@@ -2520,6 +2774,10 @@
                 it.x = Math.max(15, Math.min(945, p.x));
                 it.y = Math.max(15, Math.min(440, p.y));
             }
+        } else if (dragMode === "skid_length" && it.type === "free_skid") {
+            const dist = Math.hypot(p.x - it.x, p.y - it.y);
+            it.length = Math.max(40, Math.min(360, Math.round(dist * 2)));
+            it.angle = Math.round(Math.atan2(p.y - it.y, p.x - it.x) * 180 / Math.PI);
         } else if (dragMode === "rotate") {
             const pointer = Math.atan2(p.y - it.y, p.x - it.x) * 180 / Math.PI;
             const upright = it.type === "compass" || it.type === "traffic_light";
@@ -2547,8 +2805,11 @@
         const p = getCanvasPos(e);
         for (let i = items.length - 1; i >= 0; i--) {
             const it = items[i];
-            const reach = it.type === "compass" ? 52 : (it.type === "traffic_light" ? 48 : 42);
-            if (canRotateItem(it.type) && Math.hypot(p.x - it.x, p.y - it.y) <= reach) {
+            const reach = it.type === "compass" ? 52
+                : (it.type === "traffic_light" ? 48
+                : (it.type === "free_skid" ? Math.max(48, (Number(it.length) || 140) * 0.45) : 42));
+            const near = it.type === "free_skid" ? freeSkidHitsPoint(it, p) : Math.hypot(p.x - it.x, p.y - it.y) <= reach;
+            if (canRotateItem(it.type) && near) {
                 e.preventDefault();
                 selectedIdx = i;
                 it.angle = ((it.angle || 0) + (e.deltaY > 0 ? 8 : -8)) % 360;
@@ -2610,8 +2871,28 @@
         else if (kind === "overturned_car") items.push({type:"overturned_car", label:"1", color:"#ef4444", x:520, y:240, angle:75, posture:"right_side", tailX:390, tailY:300, skid:true});
         else if (kind === "mountain") items.push({type:"mountain", x:220, y:130, scale:1, angle:0});
         else if (kind === "slope_arrow") items.push({type:"slope_arrow", x:460, y:280, angle:120});
+        else if (kind === "grass") {
+            const sp = nextSpawnPoint(500, 260);
+            items.push({type:"grass", x:sp.x, y:sp.y, angle:0, scale:1});
+        }
+        else if (kind === "blood") {
+            const sp = nextSpawnPoint(520, 240);
+            items.push({type:"blood", x:sp.x, y:sp.y, angle:0, scale:1});
+        }
+        else if (kind === "free_skid") {
+            const sp = nextSpawnPoint(480, 280);
+            items.push({type:"free_skid", x:sp.x, y:sp.y, angle:0, length:140});
+        }
         else if (kind === "skid" && selectedIdx >= 0) items[selectedIdx].skid = !items[selectedIdx].skid;
         if (["sedan3", "truck", "bike", "overturned_car"].includes(kind)) syncCloneCarDropdown();
+        if (kind !== "skid") selectedIdx = items.length - 1;
+        renderAll(false);
+        scheduleAutoCommit();
+    };
+    window.addEvidenceMarker = function(num) {
+        const n = Math.max(1, Math.min(10, parseInt(num, 10) || 1));
+        const sp = nextSpawnPoint(460 + n * 8, 200 + (n % 3) * 10);
+        items.push({type:"marker", number:n, label:String(n), x:sp.x, y:sp.y, angle:0});
         selectedIdx = items.length - 1;
         renderAll(false);
         scheduleAutoCommit();
@@ -2642,6 +2923,18 @@
                 }
                 const labelRaw = window.prompt("نص وصف الزحف:", it.slideLabel || "زحف على الجانب الأيمن");
                 if (labelRaw !== null) it.slideLabel = String(labelRaw).trim() || "زحف على الجانب الأيمن";
+                renderAll(false);
+                scheduleAutoCommit();
+                return;
+            }
+            if (it.type === "free_skid" && freeSkidHitsPoint(it, p)) {
+                selectedIdx = i;
+                const current = it.length || 140;
+                const raw = window.prompt("طول أثر الفرامل المستقل (بكسل تقريباً 40–360):", String(current));
+                if (raw !== null && String(raw).trim() !== "") {
+                    const n = Number(raw);
+                    if (!Number.isNaN(n)) it.length = Math.max(40, Math.min(360, Math.round(n)));
+                }
                 renderAll(false);
                 scheduleAutoCommit();
                 return;

@@ -4016,6 +4016,48 @@ def _report_tab_done_flags():
     done_analysis_actions = done_analysis or done_actions
     return [done_tab1, done_sketch, done_analysis_actions, done_print]
 
+def _sync_sketch_legend_from_asphalt_items(state, key_prefix: str = "legend_key_") -> None:
+    """أضف مدلولات الحشائش / أثر الفرامل المستقل / أثر الدماء تلقائياً عند استخدامها في الكروكي."""
+    if not isinstance(state, dict):
+        return
+    items = state.get("items") if isinstance(state.get("items"), list) else []
+    type_labels = {
+        "grass": "🌿 حشائش / أعشاب جانبية",
+        "free_skid": "🛞 أثر فرامل مستقل",
+        "blood": "🩸 أثر دماء",
+    }
+    present = []
+    seen = set()
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        t = str(it.get("type") or "").strip()
+        if t in type_labels and t not in seen:
+            seen.add(t)
+            present.append(type_labels[t])
+    if not present:
+        return
+    existing = [str(st.session_state.get(f"{key_prefix}{i}") or "").strip() for i in range(1, 11)]
+    for label in present:
+        if any(label in txt or label.replace("🌿 ", "").replace("🛞 ", "").replace("🩸 ", "") in txt for txt in existing):
+            continue
+        placed = False
+        for i in range(5, 11):
+            key = f"{key_prefix}{i}"
+            if not str(st.session_state.get(key) or "").strip():
+                st.session_state[key] = f"{i} - {label}"
+                existing[i - 1] = st.session_state[key]
+                placed = True
+                break
+        if placed:
+            continue
+        for i in range(1, 11):
+            key = f"{key_prefix}{i}"
+            if not str(st.session_state.get(key) or "").strip():
+                st.session_state[key] = f"{i} - {label}"
+                break
+
+
 def render_compact_sketch_legends(key_prefix: str = "sketch_legend_"):
     """عرض أول 4 مدلولات في عمودين متجاورين وطي المدلولات 5-10 لترتيب صفحة التخطيط."""
     st.markdown(
@@ -8807,6 +8849,10 @@ def _accept_asphalt_commit(sketch_image_state_key: str, default_loc: str):
                 committed_state["fallMeters"] = saved_state.get("fallMeters")
             st.session_state["_saved_asphalt_state"] = committed_state
             st.session_state["saved_asphalt_state"] = committed_state
+            try:
+                _sync_sketch_legend_from_asphalt_items(committed_state, key_prefix="legend_key_")
+            except Exception:
+                pass
             try:
                 import bayyinah_persistence as _bp
                 _bp.save_full_workspace(reason="sketch_commit")
