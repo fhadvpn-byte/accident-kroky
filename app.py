@@ -1094,9 +1094,18 @@ def _vehicle_type_for_party_index(vehicles, party_index: int) -> str:
 def build_driver_party_title(party_index: int, parties=None, vehicles=None) -> str:
     """صيغة صفة الطرف: قائد المركبة الأولى (النوع) / الاسم — بدون زوائد إن نقص الاسم أو النوع."""
     ordinal = _VEHICLE_ORDINALS_AR.get(int(party_index) or 1, str(party_index))
-    base = f"قائد المركبة {ordinal}"
     parties = parties if parties is not None else (st.session_state.get("parties") or [])
     vehicles = vehicles if vehicles is not None else (st.session_state.get("vehicles") or [])
+    party_row = _party_row_for_index(parties, int(party_index) or 1) or {}
+    if _is_pedestrian_party(party_row):
+        name = _clean_party_text(party_row.get("الاسم"))
+        base = "عابر الطريق (المشاة)"
+        return f"{base} / {name}" if name else base
+    if _is_fleeing_unknown_party(party_row):
+        base = f"قائد المركبة {ordinal} (مجهول / هارب)"
+        name = _clean_party_text(party_row.get("الاسم")) or FLEEING_UNKNOWN_NAME
+        return f"{base} / {name}"
+    base = f"قائد المركبة {ordinal}"
     name = _driver_name_for_party_index(parties, party_index)
     veh_type = _vehicle_type_for_party_index(vehicles, party_index)
     if name and veh_type:
@@ -1451,12 +1460,28 @@ def _clone_page1_value(value):
     return value
 
 QUALIFICATION_EXEMPT = "➖ لا يُطالب برخصة"
+QUALIFICATION_FLEEING = "غير معروف (هروب)"
 QUALIFICATION_OPTIONS = [
     "مؤهل للقيادة",
     "غير مؤهل للقيادة",
+    QUALIFICATION_FLEEING,
     QUALIFICATION_EXEMPT,
 ]
+HEALTH_OPTIONS = ["", "سليم", "مصاب", "متوفي", "غير معروف"]
+VEHICLE_REG_OPTIONS = ["", "خصوصي", "نقل خاص", "نقل عام", "دراجة آلية", "غير معروف", "لا ينطبق"]
+VEHICLE_INS_OPTIONS = ["", "ساري", "مؤمنة", "غير مؤمنة", "غير معروف", "لا ينطبق"]
 NON_DRIVER_ROLES = {"راكب", "مشاة", "غير سائق"}
+FLEEING_UNKNOWN_NAME = "مجهول الهوية (لاذ بالفرار من موقع الحادث)"
+FLEEING_UNKNOWN_VEHICLE_TYPE = "مركبة مجهولة المواصفات والبيانات"
+FLEEING_DAMAGE_TEXT = "غير معروفة لفرار المركبة من موقع الحادث"
+FLEEING_DEATH_ACTION_KEY = (
+    "29. التعميم عن المركبة الهاربة وإيداع جثمان المتوفى"
+)
+FLEEING_DEATH_ACTION_TEXT = (
+    "التعميم عن المركبة الهاربة للبحث والتحري ومراجعة الكاميرات الأمنية بمحيط الموقع، "
+    "وإيداع جثمان المتوفى ثلاجة الموتى بالمستشفى لاستكمال الإجراءات النظامية"
+)
+VEHICLE_DELIVERY_ACTION_NUMBERS = frozenset({27, 28})
 
 def _clean_party_text(value) -> str:
     if value is None:
@@ -1487,6 +1512,68 @@ def _is_non_driver_role(role) -> bool:
         return False
     return False
 
+
+def _is_pedestrian_party(party) -> bool:
+    if not isinstance(party, dict):
+        return False
+    role = _clean_party_text(party.get("المشاركة"))
+    return ("مشاة" in role) or ("عابر" in role)
+
+
+def _is_fleeing_unknown_party(party) -> bool:
+    """سائق/طرف مجهول أو لاذ بالفرار من الموقع."""
+    if not isinstance(party, dict):
+        return False
+    name = _clean_party_text(party.get("الاسم"))
+    identity = _clean_party_text(party.get("الهوية"))
+    qual = _clean_party_text(party.get("التأهيل"))
+    if "فرار" in name or "مجهول" in name:
+        return True
+    if identity == "غير معروف":
+        return True
+    if qual == QUALIFICATION_FLEEING or "هروب" in qual:
+        return True
+    return False
+
+
+def _pedestrian_party_labels(parties) -> set[str]:
+    labels = set()
+    for party in parties or []:
+        if not isinstance(party, dict):
+            continue
+        if _is_pedestrian_party(party):
+            label = _clean_party_text(party.get("الطرف"))
+            if label:
+                labels.add(label)
+    return labels
+
+
+def _party_by_label(parties, label: str):
+    wanted = _clean_party_text(label)
+    for party in parties or []:
+        if not isinstance(party, dict):
+            continue
+        if _clean_party_text(party.get("الطرف")) == wanted:
+            return party
+    return None
+
+
+def _deliverable_vehicle_parties(parties, vehicles=None) -> list:
+    """أطراف لديهم مركبة قابلة للتسليم (ليسوا مشاة ولا هاربين مجهولين)."""
+    out = []
+    ped = _pedestrian_party_labels(parties)
+    for party in parties or []:
+        if not isinstance(party, dict):
+            continue
+        label = _clean_party_text(party.get("الطرف"))
+        if not label or label in ped:
+            continue
+        if _is_fleeing_unknown_party(party):
+            continue
+        out.append(party)
+    return out
+
+
 def normalize_driving_qualification(val, role=None):
     if _is_non_driver_role(role):
         return QUALIFICATION_EXEMPT
@@ -1495,12 +1582,16 @@ def normalize_driving_qualification(val, role=None):
     text = str(val).strip()
     if not text or text.lower() in ("none", "nan", "<na>"):
         return "مؤهل للقيادة"
+    if text == QUALIFICATION_FLEEING or "هروب" in text:
+        return QUALIFICATION_FLEEING
     if "لا يُطالب" in text or "لا يطالب" in text or text == QUALIFICATION_EXEMPT:
         # راكب/مشاة فقط يحتفظون بالإعفاء؛ السائق لا يبقى على هذا الخيار
         if role is not None and not _is_non_driver_role(role):
             return "مؤهل للقيادة"
         return QUALIFICATION_EXEMPT
-    if "غير" in text:
+    if text == "غير مؤهل للقيادة" or (text.startswith("غير") and "مؤهل" in text):
+        return "غير مؤهل للقيادة"
+    if "غير" in text and "مؤهل" in text:
         return "غير مؤهل للقيادة"
     if text in QUALIFICATION_OPTIONS:
         return text
@@ -1640,7 +1731,20 @@ def _render_party_role_cards(rows):
         name = html.escape(party.get("الاسم") or "—")
         role = party.get("المشاركة") or ""
         qual = party.get("التأهيل") or ""
-        if _is_non_driver_role(role) or qual == QUALIFICATION_EXEMPT:
+        if _is_fleeing_unknown_party(party):
+            accent = "#b45309"
+            glow = "rgba(245,158,11,0.28)"
+            body = "سائق مجهول الهوية | لاذ بالفرار من الموقع"
+            role_label = "سائق"
+        elif _is_pedestrian_party(party) or (
+            (_is_non_driver_role(role) or qual == QUALIFICATION_EXEMPT)
+            and ("مشاة" in role or "عابر" in role)
+        ):
+            accent = "#64748b"
+            glow = "rgba(100,116,139,0.18)"
+            body = "مشاة | لا يطالب برخصة قيادة"
+            role_label = "مشاة"
+        elif _is_non_driver_role(role) or qual == QUALIFICATION_EXEMPT:
             accent = "#64748b"
             glow = "rgba(100,116,139,0.18)"
             body = "💺 راكب | لا يُطالب برخصة قيادة"
@@ -1679,11 +1783,17 @@ def _render_party_role_cards(rows):
 
 def _party_qualification_cell_html(role, qual) -> str:
     normalized = normalize_driving_qualification(qual, role=role)
+    role_txt = _clean_party_text(role)
+    if normalized == QUALIFICATION_FLEEING or "هروب" in _clean_party_text(qual):
+        return (
+            '<span style="display:inline-block; padding:2px 10px; border-radius:4px; '
+            'background:#fff7ed; color:#b45309; border:1px solid #fdba74; '
+            'font-size:11px; font-weight:700;">سائق مجهول الهوية | لاذ بالفرار من الموقع</span>'
+        )
     if _is_non_driver_role(role) or normalized == QUALIFICATION_EXEMPT:
-        role_txt = _clean_party_text(role)
-        # الشارة المعتمدة للراكب كما طُلبت حرفياً؛ المشاة بنفس الأسلوب
+        # المشاة نصاً معتمداً؛ الراكب كما كان
         if "مشاة" in role_txt or "عابر" in role_txt:
-            badge_txt = "— لا يُطالب برخصة (مشاة) —"
+            badge_txt = "مشاة | لا يطالب برخصة قيادة"
         else:
             badge_txt = "— لا يُطالب برخصة (راكب) —"
         return (
@@ -1702,6 +1812,156 @@ def _party_qualification_cell_html(role, qual) -> str:
         'background:#ecfeff; color:#0e7490; border:1px solid #67e8f9; '
         'font-size:11px; font-weight:700;">✅ مؤهل للقيادة</span>'
     )
+
+
+def _blank_vehicle_row_for_label(label: str) -> dict:
+    return {
+        "الطرف": label,
+        "نوع المركبة": "",
+        "رقم اللوحة": "",
+        "الرقم التسلسلي": "",
+        "نوع الترخيص": "",
+        "التأمين": "",
+    }
+
+
+def _vehicles_excluding_pedestrians(parties, vehicles) -> list:
+    """استبعاد صفوف مركبات أطراف المشاة من الجدول والتقرير."""
+    ped = _pedestrian_party_labels(parties)
+    out = []
+    for veh in vehicles or []:
+        if not isinstance(veh, dict):
+            continue
+        label = _clean_party_text(veh.get("الطرف"))
+        if label and label in ped:
+            continue
+        out.append(dict(veh))
+    return out
+
+
+def _align_vehicles_to_non_pedestrian_parties(parties, vehicles) -> list:
+    """ابنِ صفوف المركبات للأطراف غير المشاة فقط مع الحفاظ على البيانات القائمة."""
+    ped = _pedestrian_party_labels(parties)
+    by_label = {}
+    for veh in vehicles or []:
+        if not isinstance(veh, dict):
+            continue
+        label = _clean_party_text(veh.get("الطرف"))
+        if label:
+            by_label[label] = dict(veh)
+    aligned = []
+    for party in parties or []:
+        if not isinstance(party, dict):
+            continue
+        label = _clean_party_text(party.get("الطرف"))
+        if not label or label in ped:
+            continue
+        if label in by_label:
+            row = dict(by_label[label])
+            row["الطرف"] = label
+            aligned.append(row)
+        else:
+            aligned.append(_blank_vehicle_row_for_label(label))
+    return aligned
+
+
+def _apply_fleeing_unknown_fill(party_index: int = 1) -> None:
+    """تعبئة سريعة لطرف ومركبته كسائق/مركبة مجهولة هاربة."""
+    try:
+        idx = int(party_index or 1)
+    except (TypeError, ValueError):
+        idx = 1
+    idx = max(1, idx)
+    label = _PARTY_LABELS.get(idx, f"الطرف {idx}")
+    parties = [dict(p) for p in (st.session_state.get("parties") or []) if isinstance(p, dict)]
+    if not parties:
+        parties = _blank_parties()
+    # وسّع القائمة إن لزم
+    while len(parties) < idx:
+        n = len(parties) + 1
+        parties.append({
+            "الطرف": _PARTY_LABELS.get(n, f"الطرف {n}"),
+            "الاسم": "",
+            "الهوية": "",
+            "المشاركة": "سائق",
+            "الحالة": "سليم",
+            "التأهيل": "مؤهل للقيادة",
+        })
+    target = None
+    target_i = None
+    for i, party in enumerate(parties):
+        if _clean_party_text(party.get("الطرف")) == label or i == idx - 1:
+            target = party
+            target_i = i
+            break
+    if target is None:
+        target = {
+            "الطرف": label,
+            "الاسم": "",
+            "الهوية": "",
+            "المشاركة": "سائق",
+            "الحالة": "سليم",
+            "التأهيل": "مؤهل للقيادة",
+        }
+        parties.append(target)
+        target_i = len(parties) - 1
+    target["الطرف"] = label
+    target["الاسم"] = FLEEING_UNKNOWN_NAME
+    target["الهوية"] = "غير معروف"
+    target["المشاركة"] = "سائق"
+    target["الحالة"] = "غير معروف"
+    target["التأهيل"] = QUALIFICATION_FLEEING
+    parties[target_i] = _sanitize_party_row(target)
+    st.session_state.parties = parties
+    st.session_state.p1_parties_records = _clone_page1_value(parties)
+
+    vehicles = _align_vehicles_to_non_pedestrian_parties(
+        parties,
+        st.session_state.get("vehicles") or [],
+    )
+    found = False
+    for veh in vehicles:
+        if _clean_party_text(veh.get("الطرف")) == label:
+            veh["نوع المركبة"] = FLEEING_UNKNOWN_VEHICLE_TYPE
+            veh["رقم اللوحة"] = "غير معروف"
+            veh["الرقم التسلسلي"] = "غير معروف"
+            veh["نوع الترخيص"] = "غير معروف"
+            veh["التأمين"] = "غير معروف"
+            found = True
+            break
+    if not found:
+        vehicles.append({
+            "الطرف": label,
+            "نوع المركبة": FLEEING_UNKNOWN_VEHICLE_TYPE,
+            "رقم اللوحة": "غير معروف",
+            "الرقم التسلسلي": "غير معروف",
+            "نوع الترخيص": "غير معروف",
+            "التأمين": "غير معروف",
+        })
+    st.session_state.vehicles = vehicles
+    st.session_state.p1_vehicles_records = _clone_page1_value(vehicles)
+    # أعد تركيب محرري الجداول
+    st.session_state.pop("p1_parties_editor", None)
+    st.session_state.pop("p1_vehicles_editor", None)
+
+
+def _on_fleeing_unknown_fill_toggle() -> None:
+    if st.session_state.get("flee_unknown_fill_enabled"):
+        _apply_fleeing_unknown_fill(st.session_state.get("flee_unknown_party_index") or 1)
+
+
+def _filter_actions_options_for_case(option_keys):
+    """أخفِ خيارات تسليم المركبة إن لم تبقَ أطراف قابلة للتسليم (مشاة/هارب)."""
+    parties = st.session_state.get("parties") or []
+    vehicles = st.session_state.get("vehicles") or []
+    deliverable = _deliverable_vehicle_parties(parties, vehicles)
+    out = []
+    for key in option_keys:
+        num = _action_key_number(key)
+        if num in VEHICLE_DELIVERY_ACTION_NUMBERS and not deliverable:
+            continue
+        out.append(key)
+    return out
 
 def _plain_text_len_for_autofit(value) -> int:
     text = re.sub(r"<[^>]+>", " ", str(value or ""))
@@ -2901,14 +3161,21 @@ def build_accident_results_text() -> str:
         elif health_norm in ("مصاب", "اصابة", "إصابة") or health_norm.startswith("مصاب"):
             lines.append(f"إصابة {label}")
 
-    vehicles = st.session_state.get("vehicles") or []
+    ped_labels = _pedestrian_party_labels(parties)
+    vehicles = _vehicles_excluding_pedestrians(parties, st.session_state.get("vehicles") or [])
     for idx, veh in enumerate(vehicles, start=1):
         if not isinstance(veh, dict):
+            continue
+        party_label = str(veh.get("الطرف") or f"الطرف {idx}").strip()
+        if party_label in ped_labels:
+            continue
+        party_row = _party_by_label(parties, party_label)
+        if party_row and _is_fleeing_unknown_party(party_row):
+            lines.append(FLEEING_DAMAGE_TEXT)
             continue
         vtype = str(veh.get("نوع المركبة") or "").strip()
         plate = str(veh.get("رقم اللوحة") or "").strip()
         serial = str(veh.get("الرقم التسلسلي") or "").strip()
-        party_label = str(veh.get("الطرف") or f"الطرف {idx}").strip()
         if not (vtype or plate or serial):
             continue
         item = f"تلفيات مركبة {party_label}"
@@ -5033,7 +5300,12 @@ def load_a4_report_fields_from_session() -> dict:
         "legend_keys": [str(st.session_state.get(f"legend_key_{index}") or "") for index in range(1, 11)],
         "final_actions_html": final_actions_html or str(get_form_value("final_actions_html") or ""),
         "parties_df": pd.DataFrame(st.session_state.get("parties") or []),
-        "vehicles_df": pd.DataFrame(st.session_state.get("vehicles") or []),
+        "vehicles_df": pd.DataFrame(
+            _align_vehicles_to_non_pedestrian_parties(
+                st.session_state.get("parties") or [],
+                st.session_state.get("vehicles") or [],
+            )
+        ),
         "liability_html": build_liability_html_from_session()
         or get_form_value(SAVED_OPINION_TEXT)
         or get_form_value("liability_html")
@@ -6793,9 +7065,47 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
         _ed = fill_smart_table_defaults(st.session_state.p1_parties_editor, PARTY_SMART_DEFAULTS)
         _ed_rows, _ = _normalize_party_qualification_rows(_frame_records(_ed) if not _ed.empty else [])
         st.session_state.p1_parties_editor = pd.DataFrame(_ed_rows) if _ed_rows else _ed
-    vehicles_source = fill_smart_table_defaults(pd.DataFrame(st.session_state.vehicles), VEHICLE_SMART_DEFAULTS)
+    # صفوف المركبات بلا أطراف المشاة
+    _aligned_vehicles = _align_vehicles_to_non_pedestrian_parties(
+        st.session_state.get("parties") or [],
+        st.session_state.get("vehicles") or [],
+    )
+    st.session_state.vehicles = _aligned_vehicles
+    vehicles_source = fill_smart_table_defaults(pd.DataFrame(_aligned_vehicles), VEHICLE_SMART_DEFAULTS)
     if isinstance(st.session_state.get("p1_vehicles_editor"), pd.DataFrame):
-        st.session_state.p1_vehicles_editor = fill_smart_table_defaults(st.session_state.p1_vehicles_editor, VEHICLE_SMART_DEFAULTS)
+        _ed_veh_rows = _frame_records(st.session_state.p1_vehicles_editor)
+        _ed_veh_aligned = _align_vehicles_to_non_pedestrian_parties(
+            st.session_state.get("parties") or [],
+            _ed_veh_rows,
+        )
+        st.session_state.p1_vehicles_editor = fill_smart_table_defaults(
+            pd.DataFrame(_ed_veh_aligned),
+            VEHICLE_SMART_DEFAULTS,
+        )
+
+    # تعبئة سريعة لحالة الهروب (خارج النموذج لإعادة الرسم فوراً)
+    st.markdown("#### 🚨 تسجيل مركبة/سائق مجهول الهوية (هروب من الموقع)")
+    _flee_c1, _flee_c2, _flee_c3 = st.columns([3.2, 1.2, 1.4])
+    with _flee_c1:
+        st.checkbox(
+            "تفعيل تعبئة بيانات السائق/المركبة المجهولة الهاربة",
+            key="flee_unknown_fill_enabled",
+            on_change=_on_fleeing_unknown_fill_toggle,
+            help="عند التفعيل تُعبَّأ بيانات الطرف المحدد كسائق مجهول لاذ بالفرار مع مركبة مجهولة المواصفات.",
+        )
+    with _flee_c2:
+        _party_count = max(len(st.session_state.get("parties") or []), 2)
+        st.selectbox(
+            "رقم الطرف",
+            options=list(range(1, _party_count + 1)),
+            key="flee_unknown_party_index",
+            help="الطرف الذي ستُعبَّأ بياناته (افتراضي: الطرف الأول).",
+        )
+    with _flee_c3:
+        if st.button("تعبئة الآن", key="flee_unknown_fill_btn", use_container_width=True):
+            st.session_state["flee_unknown_fill_enabled"] = True
+            _apply_fleeing_unknown_fill(st.session_state.get("flee_unknown_party_index") or 1)
+            st.rerun()
 
     with st.form("page1_accident_data_form", border=False, clear_on_submit=False):
         st.subheader("جدول معلومات أطراف الحادث")
@@ -6810,7 +7120,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
                 "الاسم": st.column_config.TextColumn("الاسم"),
                 "الهوية": st.column_config.TextColumn("الهوية / الإقامة"),
                 "المشاركة": st.column_config.SelectboxColumn("نوع المشاركة", options=["", "سائق", "راكب", "مشاة"]),
-                "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=["", "سليم", "مصاب", "متوفي"]),
+                "الحالة": st.column_config.SelectboxColumn("الحالة الصحية", options=HEALTH_OPTIONS),
                 "التأهيل": st.column_config.SelectboxColumn(
                     "تأهيل للقيادة",
                     options=QUALIFICATION_OPTIONS,
@@ -6828,6 +7138,7 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
             pass
         st.divider()
         st.subheader("جدول معلومات المركبات")
+        st.caption("أطراف المشاة لا يظهرون في جدول المركبات ولا في تلفيات المركبات بالتقرير.")
         vehicles_df = st.data_editor(
             vehicles_source,
             key="p1_vehicles_editor",
@@ -6839,8 +7150,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
                 "نوع المركبة": st.column_config.TextColumn("نوع المركبة"),
                 "رقم اللوحة": st.column_config.TextColumn("رقم اللوحة"),
                 "الرقم التسلسلي": st.column_config.TextColumn("الرقم التسلسلي"),
-                "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=["", "خصوصي", "نقل خاص", "نقل عام", "دراجة آلية"]),
-                "التأمين": st.column_config.SelectboxColumn("التأمين", options=["", "ساري", "مؤمنة", "غير مؤمنة"]),
+                "نوع الترخيص": st.column_config.SelectboxColumn("نوع الترخيص", options=VEHICLE_REG_OPTIONS),
+                "التأمين": st.column_config.SelectboxColumn("التأمين", options=VEHICLE_INS_OPTIONS),
             }
         )
         page1_submitted = st.form_submit_button("💾 اعتماد بيانات الحادث والأطراف", use_container_width=True)
@@ -6850,7 +7161,10 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
         raw_parties = _frame_records(parties_df)
         cleaned_parties, _ = _normalize_party_qualification_rows(raw_parties)
         st.session_state.parties = cleaned_parties
-        st.session_state.vehicles = _frame_records(vehicles_df)
+        st.session_state.vehicles = _align_vehicles_to_non_pedestrian_parties(
+            cleaned_parties,
+            _frame_records(vehicles_df),
+        )
         st.session_state.p1_parties_records = _clone_page1_value(st.session_state.parties)
         st.session_state.p1_vehicles_records = _clone_page1_value(st.session_state.vehicles)
         # لا تنبيه رخصة للراكب/المشاة؛ تنبيه السائق غير المؤهل فقط
@@ -7842,6 +8156,7 @@ ACTIONS_SCENARIOS = {
     "28. تسليم مركبة المتوفى لذويه / الوكيل الشرعي": (
         "تم تسليم مركبة المتوفى لذويه (أو الوكيل الشرعي) بموجب محضر تسليم رسمي بعد انتهاء المعاينة واستكمال الإجراءات النظامية."
     ),
+    FLEEING_DEATH_ACTION_KEY: FLEEING_DEATH_ACTION_TEXT,
 }
 
 FATALITY_ACTION_NUMBERS = set(range(20, 27))
@@ -7987,10 +8302,11 @@ def _append_missing_selected_procedures_once() -> bool:
 def sync_selected_actions():
     """on_change للقائمة: توليد كامل أو دمج ذكي مع is_manual + رفع proc_ta_ver."""
     _ensure_procedures_defaults()
+    allowed = set(_filter_actions_options_for_case(list(ACTIONS_SCENARIOS.keys()))) if "ACTIONS_SCENARIOS" in globals() else set()
     new_keys = [
         key
         for key in (st.session_state.get("selected_actions_multi") or [])
-        if "ACTIONS_SCENARIOS" in globals() and key in ACTIONS_SCENARIOS
+        if "ACTIONS_SCENARIOS" in globals() and key in ACTIONS_SCENARIOS and key in allowed
     ]
     prev_keys = list(st.session_state.get(PREV_SELECTED_PROCS) or [])
     if _procedures_is_manual():
@@ -8036,9 +8352,25 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
         st.session_state.rights_custom = ""
     if not isinstance(st.session_state.get("selected_actions_multi"), list):
         st.session_state.selected_actions_multi = ["1. صلح وتنازل ميداني نهائي"]
+    _actions_options_for_case = _filter_actions_options_for_case(list(ACTIONS_SCENARIOS.keys()))
+    _actions_options_set = set(_actions_options_for_case)
+    _prev_selected_actions = list(st.session_state.selected_actions_multi)
     st.session_state.selected_actions_multi = [
-        key for key in st.session_state.selected_actions_multi if key in ACTIONS_SCENARIOS
+        key
+        for key in st.session_state.selected_actions_multi
+        if key in ACTIONS_SCENARIOS and key in _actions_options_set
     ]
+    # إن حُذفت 27/28 لعدم وجود مركبة قابلة للتسليم — أعد توليد النص غير اليدوي
+    if (
+        _prev_selected_actions != st.session_state.selected_actions_multi
+        and not _procedures_is_manual()
+    ):
+        _write_saved_procedures(
+            _build_procedures_text_from_selection(st.session_state.selected_actions_multi),
+            mark_manual=False,
+            bump_rev=True,
+        )
+        st.session_state[PREV_SELECTED_PROCS] = list(st.session_state.selected_actions_multi)
     _ensure_procedures_defaults()
     if _is_blank_form_value(st.session_state.get(SAVED_PROCEDURES_TEXT)):
         seed = _build_procedures_text_from_selection()
@@ -8118,9 +8450,10 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
     except Exception:
         pass
     # إعادة التوليد من القائمة فقط عبر on_change — لا تُفرض عند تغيّر عدد الوفيات هنا
+    # أخفِ 27/28 عند غياب أطراف قابلة لتسليم مركبة (مشاة/هارب مجهول فقط)
     st.multiselect(
         "اختر إجراءً واحداً أو ادمج عدة إجراءات معاً (تُرقّم تلقائياً بالأسفل):",
-        options=list(ACTIONS_SCENARIOS.keys()),
+        options=_actions_options_for_case,
         key="selected_actions_multi",
         on_change=sync_selected_actions,
     )
@@ -9158,14 +9491,18 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     if not parties_df.empty:
         _a4_parties, _ = _normalize_party_qualification_rows(_frame_records(parties_df))
         parties_df = pd.DataFrame(_a4_parties)
-    _a4_vehicles_records = (
-        _frame_records(vehicles_df) if isinstance(vehicles_df, pd.DataFrame) and not vehicles_df.empty
-        else list(st.session_state.get("vehicles") or [])
-    )
     _a4_party_records = (
         _frame_records(parties_df) if isinstance(parties_df, pd.DataFrame) and not parties_df.empty
         else list(st.session_state.get("parties") or [])
     )
+    _a4_vehicles_records = _align_vehicles_to_non_pedestrian_parties(
+        _a4_party_records,
+        (
+            _frame_records(vehicles_df) if isinstance(vehicles_df, pd.DataFrame) and not vehicles_df.empty
+            else list(st.session_state.get("vehicles") or [])
+        ),
+    )
+    vehicles_df = pd.DataFrame(_a4_vehicles_records)
     refresh_party_role_titles(parties=_a4_party_records, vehicles=_a4_vehicles_records, force=False)
     parties_rows = ""
     for _, row in parties_df.iterrows():
@@ -9179,7 +9516,9 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                 cells.append(f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>")
         parties_rows += "<tr>" + "".join(cells) + "</tr>"
     vehicles_rows = ""
-    for _, row in vehicles_df.iterrows():
+    for row in _a4_vehicles_records:
+        if not isinstance(row, dict):
+            continue
         vehicles_rows += "<tr>" + "".join(
             f"<td>{html.escape(_page1_cell(row.get(key, '')))}</td>" for key, _label in _vehicle_columns
         ) + "</tr>"
@@ -10462,13 +10801,13 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
                         {parties_rows}
                     </table></div>
                 </div>
-                <div class="p1-section-group">
+                {f'''<div class="p1-section-group">
                     <div class="section-badge badge-sub">معلومات المركبات</div>
                     <div class="table-scroll"><table>
                         <tr>{vehicles_head}</tr>
                         {vehicles_rows}
                     </table></div>
-                </div>
+                </div>''' if vehicles_rows.strip() else ""}
             </div>
             {official_footer_html}
         </div>
