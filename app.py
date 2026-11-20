@@ -6336,41 +6336,123 @@ st.markdown("""<style id="tags-red-only">
 
 </style>""", unsafe_allow_html=True)
 
-st.components.v1.html(
-    """
+def render_device_bootstrap():
+    """تهيئة مخفية (height=0): PWA + إخفاء شارات Streamlit Cloud الحمراء/حساب GitHub دون مساس بـ #root أو iframe التطبيق."""
+    components.html(
+        """
 <script>
 (function () {
-  var parentWin;
   try {
-    parentWin = window.parent;
-  } catch (err) {
-    return;
+    if (window.frameElement) {
+      var wrap = window.frameElement.closest('[data-testid="stElementContainer"], .element-container');
+      if (wrap) {
+        wrap.style.cssText = "height:0!important;min-height:0!important;margin:0!important;padding:0!important;overflow:hidden!important;border:0!important;";
+      }
+      try {
+        window.frameElement.style.cssText = "height:0!important;min-height:0!important;border:0!important;position:absolute!important;opacity:0!important;pointer-events:none!important;";
+      } catch (eFrame) {}
+    }
+  } catch (eCollapse) {}
+
+  function hideStreamlitCloudBadges(doc) {
+    try {
+      if (!doc || !doc.head) return;
+      var STYLE_ID = "hide-st-cloud-badges";
+      var cssText = [
+        '[class*="viewerBadge"],',
+        '[class*="_viewerBadge"],',
+        '[class*="_link_gzau3"],',
+        '[class*="profileContainer"],',
+        '[class*="_profileContainer"],',
+        '[class*="profilePreview"],',
+        '[class*="_profilePreview"],',
+        'a[href*="streamlit.io"],',
+        'a[href*="share.streamlit.io/user"],',
+        'img[src*="avatars.githubusercontent.com"],',
+        '[data-testid="manage-app-button"],',
+        '[data-testid="stToolbar"],',
+        'header[data-testid="stHeader"],',
+        'footer',
+        '{',
+        '  display: none !important;',
+        '  visibility: hidden !important;',
+        '  opacity: 0 !important;',
+        '  pointer-events: none !important;',
+        '  width: 0 !important;',
+        '  height: 0 !important;',
+        '}'
+      ].join("\\n");
+      var styleEl = doc.getElementById(STYLE_ID);
+      if (!styleEl) {
+        styleEl = doc.createElement("style");
+        styleEl.id = STYLE_ID;
+        doc.head.appendChild(styleEl);
+      }
+      if (styleEl.textContent !== cssText) styleEl.textContent = cssText;
+    } catch (errStyle) {}
   }
-  if (!parentWin || !parentWin.document || !parentWin.document.head) return;
-  if (!parentWin.document.querySelector('link[rel="manifest"][data-bayyinah-manifest]')) {
-    var link = parentWin.document.createElement("link");
-    link.rel = "manifest";
-    link.href = new parentWin.URL("manifest.json", parentWin.location.href).href;
-    link.setAttribute("data-bayyinah-manifest", "1");
-    parentWin.document.head.appendChild(link);
+
+  function watchDocument(doc) {
+    try {
+      if (!doc) return;
+      hideStreamlitCloudBadges(doc);
+      if (!doc.documentElement || doc.documentElement.dataset.bayyinahHideCloudBadges === "1") return;
+      doc.documentElement.dataset.bayyinahHideCloudBadges = "1";
+      try {
+        var obs = new MutationObserver(function () {
+          hideStreamlitCloudBadges(doc);
+        });
+        obs.observe(doc.documentElement, { childList: true, subtree: true });
+      } catch (errObs) {}
+    } catch (errWatch) {}
   }
-  if ("serviceWorker" in parentWin.navigator && !parentWin.__bayyinahSwRegistered) {
-    parentWin.__bayyinahSwRegistered = true;
-    parentWin.navigator.serviceWorker
-      .register(new parentWin.URL("sw.js", parentWin.location.href).href)
-      .catch(function () {});
-  }
-  if (parentWin.__bayyinahInstallBound) return;
-  parentWin.__bayyinahInstallBound = true;
-  parentWin.addEventListener("beforeinstallprompt", function (event) {
-    event.preventDefault();
-    parentWin.deferredPrompt = event;
-  });
+
+  try {
+    var parentWin = null;
+    var topWin = null;
+    try { parentWin = window.parent; } catch (eP) { parentWin = null; }
+    try { topWin = window.top; } catch (eT) { topWin = null; }
+    if (parentWin && parentWin.document) watchDocument(parentWin.document);
+    if (topWin && topWin.document && (!parentWin || topWin.document !== parentWin.document)) {
+      watchDocument(topWin.document);
+    }
+  } catch (errDocs) {}
+
+  // PWA manifest / service worker (آمن على localhost)
+  try {
+    var parentWin2 = window.parent;
+    if (parentWin2 && parentWin2.document && parentWin2.document.head) {
+      if (!parentWin2.document.querySelector('link[rel="manifest"][data-bayyinah-manifest]')) {
+        var link = parentWin2.document.createElement("link");
+        link.rel = "manifest";
+        link.href = new parentWin2.URL("manifest.json", parentWin2.location.href).href;
+        link.setAttribute("data-bayyinah-manifest", "1");
+        parentWin2.document.head.appendChild(link);
+      }
+      if ("serviceWorker" in parentWin2.navigator && !parentWin2.__bayyinahSwRegistered) {
+        parentWin2.__bayyinahSwRegistered = true;
+        parentWin2.navigator.serviceWorker
+          .register(new parentWin2.URL("sw.js", parentWin2.location.href).href)
+          .catch(function () {});
+      }
+      if (!parentWin2.__bayyinahInstallBound) {
+        parentWin2.__bayyinahInstallBound = true;
+        parentWin2.addEventListener("beforeinstallprompt", function (event) {
+          event.preventDefault();
+          parentWin2.deferredPrompt = event;
+        });
+      }
+    }
+  } catch (errPwa) {}
 })();
 </script>
-    """,
-    height=0,
-)
+        """,
+        height=0,
+        width=0,
+    )
+
+
+render_device_bootstrap()
 # تنسيق واجهة البرنامج باللون الأخضر الرسمي
 st.markdown("""
 <style>
