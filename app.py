@@ -1461,19 +1461,23 @@ def _clone_page1_value(value):
 
 QUALIFICATION_EXEMPT = "➖ لا يُطالب برخصة"
 QUALIFICATION_FLEEING = "غير معروف (هروب)"
+QUALIFICATION_UNKNOWN = "غير معروف"
 QUALIFICATION_OPTIONS = [
     "مؤهل للقيادة",
     "غير مؤهل للقيادة",
     QUALIFICATION_FLEEING,
+    QUALIFICATION_UNKNOWN,
     QUALIFICATION_EXEMPT,
 ]
 HEALTH_OPTIONS = ["", "سليم", "مصاب", "متوفي", "غير معروف"]
 VEHICLE_REG_OPTIONS = ["", "خصوصي", "نقل خاص", "نقل عام", "دراجة آلية", "غير معروف", "لا ينطبق"]
 VEHICLE_INS_OPTIONS = ["", "ساري", "مؤمنة", "غير مؤمنة", "غير معروف", "لا ينطبق"]
 NON_DRIVER_ROLES = {"راكب", "مشاة", "غير سائق"}
-FLEEING_UNKNOWN_NAME = "مجهول الهوية (لاذ بالفرار من موقع الحادث)"
-FLEEING_UNKNOWN_VEHICLE_TYPE = "مركبة مجهولة المواصفات والبيانات"
+FLEEING_UNKNOWN_NAME = "لاذ بالفرار من موقع الحادث"
+FLEEING_UNKNOWN_VEHICLE_TYPE = "غير معروف (مركبة هاربة)"
 FLEEING_DAMAGE_TEXT = "غير معروفة لفرار المركبة من موقع الحادث"
+FLEEING_CARD_BODY = "سائق مجهول | لاذ بالفرار من موقع الحادث"
+PEDESTRIAN_CARD_BODY = "مشاة | لا يُطالب برخصة قيادة"
 FLEEING_DEATH_ACTION_KEY = (
     "29. التعميم عن المركبة الهاربة وإيداع جثمان المتوفى"
 )
@@ -1584,6 +1588,8 @@ def normalize_driving_qualification(val, role=None):
         return "مؤهل للقيادة"
     if text == QUALIFICATION_FLEEING or "هروب" in text:
         return QUALIFICATION_FLEEING
+    if text == QUALIFICATION_UNKNOWN:
+        return QUALIFICATION_UNKNOWN
     if "لا يُطالب" in text or "لا يطالب" in text or text == QUALIFICATION_EXEMPT:
         # راكب/مشاة فقط يحتفظون بالإعفاء؛ السائق لا يبقى على هذا الخيار
         if role is not None and not _is_non_driver_role(role):
@@ -1734,7 +1740,7 @@ def _render_party_role_cards(rows):
         if _is_fleeing_unknown_party(party):
             accent = "#b45309"
             glow = "rgba(245,158,11,0.28)"
-            body = "سائق مجهول الهوية | لاذ بالفرار من الموقع"
+            body = FLEEING_CARD_BODY
             role_label = "سائق"
         elif _is_pedestrian_party(party) or (
             (_is_non_driver_role(role) or qual == QUALIFICATION_EXEMPT)
@@ -1742,7 +1748,7 @@ def _render_party_role_cards(rows):
         ):
             accent = "#64748b"
             glow = "rgba(100,116,139,0.18)"
-            body = "مشاة | لا يطالب برخصة قيادة"
+            body = PEDESTRIAN_CARD_BODY
             role_label = "مشاة"
         elif _is_non_driver_role(role) or qual == QUALIFICATION_EXEMPT:
             accent = "#64748b"
@@ -1753,6 +1759,11 @@ def _render_party_role_cards(rows):
             accent = "#dc2626"
             glow = "rgba(245,158,11,0.28)"
             body = "⚠️ سائق | غير مؤهل للقيادة"
+            role_label = "سائق"
+        elif qual == QUALIFICATION_UNKNOWN:
+            accent = "#b45309"
+            glow = "rgba(245,158,11,0.22)"
+            body = "سائق | غير معروف"
             role_label = "سائق"
         else:
             accent = "#0891b2"
@@ -1784,16 +1795,21 @@ def _render_party_role_cards(rows):
 def _party_qualification_cell_html(role, qual) -> str:
     normalized = normalize_driving_qualification(qual, role=role)
     role_txt = _clean_party_text(role)
-    if normalized == QUALIFICATION_FLEEING or "هروب" in _clean_party_text(qual):
+    raw_qual = _clean_party_text(qual)
+    if (
+        normalized == QUALIFICATION_FLEEING
+        or "هروب" in raw_qual
+        or ("فرار" in raw_qual)
+    ):
         return (
             '<span style="display:inline-block; padding:2px 10px; border-radius:4px; '
             'background:#fff7ed; color:#b45309; border:1px solid #fdba74; '
-            'font-size:11px; font-weight:700;">سائق مجهول الهوية | لاذ بالفرار من الموقع</span>'
+            f'font-size:11px; font-weight:700;">{FLEEING_CARD_BODY}</span>'
         )
     if _is_non_driver_role(role) or normalized == QUALIFICATION_EXEMPT:
         # المشاة نصاً معتمداً؛ الراكب كما كان
         if "مشاة" in role_txt or "عابر" in role_txt:
-            badge_txt = "مشاة | لا يطالب برخصة قيادة"
+            badge_txt = PEDESTRIAN_CARD_BODY
         else:
             badge_txt = "— لا يُطالب برخصة (راكب) —"
         return (
@@ -1806,6 +1822,12 @@ def _party_qualification_cell_html(role, qual) -> str:
             '<span style="display:inline-block; padding:2px 10px; border-radius:4px; '
             'background:#fff7ed; color:#c2410c; border:1px solid #fdba74; '
             'font-size:11px; font-weight:700;">⚠️ غير مؤهل للقيادة</span>'
+        )
+    if normalized == QUALIFICATION_UNKNOWN:
+        return (
+            '<span style="display:inline-block; padding:2px 10px; border-radius:4px; '
+            'background:#fff7ed; color:#b45309; border:1px solid #fdba74; '
+            'font-size:11px; font-weight:700;">غير معروف</span>'
         )
     return (
         '<span style="display:inline-block; padding:2px 10px; border-radius:4px; '
@@ -1943,11 +1965,6 @@ def _apply_fleeing_unknown_fill(party_index: int = 1) -> None:
     # أعد تركيب محرري الجداول
     st.session_state.pop("p1_parties_editor", None)
     st.session_state.pop("p1_vehicles_editor", None)
-
-
-def _on_fleeing_unknown_fill_toggle() -> None:
-    if st.session_state.get("flee_unknown_fill_enabled"):
-        _apply_fleeing_unknown_fill(st.session_state.get("flee_unknown_party_index") or 1)
 
 
 def _filter_actions_options_for_case(option_keys):
@@ -2117,6 +2134,8 @@ def _records_from_dynamic_parties(vault):
                 "مؤهل (رخصة سارية)",
                 "مؤهل للقيادة",
                 QUALIFICATION_EXEMPT,
+                QUALIFICATION_FLEEING,
+                QUALIFICATION_UNKNOWN,
                 "➖ لا يُطالب برخصة",
             ),
         ))
@@ -7083,29 +7102,15 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[0]:
             VEHICLE_SMART_DEFAULTS,
         )
 
-    # تعبئة سريعة لحالة الهروب (خارج النموذج لإعادة الرسم فوراً)
-    st.markdown("#### 🚨 تسجيل مركبة/سائق مجهول الهوية (هروب من الموقع)")
-    _flee_c1, _flee_c2, _flee_c3 = st.columns([3.2, 1.2, 1.4])
-    with _flee_c1:
-        st.checkbox(
-            "تفعيل تعبئة بيانات السائق/المركبة المجهولة الهاربة",
-            key="flee_unknown_fill_enabled",
-            on_change=_on_fleeing_unknown_fill_toggle,
-            help="عند التفعيل تُعبَّأ بيانات الطرف المحدد كسائق مجهول لاذ بالفرار مع مركبة مجهولة المواصفات.",
-        )
-    with _flee_c2:
-        _party_count = max(len(st.session_state.get("parties") or []), 2)
-        st.selectbox(
-            "رقم الطرف",
-            options=list(range(1, _party_count + 1)),
-            key="flee_unknown_party_index",
-            help="الطرف الذي ستُعبَّأ بياناته (افتراضي: الطرف الأول).",
-        )
-    with _flee_c3:
-        if st.button("تعبئة الآن", key="flee_unknown_fill_btn", use_container_width=True):
-            st.session_state["flee_unknown_fill_enabled"] = True
-            _apply_fleeing_unknown_fill(st.session_state.get("flee_unknown_party_index") or 1)
-            st.rerun()
+    # زر سريع: طرف أول هارب / مركبة مجهولة (خارج النموذج لإعادة الرسم فوراً)
+    if st.button(
+        "🚨 تسجيل طرف أول هارب (مركبة مجهولة البيانات)",
+        key="flee_unknown_party1_btn",
+        use_container_width=True,
+        help="تعبئة الطرف الأول ومركبته كسائق/مركبة مجهولة هاربة من موقع الحادث ثم إعادة الرسم.",
+    ):
+        _apply_fleeing_unknown_fill(1)
+        st.rerun()
 
     with st.form("page1_accident_data_form", border=False, clear_on_submit=False):
         st.subheader("جدول معلومات أطراف الحادث")
