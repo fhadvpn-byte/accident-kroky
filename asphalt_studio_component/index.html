@@ -203,6 +203,9 @@
             <div class="btn-group">
                 <button class="t-btn" onclick="rotateSelected(-15)">↺ تدوير يسار</button>
                 <button class="t-btn" onclick="rotateSelected(15)">↻ تدوير يمين</button>
+                <button class="t-btn" onclick="scaleSelectedItem(1.15)">➕ تكبير</button>
+                <button class="t-btn" onclick="scaleSelectedItem(0.87)">➖ تصغير</button>
+                <button class="t-btn" onclick="stretchGrassAsSideStrip()">↔️ تمديد كشريط جانبي</button>
                 <button class="t-btn commit" onclick="commitToStreamlit(true)">✅ اعتماد الكروكي في التقرير</button>
             </div>
         </div>
@@ -251,6 +254,8 @@
                     <option value="default">افتراضي</option>
                     <option value="rocky">جبلي صخري</option>
                     <option value="sandy">رملي صحراوي</option>
+                    <option value="grassy_dense">عشبي كثيف (حشائش خضراء بالكامل)</option>
+                    <option value="sandy_grass_edge">رملي مع شريط حشائش ملاصق للطريق</option>
                     <option value="wadi">مجرى وادي</option>
                     <option value="urban">عمراني</option>
                 </select>
@@ -651,6 +656,9 @@
         roadNameIn.value = state.roadName || roadNameIn.value || "";
         if (state.fallMeters != null) updateFallMeters(state.fallMeters, false);
         items = JSON.parse(JSON.stringify(state.items));
+        items.forEach(function(it) {
+            if (isResizableFieldItem(it && it.type)) normalizeFieldItemSize(it);
+        });
         if (state.flexRoad) restoreFlexRoad(state.flexRoad);
         restoreRoadGeometry(state);
         ensureCompass();
@@ -1160,7 +1168,7 @@
         roadFlipY = !!raw.roadFlipY;
         const scale = Number(raw.roadWidthScale);
         if (Number.isFinite(scale)) roadWidthScale = Math.max(0.75, Math.min(1.35, scale));
-        if (["default","rocky","sandy","wadi","urban"].includes(raw.roadTerrainBg)) roadTerrainBg = raw.roadTerrainBg;
+        if (TERRAIN_BG_OPTIONS.includes(raw.roadTerrainBg)) roadTerrainBg = raw.roadTerrainBg;
         if (["single_2lane","dual_island","highway_3lane","jersey_guardrail"].includes(raw.flexRoadStyle)) flexRoadStyle = raw.flexRoadStyle;
     }
     function isSplineRoad(type) {
@@ -1172,11 +1180,14 @@
         if (type === "bridge_jersey_barrier") return "jersey_guardrail";
         return "single_2lane";
     }
+    const TERRAIN_BG_OPTIONS = ["default","rocky","sandy","grassy_dense","sandy_grass_edge","wadi","urban"];
     function fillTerrainBackground() {
         const colors = {
             default: "#cbd5e1",
             rocky: "#cbb892",
             sandy: "#e7d3a4",
+            grassy_dense: "#b7e4c7",
+            sandy_grass_edge: "#e7d3a4",
             wadi: "#b7c4a4",
             urban: "#94a3b8"
         };
@@ -1194,9 +1205,32 @@
             for (let h = -120; h < 1200; h += 18) {
                 ctx.beginPath(); ctx.moveTo(h, 0); ctx.lineTo(h - 180, 500); ctx.stroke();
             }
-        } else if (roadTerrainBg === "sandy") {
+        } else if (roadTerrainBg === "sandy" || roadTerrainBg === "sandy_grass_edge") {
             ctx.fillStyle = "rgba(180,140,70,0.12)";
             for (let i = 0; i < 40; i++) ctx.fillRect((i * 97) % 960, (i * 53) % 500, 18, 8);
+            if (roadTerrainBg === "sandy_grass_edge") {
+                // حزام حشائش ملاصق لجانبي الأسفلت (طباعة خفيفة)
+                drawAmbientGrassBelt(0, 118, 960, 34, 0.55);
+                drawAmbientGrassBelt(0, 338, 960, 34, 0.55);
+            }
+        } else if (roadTerrainBg === "grassy_dense") {
+            // أرضية عشبية خضراء كاملة بنقوش أعشاب خفيفة مريحة للطباعة
+            ctx.fillStyle = "rgba(22, 101, 52, 0.08)";
+            for (let i = 0; i < 70; i++) {
+                const gx = (i * 137) % 960;
+                const gy = (i * 79) % 500;
+                ctx.fillRect(gx, gy, 22, 10);
+            }
+            ctx.strokeStyle = "rgba(21, 128, 61, 0.28)";
+            ctx.lineWidth = 1.1;
+            for (let i = 0; i < 160; i++) {
+                const x = (i * 61 + 17) % 960;
+                const y = (i * 43 + 9) % 500;
+                ctx.beginPath();
+                ctx.moveTo(x, y + 6);
+                ctx.quadraticCurveTo(x + 2, y - 4, x + 5, y - 10);
+                ctx.stroke();
+            }
         } else if (roadTerrainBg === "wadi") {
             ctx.fillStyle = "rgba(147,197,253,0.18)";
             ctx.beginPath();
@@ -1212,6 +1246,26 @@
             for (let gy = 0; gy < 500; gy += 30) { ctx.beginPath(); ctx.moveTo(0,gy); ctx.lineTo(960,gy); ctx.stroke(); }
         }
     }
+    function drawAmbientGrassBelt(x, y, w, h, alpha) {
+        ctx.save();
+        ctx.globalAlpha = alpha == null ? 0.6 : alpha;
+        ctx.fillStyle = "#65a30d";
+        ctx.fillRect(x, y, w, h);
+        ctx.fillStyle = "#4d7c0f";
+        ctx.fillRect(x, y + h * 0.55, w, h * 0.45);
+        ctx.strokeStyle = "rgba(20, 83, 45, 0.45)";
+        ctx.lineWidth = 1.05;
+        const cols = Math.max(8, Math.floor(w / 14));
+        for (let i = 0; i < cols; i++) {
+            const px = x + 6 + i * (w / cols);
+            const py = y + h - 4;
+            ctx.beginPath();
+            ctx.moveTo(px, py);
+            ctx.quadraticCurveTo(px - 2, py - h * 0.45, px + 1, py - h * 0.85);
+            ctx.stroke();
+        }
+        ctx.restore();
+    }
     function updateRoadGlobalParams() {
         const angIn = document.getElementById("roadAngleIn");
         const scaleIn = document.getElementById("roadWidthScaleIn");
@@ -1226,7 +1280,7 @@
             const scaleVal = document.getElementById("roadWidthScaleVal");
             if (scaleVal) scaleVal.textContent = roadWidthScale.toFixed(2) + "×";
         }
-        if (terrainSel && ["default","rocky","sandy","wadi","urban"].includes(terrainSel.value)) roadTerrainBg = terrainSel.value;
+        if (terrainSel && TERRAIN_BG_OPTIONS.includes(terrainSel.value)) roadTerrainBg = terrainSel.value;
         renderAll(false);
         scheduleAutoCommit();
     }
@@ -1585,8 +1639,8 @@
             if (!it) continue;
             if (it.tailX !== undefined && Math.hypot(p.x - it.tailX, p.y - it.tailY) <= 14) return true;
             if (it.type === "cliff_fall" && Math.hypot(p.x - it.x, p.y - it.y) <= 18) return true;
-            if (it.type === "free_skid" && freeSkidHitsPoint(it, p)) return true;
-            if (it.type !== "cliff_fall" && it.type !== "free_skid" && Math.hypot(p.x - it.x, p.y - it.y) <= itemHitRadius(it)) return true;
+            if (isResizableFieldItem(it.type) && fieldItemHitsPoint(it, p)) return true;
+            if (it.type !== "cliff_fall" && !isResizableFieldItem(it.type) && Math.hypot(p.x - it.x, p.y - it.y) <= itemHitRadius(it)) return true;
         }
         return false;
     }
@@ -1980,69 +2034,174 @@
             y: Math.max(40, Math.min(420, baseY + (n % 5) * 12))
         };
     }
-    function drawGrassItem(it, isSelected, hideHandles) {
+    function clampFieldScale(v) {
+        const n = Number(v);
+        if (!Number.isFinite(n) || n <= 0) return 1;
+        return Math.max(0.4, Math.min(10, n));
+    }
+    function isResizableFieldItem(type) {
+        return type === "grass" || type === "blood" || type === "free_skid";
+    }
+    function normalizeFieldItemSize(it) {
+        if (!it || !isResizableFieldItem(it.type)) return it;
+        const legacy = Number(it.scale);
+        const sx0 = Number(it.scaleX);
+        const sy0 = Number(it.scaleY);
+        it.scaleX = clampFieldScale(Number.isFinite(sx0) && sx0 > 0 ? sx0 : (Number.isFinite(legacy) && legacy > 0 ? legacy : 1));
+        it.scaleY = clampFieldScale(Number.isFinite(sy0) && sy0 > 0 ? sy0 : (Number.isFinite(legacy) && legacy > 0 ? legacy : 1));
+        if (it.type === "grass") {
+            it.width = Math.max(40, Math.min(900, Number(it.width) || 64));
+            it.height = Math.max(28, Math.min(500, Number(it.height) || 44));
+        } else if (it.type === "blood") {
+            it.width = Math.max(36, Math.min(500, Number(it.width) || 52));
+            it.height = Math.max(28, Math.min(400, Number(it.height) || 42));
+        } else if (it.type === "free_skid") {
+            const len = Math.max(40, Math.min(900, Number(it.length) || Number(it.width) || 140));
+            it.length = len;
+            it.width = len;
+            it.height = Math.max(24, Math.min(120, Number(it.height) || 36));
+        }
+        it.scale = clampFieldScale((it.scaleX + it.scaleY) / 2);
+        return it;
+    }
+    function fieldItemHalfSize(it) {
+        normalizeFieldItemSize(it);
+        if (it.type === "free_skid") {
+            return {
+                hw: (Number(it.length) * it.scaleX) / 2,
+                hh: Math.max(12, (Number(it.height) * it.scaleY) / 2)
+            };
+        }
+        return {
+            hw: (Number(it.width) * it.scaleX) / 2,
+            hh: (Number(it.height) * it.scaleY) / 2
+        };
+    }
+    function fieldItemHitsPoint(it, p) {
+        if (!it || !isResizableFieldItem(it.type)) return false;
+        const ang = ((it.angle || 0) * Math.PI) / 180;
+        const dx = p.x - it.x;
+        const dy = p.y - it.y;
+        const localX = dx * Math.cos(ang) + dy * Math.sin(ang);
+        const localY = -dx * Math.sin(ang) + dy * Math.cos(ang);
+        const hs = fieldItemHalfSize(it);
+        return Math.abs(localX) <= hs.hw + 8 && Math.abs(localY) <= hs.hh + 8;
+    }
+    function drawFieldResizeHandles(hw, hh, withRotate) {
         ctx.save();
-        ctx.translate(it.x, it.y);
-        ctx.rotate(((it.angle || 0) * Math.PI) / 180);
-        const sc = Number(it.scale) || 1;
-        ctx.scale(sc, sc);
-        ctx.fillStyle = "rgba(0,0,0,0.22)";
-        ctx.beginPath(); ctx.ellipse(2, 14, 28, 8, 0, 0, Math.PI * 2); ctx.fill();
-        const tufts = [
-            [-18, 6], [-8, 8], [2, 5], [12, 8], [20, 4],
-            [-14, -2], [-2, -4], [10, -1], [0, 10]
+        ctx.setLineDash([4, 3]);
+        ctx.strokeStyle = "#38bdf8";
+        ctx.lineWidth = 2;
+        ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
+        ctx.setLineDash([]);
+        const handles = [
+            { x: hw, y: hh, fill: "#38bdf8" },       // corner scale
+            { x: hw, y: 0, fill: "#fbbf24" },        // horizontal
+            { x: 0, y: hh, fill: "#a3e635" }         // vertical
         ];
-        tufts.forEach(function(pt, idx) {
-            const px = pt[0], py = pt[1];
-            ctx.strokeStyle = idx % 2 ? "#166534" : "#14532d";
-            ctx.fillStyle = idx % 2 ? "#22c55e" : "#16a34a";
+        handles.forEach(function(h) {
+            ctx.fillStyle = h.fill;
+            ctx.strokeStyle = "#ffffff";
             ctx.lineWidth = 1.6;
             ctx.beginPath();
-            ctx.moveTo(px - 4, py + 8);
-            ctx.quadraticCurveTo(px - 8, py - 6, px - 1, py - 18);
-            ctx.quadraticCurveTo(px + 2, py - 4, px + 5, py + 8);
-            ctx.closePath();
+            ctx.rect(h.x - 5, h.y - 5, 10, 10);
             ctx.fill();
             ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(px, py + 8);
-            ctx.quadraticCurveTo(px + 1, py - 10, px + 6, py - 20);
-            ctx.strokeStyle = "#052e16";
-            ctx.lineWidth = 1.2;
-            ctx.stroke();
         });
-        ctx.strokeStyle = "#052e16";
-        ctx.lineWidth = 2.2;
-        ctx.beginPath(); ctx.ellipse(0, 8, 26, 10, 0, 0, Math.PI * 2); ctx.stroke();
-        if (isSelected && !hideHandles) {
-            ctx.setLineDash([4, 3]);
+        if (withRotate !== false) {
             ctx.strokeStyle = "#38bdf8";
             ctx.lineWidth = 2;
-            ctx.strokeRect(-30, -24, 60, 42);
-            ctx.setLineDash([]);
-            ctx.beginPath(); ctx.moveTo(30, 0); ctx.lineTo(44, 0); ctx.stroke();
-            ctx.fillStyle = "#38bdf8"; ctx.strokeStyle = "#ffffff";
-            ctx.beginPath(); ctx.arc(46, 0, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(hw + 6, 0);
+            ctx.lineTo(hw + 22, 0);
+            ctx.stroke();
+            ctx.fillStyle = "#38bdf8";
+            ctx.strokeStyle = "#ffffff";
+            ctx.beginPath();
+            ctx.arc(hw + 24, 0, 6.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
         }
         ctx.restore();
     }
-    function drawFreeSkidItem(it, isSelected, hideHandles) {
+    function drawSingleGrassTuft(px, py, idx) {
+        ctx.strokeStyle = idx % 2 ? "#166534" : "#14532d";
+        ctx.fillStyle = idx % 2 ? "#22c55e" : "#16a34a";
+        ctx.lineWidth = 1.5;
+        ctx.beginPath();
+        ctx.moveTo(px - 4, py + 8);
+        ctx.quadraticCurveTo(px - 8, py - 6, px - 1, py - 16);
+        ctx.quadraticCurveTo(px + 2, py - 4, px + 5, py + 8);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(px, py + 8);
+        ctx.quadraticCurveTo(px + 1, py - 8, px + 5, py - 17);
+        ctx.strokeStyle = "#052e16";
+        ctx.lineWidth = 1.1;
+        ctx.stroke();
+    }
+    function drawGrassItem(it, isSelected, hideHandles) {
+        normalizeFieldItemSize(it);
+        const ew = Number(it.width) * Number(it.scaleX);
+        const eh = Number(it.height) * Number(it.scaleY);
+        const hw = ew / 2;
+        const hh = eh / 2;
         ctx.save();
         ctx.translate(it.x, it.y);
-        const ang = ((it.angle || 0) * Math.PI) / 180;
-        ctx.rotate(ang);
-        const len = Math.max(40, Math.min(360, Number(it.length) || 140));
+        ctx.rotate(((it.angle || 0) * Math.PI) / 180);
+        // ظل خفيف للمساحة دون مطّ الشفرات
+        ctx.fillStyle = "rgba(0,0,0,0.16)";
+        ctx.beginPath();
+        ctx.ellipse(2, hh * 0.55, hw * 0.92, Math.max(6, hh * 0.28), 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = "rgba(34, 197, 94, 0.18)";
+        ctx.strokeStyle = "#14532d";
+        ctx.lineWidth = 1.8;
+        ctx.beginPath();
+        ctx.roundRect(-hw, -hh, ew, eh, 8);
+        ctx.fill();
+        ctx.stroke();
+        // تبليط شفرات الحشائش داخل المساحة بدل التشويه
+        const stepX = 18;
+        const stepY = 16;
+        let idx = 0;
+        for (let y = -hh + 12; y <= hh - 6; y += stepY) {
+            for (let x = -hw + 10; x <= hw - 8; x += stepX) {
+                const jitterX = ((idx * 17) % 7) - 3;
+                const jitterY = ((idx * 13) % 5) - 2;
+                drawSingleGrassTuft(x + jitterX, y + jitterY, idx);
+                idx += 1;
+            }
+        }
+        if (idx < 4) {
+            drawSingleGrassTuft(-8, 2, 0);
+            drawSingleGrassTuft(8, -2, 1);
+            drawSingleGrassTuft(0, 6, 2);
+        }
+        if (isSelected && !hideHandles) drawFieldResizeHandles(hw, hh, true);
+        ctx.restore();
+    }
+    function drawFreeSkidItem(it, isSelected, hideHandles) {
+        normalizeFieldItemSize(it);
+        const len = Number(it.length) * Number(it.scaleX);
+        const trackH = Number(it.height) * Number(it.scaleY);
         const half = len / 2;
-        const gap = 8;
+        const gap = Math.max(5, Math.min(28, trackH * 0.28));
+        const lineW = Math.max(2.2, Math.min(8, trackH * 0.18));
+        ctx.save();
+        ctx.translate(it.x, it.y);
+        ctx.rotate(((it.angle || 0) * Math.PI) / 180);
         ctx.strokeStyle = "rgba(15, 23, 42, 0.55)";
-        ctx.lineWidth = 7;
+        ctx.lineWidth = lineW + 2.5;
         ctx.lineCap = "round";
         ctx.beginPath();
         ctx.moveTo(-half, -gap); ctx.lineTo(half, -gap);
         ctx.moveTo(-half, gap); ctx.lineTo(half, gap);
         ctx.stroke();
         ctx.strokeStyle = "#0f172a";
-        ctx.lineWidth = 3.6;
+        ctx.lineWidth = lineW;
         ctx.setLineDash([7, 5]);
         ctx.beginPath();
         ctx.moveTo(-half, -gap); ctx.lineTo(half, -gap);
@@ -2050,71 +2209,74 @@
         ctx.stroke();
         ctx.setLineDash([]);
         ctx.strokeStyle = "#020617";
-        ctx.lineWidth = 1.8;
+        ctx.lineWidth = Math.max(1.4, lineW * 0.55);
         ctx.beginPath();
         ctx.moveTo(-half, -gap); ctx.lineTo(half, -gap);
         ctx.moveTo(-half, gap); ctx.lineTo(half, gap);
         ctx.stroke();
         if (isSelected && !hideHandles) {
-            ctx.strokeStyle = "#38bdf8";
-            ctx.lineWidth = 2;
-            ctx.setLineDash([4, 3]);
-            ctx.strokeRect(-half - 8, -18, len + 16, 36);
-            ctx.setLineDash([]);
-            ctx.beginPath(); ctx.moveTo(half + 6, 0); ctx.lineTo(half + 22, 0); ctx.stroke();
-            ctx.fillStyle = "#38bdf8"; ctx.strokeStyle = "#ffffff";
-            ctx.beginPath(); ctx.arc(half + 24, 0, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            drawFieldResizeHandles(half, Math.max(14, trackH / 2), true);
             ctx.fillStyle = "#fbbf24";
             ctx.strokeStyle = "#0f172a";
-            ctx.beginPath(); ctx.arc(half, 0, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(half, 0, 5.5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
         }
         ctx.restore();
     }
     function drawBloodItem(it, isSelected, hideHandles) {
+        normalizeFieldItemSize(it);
+        const ew = Number(it.width) * Number(it.scaleX);
+        const eh = Number(it.height) * Number(it.scaleY);
+        const hw = ew / 2;
+        const hh = eh / 2;
         ctx.save();
         ctx.translate(it.x, it.y);
         ctx.rotate(((it.angle || 0) * Math.PI) / 180);
-        const sc = Number(it.scale) || 1;
-        ctx.scale(sc, sc);
-        ctx.fillStyle = "rgba(0,0,0,0.28)";
-        ctx.beginPath(); ctx.ellipse(2, 6, 22, 12, 0.2, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#7f1d1d";
-        ctx.strokeStyle = "#450a0a";
-        ctx.lineWidth = 2.4;
-        ctx.beginPath();
-        ctx.moveTo(-16, 2);
-        ctx.bezierCurveTo(-22, -10, -6, -18, 2, -14);
-        ctx.bezierCurveTo(12, -20, 24, -8, 18, 2);
-        ctx.bezierCurveTo(26, 10, 10, 18, 0, 14);
-        ctx.bezierCurveTo(-12, 20, -22, 10, -16, 2);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
-        ctx.fillStyle = "#991b1b";
-        ctx.beginPath(); ctx.ellipse(-4, -2, 7, 5, -0.3, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(8, 4, 5, 3.5, 0.4, 0, Math.PI * 2); ctx.fill();
-        ctx.fillStyle = "#b91c1c";
-        ctx.beginPath(); ctx.ellipse(3, -6, 3.2, 2.4, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.beginPath(); ctx.ellipse(-10, 6, 2.6, 2, 0, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = "#1c1917";
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(-16, 2);
-        ctx.bezierCurveTo(-22, -10, -6, -18, 2, -14);
-        ctx.bezierCurveTo(12, -20, 24, -8, 18, 2);
-        ctx.bezierCurveTo(26, 10, 10, 18, 0, 14);
-        ctx.bezierCurveTo(-12, 20, -22, 10, -16, 2);
-        ctx.stroke();
-        if (isSelected && !hideHandles) {
-            ctx.setLineDash([4, 3]);
-            ctx.strokeStyle = "#38bdf8";
-            ctx.lineWidth = 2;
-            ctx.strokeRect(-26, -22, 52, 42);
-            ctx.setLineDash([]);
-            ctx.beginPath(); ctx.moveTo(26, 0); ctx.lineTo(40, 0); ctx.stroke();
-            ctx.fillStyle = "#38bdf8"; ctx.strokeStyle = "#ffffff";
-            ctx.beginPath(); ctx.arc(42, 0, 6.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+        // كرر بقع دماء صغيرة داخل المساحة بدل مطّ بقعة واحدة
+        const stepX = Math.max(18, Math.min(34, ew / 3.2));
+        const stepY = Math.max(16, Math.min(30, eh / 2.8));
+        let idx = 0;
+        for (let y = -hh + stepY * 0.55; y <= hh - stepY * 0.35; y += stepY) {
+            for (let x = -hw + stepX * 0.55; x <= hw - stepX * 0.35; x += stepX) {
+                const jx = ((idx * 11) % 5) - 2;
+                const jy = ((idx * 7) % 5) - 2;
+                const rx = 10 + (idx % 3) * 2;
+                const ry = 7 + (idx % 2) * 2;
+                ctx.fillStyle = "rgba(0,0,0,0.22)";
+                ctx.beginPath();
+                ctx.ellipse(x + jx + 1, y + jy + 2, rx, ry * 0.7, 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.fillStyle = idx % 2 ? "#7f1d1d" : "#991b1b";
+                ctx.strokeStyle = "#450a0a";
+                ctx.lineWidth = 1.8;
+                ctx.beginPath();
+                ctx.ellipse(x + jx, y + jy, rx, ry, (idx % 4) * 0.2, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.stroke();
+                ctx.fillStyle = "#b91c1c";
+                ctx.beginPath();
+                ctx.ellipse(x + jx - 3, y + jy - 2, 3.2, 2.2, 0, 0, Math.PI * 2);
+                ctx.fill();
+                idx += 1;
+            }
         }
+        if (idx === 0) {
+            ctx.fillStyle = "#7f1d1d";
+            ctx.strokeStyle = "#450a0a";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, Math.min(hw, 18), Math.min(hh, 12), 0.15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.stroke();
+        }
+        ctx.strokeStyle = "#1c1917";
+        ctx.lineWidth = 1.6;
+        ctx.beginPath();
+        ctx.roundRect(-hw, -hh, ew, eh, 10);
+        ctx.stroke();
+        if (isSelected && !hideHandles) drawFieldResizeHandles(hw, hh, true);
         ctx.restore();
     }
     function drawEvidenceMarkerItem(it, isSelected, hideHandles) {
@@ -2557,21 +2719,16 @@
         else if (it.type === "overturned_car") r = 40;
         else if (it.type === "mountain") r = 48;
         else if (it.type === "slope_arrow") r = 28;
-        else if (it.type === "free_skid") r = Math.max(36, Math.min(120, (Number(it.length) || 140) * 0.42));
+        else if (isResizableFieldItem(it.type)) {
+            const hs = fieldItemHalfSize(it);
+            r = Math.max(28, Math.min(160, Math.hypot(hs.hw, hs.hh) * 0.75));
+        }
         else if (it.type === "marker") r = 20;
-        else if (it.type === "grass" || it.type === "blood") r = 34;
         else if (isVectorShape(it.type)) r = 36;
         return Math.max(24, r);
     }
     function freeSkidHitsPoint(it, p) {
-        if (!it || it.type !== "free_skid") return false;
-        const len = Math.max(40, Number(it.length) || 140);
-        const ang = ((it.angle || 0) * Math.PI) / 180;
-        const dx = p.x - it.x;
-        const dy = p.y - it.y;
-        const localX = dx * Math.cos(ang) + dy * Math.sin(ang);
-        const localY = -dx * Math.sin(ang) + dy * Math.cos(ang);
-        return Math.abs(localX) <= len / 2 + 10 && Math.abs(localY) <= 18;
+        return fieldItemHitsPoint(it, p);
     }
     const TOUCH_HIT = 24;
     function setDraggingTouch(on) {
@@ -2674,14 +2831,24 @@
                 break;
             }
         }
-        if (!hit && selectedIdx >= 0 && items[selectedIdx] && items[selectedIdx].type === "free_skid") {
+        if (!hit && selectedIdx >= 0 && items[selectedIdx] && isResizableFieldItem(items[selectedIdx].type)) {
             const sel = items[selectedIdx];
-            const rad = (sel.angle || 0) * Math.PI / 180;
-            const half = Math.max(40, Number(sel.length) || 140) / 2;
-            const lx = sel.x + Math.cos(rad) * half;
-            const ly = sel.y + Math.sin(rad) * half;
-            if (Math.hypot(p.x - lx, p.y - ly) <= TOUCH_HIT) {
-                dragMode = "skid_length";
+            normalizeFieldItemSize(sel);
+            const rad = ((sel.angle || 0) * Math.PI) / 180;
+            const hs = fieldItemHalfSize(sel);
+            const localX = (p.x - sel.x) * Math.cos(rad) + (p.y - sel.y) * Math.sin(rad);
+            const localY = -(p.x - sel.x) * Math.sin(rad) + (p.y - sel.y) * Math.cos(rad);
+            if (Math.hypot(localX - hs.hw, localY - hs.hh) <= TOUCH_HIT) {
+                dragMode = "resize_corner";
+                hit = true;
+            } else if (Math.hypot(localX - hs.hw, localY) <= TOUCH_HIT) {
+                dragMode = "resize_x";
+                hit = true;
+            } else if (Math.hypot(localX, localY - hs.hh) <= TOUCH_HIT) {
+                dragMode = "resize_y";
+                hit = true;
+            } else if (Math.hypot(localX - (hs.hw + 24), localY) <= TOUCH_HIT) {
+                dragMode = "rotate";
                 hit = true;
             }
         }
@@ -2694,6 +2861,10 @@
                 const handleReach = sel.type === "compass" ? 46 : 44;
                 hx = sel.x + Math.sin(rad) * handleReach;
                 hy = sel.y - Math.cos(rad) * handleReach;
+            } else if (isResizableFieldItem(sel.type)) {
+                const hs = fieldItemHalfSize(sel);
+                hx = sel.x + Math.cos(rad) * (hs.hw + 24);
+                hy = sel.y + Math.sin(rad) * (hs.hw + 24);
             } else if (isVectorShape(sel.type)) {
                 hx = sel.x + Math.cos(rad) * 44;
                 hy = sel.y + Math.sin(rad) * 44;
@@ -2706,10 +2877,6 @@
             } else if (sel.type === "slope_arrow") {
                 hx = sel.x + Math.cos(rad) * 30;
                 hy = sel.y + Math.sin(rad) * 30;
-            } else if (sel.type === "free_skid") {
-                const half = Math.max(40, Number(sel.length) || 140) / 2;
-                hx = sel.x + Math.cos(rad) * (half + 24);
-                hy = sel.y + Math.sin(rad) * (half + 24);
             } else {
                 const w = sel.type === "truck" ? 104 : (sel.type === "bike" ? 44 : 68);
                 hx = sel.x + Math.cos(rad) * (w/2 + 26);
@@ -2736,8 +2903,8 @@
                 const it = items[i];
                 const hitR = itemHitRadius(it);
                 if (it.type === "cliff_fall") continue;
-                const onItem = it.type === "free_skid"
-                    ? freeSkidHitsPoint(it, p)
+                const onItem = isResizableFieldItem(it.type)
+                    ? fieldItemHitsPoint(it, p)
                     : Math.hypot(p.x - it.x, p.y - it.y) <= hitR;
                 if (onItem) {
                     selectedIdx = i;
@@ -2774,10 +2941,32 @@
                 it.x = Math.max(15, Math.min(945, p.x));
                 it.y = Math.max(15, Math.min(440, p.y));
             }
-        } else if (dragMode === "skid_length" && it.type === "free_skid") {
-            const dist = Math.hypot(p.x - it.x, p.y - it.y);
-            it.length = Math.max(40, Math.min(360, Math.round(dist * 2)));
-            it.angle = Math.round(Math.atan2(p.y - it.y, p.x - it.x) * 180 / Math.PI);
+        } else if (dragMode === "resize_corner" || dragMode === "resize_x" || dragMode === "resize_y") {
+            if (isResizableFieldItem(it.type)) {
+                normalizeFieldItemSize(it);
+                const rad = ((it.angle || 0) * Math.PI) / 180;
+                const localX = Math.abs((p.x - it.x) * Math.cos(rad) + (p.y - it.y) * Math.sin(rad));
+                const localY = Math.abs(-(p.x - it.x) * Math.sin(rad) + (p.y - it.y) * Math.cos(rad));
+                if (dragMode === "resize_corner") {
+                    const baseW = Math.max(1, Number(it.width) || 1);
+                    const baseH = Math.max(1, Number(it.height) || 1);
+                    const sx = clampFieldScale((localX * 2) / baseW);
+                    const sy = clampFieldScale((localY * 2) / baseH);
+                    const uni = clampFieldScale((sx + sy) / 2);
+                    it.scaleX = uni;
+                    it.scaleY = uni;
+                    if (it.type === "free_skid") it.length = Number(it.width);
+                } else if (dragMode === "resize_x") {
+                    // تمديد أفقي حر عبر width (مع الإبقاء على scaleX)
+                    const nextW = Math.max(40, Math.min(900, (localX * 2) / Math.max(0.4, Number(it.scaleX) || 1)));
+                    it.width = nextW;
+                    if (it.type === "free_skid") it.length = nextW;
+                } else if (dragMode === "resize_y") {
+                    const nextH = Math.max(24, Math.min(500, (localY * 2) / Math.max(0.4, Number(it.scaleY) || 1)));
+                    it.height = nextH;
+                }
+                normalizeFieldItemSize(it);
+            }
         } else if (dragMode === "rotate") {
             const pointer = Math.atan2(p.y - it.y, p.x - it.x) * 180 / Math.PI;
             const upright = it.type === "compass" || it.type === "traffic_light";
@@ -2805,18 +2994,26 @@
         const p = getCanvasPos(e);
         for (let i = items.length - 1; i >= 0; i--) {
             const it = items[i];
-            const reach = it.type === "compass" ? 52
-                : (it.type === "traffic_light" ? 48
-                : (it.type === "free_skid" ? Math.max(48, (Number(it.length) || 140) * 0.45) : 42));
-            const near = it.type === "free_skid" ? freeSkidHitsPoint(it, p) : Math.hypot(p.x - it.x, p.y - it.y) <= reach;
-            if (canRotateItem(it.type) && near) {
-                e.preventDefault();
-                selectedIdx = i;
+            const near = isResizableFieldItem(it.type)
+                ? fieldItemHitsPoint(it, p)
+                : Math.hypot(p.x - it.x, p.y - it.y) <= (it.type === "compass" ? 52 : (it.type === "traffic_light" ? 48 : 42));
+            if (!near) continue;
+            e.preventDefault();
+            selectedIdx = i;
+            if (e.shiftKey && isResizableFieldItem(it.type)) {
+                const factor = e.deltaY > 0 ? 0.9 : 1.12;
+                normalizeFieldItemSize(it);
+                it.scaleX = clampFieldScale(it.scaleX * factor);
+                it.scaleY = clampFieldScale(it.scaleY * factor);
+                normalizeFieldItemSize(it);
+            } else if (canRotateItem(it.type)) {
                 it.angle = ((it.angle || 0) + (e.deltaY > 0 ? 8 : -8)) % 360;
-                renderAll(false);
-                scheduleAutoCommit();
-                return;
+            } else {
+                continue;
             }
+            renderAll(false);
+            scheduleAutoCommit();
+            return;
         }
     }, { passive: false });
     window.rotateSelected = function(delta) {
@@ -2825,6 +3022,54 @@
             renderAll(false);
             scheduleAutoCommit();
         }
+    };
+    window.scaleSelectedItem = function(factor) {
+        if (selectedIdx < 0) return;
+        const it = items[selectedIdx];
+        if (!isResizableFieldItem(it.type)) {
+            const st = document.getElementById("saveStatus");
+            if (st) {
+                st.textContent = "حدّد حشائش أو أثر دماء أو أثر فرامل مستقل أولاً للتكبير/التصغير";
+                st.style.color = "#fbbf24";
+            }
+            return;
+        }
+        normalizeFieldItemSize(it);
+        const f = Number(factor) || 1;
+        it.scaleX = clampFieldScale(it.scaleX * f);
+        it.scaleY = clampFieldScale(it.scaleY * f);
+        normalizeFieldItemSize(it);
+        renderAll(false);
+        scheduleAutoCommit();
+    };
+    window.stretchGrassAsSideStrip = function() {
+        if (selectedIdx < 0 || !items[selectedIdx] || items[selectedIdx].type !== "grass") {
+            // إن لم يُحدد حشائش، أضف شريطاً جاهزاً
+            const sp = nextSpawnPoint(480, 320);
+            items.push({
+                type: "grass",
+                x: sp.x,
+                y: Math.min(400, sp.y + 40),
+                angle: roadGlobalAngle || 0,
+                width: 520,
+                height: 46,
+                scaleX: 1,
+                scaleY: 1,
+                scale: 1
+            });
+            selectedIdx = items.length - 1;
+        } else {
+            const it = items[selectedIdx];
+            normalizeFieldItemSize(it);
+            it.width = 520;
+            it.height = 46;
+            it.scaleX = 1;
+            it.scaleY = 1;
+            it.angle = (typeof roadGlobalAngle === "number") ? roadGlobalAngle : (it.angle || 0);
+            normalizeFieldItemSize(it);
+        }
+        renderAll(false);
+        scheduleAutoCommit();
     };
     window.resetCompass = function() {
         let compass = items.find(it => it.type === "compass");
@@ -2873,15 +3118,15 @@
         else if (kind === "slope_arrow") items.push({type:"slope_arrow", x:460, y:280, angle:120});
         else if (kind === "grass") {
             const sp = nextSpawnPoint(500, 260);
-            items.push({type:"grass", x:sp.x, y:sp.y, angle:0, scale:1});
+            items.push({type:"grass", x:sp.x, y:sp.y, angle:0, width:64, height:44, scaleX:1, scaleY:1, scale:1});
         }
         else if (kind === "blood") {
             const sp = nextSpawnPoint(520, 240);
-            items.push({type:"blood", x:sp.x, y:sp.y, angle:0, scale:1});
+            items.push({type:"blood", x:sp.x, y:sp.y, angle:0, width:52, height:42, scaleX:1, scaleY:1, scale:1});
         }
         else if (kind === "free_skid") {
             const sp = nextSpawnPoint(480, 280);
-            items.push({type:"free_skid", x:sp.x, y:sp.y, angle:0, length:140});
+            items.push({type:"free_skid", x:sp.x, y:sp.y, angle:0, length:140, width:140, height:36, scaleX:1, scaleY:1, scale:1});
         }
         else if (kind === "skid" && selectedIdx >= 0) items[selectedIdx].skid = !items[selectedIdx].skid;
         if (["sedan3", "truck", "bike", "overturned_car"].includes(kind)) syncCloneCarDropdown();
