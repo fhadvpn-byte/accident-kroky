@@ -41,6 +41,7 @@ _BAYYINAH_AUTH_SECRET = (
     or "bayyinah-stable-local-auth-secret-v1-not-a-pin"
 )
 _APP_DIR = Path(__file__).resolve().parent
+KSA_TZ = timezone(timedelta(hours=3))
 _AUTH_SESSION_KEYS = frozenset({
     "active_dept_id",
     "browser_cid",
@@ -102,8 +103,8 @@ ARABIC_FONT_CANDIDATES = [
     "/usr/share/fonts/truetype/noto/NotoKufiArabic-Regular.ttf",
 ]
 GROQ_VISION_MODELS = (
-    "llama-3.2-90b-vision-preview",
-    "llama-3.2-11b-vision-preview",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
 )
 
 def gregorian_to_hijri_str(gregorian_date):
@@ -127,7 +128,7 @@ def gregorian_to_hijri_str(gregorian_date):
     return f"{int(hijri_year):04d}/{int(hijri_month):02d}/{int(hijri_day):02d}"
 
 def get_today_hijri():
-    return gregorian_to_hijri_str(date.today())
+    return gregorian_to_hijri_str(datetime.now(KSA_TZ).date())
 
 HIJRI_MONTHS = {
     1: "محرم",
@@ -149,7 +150,8 @@ HIJRI_YEAR_MAX = 1455
 def get_today_hijri_parts() -> tuple[int, int, int]:
     try:
         from hijridate import Gregorian
-        today_hijri = Gregorian.today().to_hijri()
+        today = datetime.now(KSA_TZ).date()
+        today_hijri = Gregorian(today.year, today.month, today.day).to_hijri()
         return int(today_hijri.year), int(today_hijri.month), int(today_hijri.day)
     except Exception:
         year, month, day = get_today_hijri().split("/")
@@ -448,7 +450,6 @@ def render_luxury_hijri_picker(state_key: str = "hijri_date", label: str = "تا
         )
     return str(st.session_state.get(state_key, ""))
 
-KSA_TZ = timezone(timedelta(hours=3))
 def get_dept_staff_path(dept_id: str | None = None) -> Path:
     dept = str(dept_id or st.session_state.get("active_dept_id") or "ardah").strip() or "ardah"
     if dept == "ardah":
@@ -1965,6 +1966,18 @@ def _apply_fleeing_unknown_fill(party_index: int = 1) -> None:
     # أعد تركيب محرري الجداول
     st.session_state.pop("p1_parties_editor", None)
     st.session_state.pop("p1_vehicles_editor", None)
+    try:
+        refresh_party_role_titles(parties=parties, vehicles=vehicles, force=True)
+    except Exception:
+        pass
+    try:
+        _mirror_page1_fields()
+    except Exception:
+        pass
+    try:
+        sync_page1_to_vault(extra_keys=list(PAGE1_EXTRA_SYNC_KEYS), write_disk=True)
+    except Exception:
+        pass
 
 
 def _filter_actions_options_for_case(option_keys):
@@ -3794,28 +3807,40 @@ def render_direct_print_button(
     
 </style>
     <script>
-        window.addEventListener("load", function() {
-            var imgs = Array.prototype.slice.call(document.images || []).filter(function(im) {
+        function bayyinahReadyThenPrint() {{
+            var runBalance = (typeof autoBalanceReportPages === "function")
+                ? function () {{ try {{ autoBalanceReportPages(); }} catch (eBal) {{}} }}
+                : function () {{}};
+            var fontsReady = (document.fonts && document.fonts.ready)
+                ? document.fonts.ready.catch(function () {{}})
+                : Promise.resolve();
+            var imgs = Array.prototype.slice.call(document.images || []).filter(function(im) {{
                 return im.getAttribute("src") && im.getAttribute("src").trim() !== "";
-            });
-            var waitAll = Promise.all(imgs.map(function(im) {
+            }});
+            var waitImgs = Promise.all(imgs.map(function(im) {{
                 if (im.complete) return Promise.resolve();
-                return new Promise(function(res) { im.onload = res; im.onerror = res; });
-            }));
-            Promise.race([waitAll, new Promise(function(r) { setTimeout(r, 650); })]).then(function() {
-                setTimeout(function() {
+                return new Promise(function(res) {{ im.onload = res; im.onerror = res; }});
+            }}));
+            Promise.race([
+                Promise.all([fontsReady, waitImgs]),
+                new Promise(function(r) {{ setTimeout(r, 1200); }})
+            ]).then(function() {{
+                runBalance();
+                setTimeout(function() {{
+                    runBalance();
                     window.focus();
                     window.print();
-                }, 180);
-            });
-        });
+                }}, 220);
+            }});
+        }}
+        window.addEventListener("load", bayyinahReadyThenPrint);
     </script>
     """
     top_bar_ui = """
     <div class="bayyinah-print-bar no-print">
         <span>🛡️ معاينة الطباعة الرسمية لمنظومة بَيِّنَة (مقاس A4 معتمد)</span>
         <div>
-            <button onclick="window.print()">🖨️ طباعة / حفظ كـ PDF</button>
+            <button onclick="(function(){if(typeof autoBalanceReportPages==='function'){try{autoBalanceReportPages();}catch(e){}}var fr=(document.fonts&&document.fonts.ready)?document.fonts.ready.catch(function(){}):Promise.resolve();fr.then(function(){if(typeof autoBalanceReportPages==='function'){try{autoBalanceReportPages();}catch(e2){}}window.print();});})()">🖨️ طباعة / حفظ كـ PDF</button>
             <button onclick="window.close()" style="background:#ef4444;color:#fff;">✖ إغلاق</button>
         </div>
     </div>
@@ -4173,8 +4198,8 @@ VIDEO_CLIP_MIN = 1
 VIDEO_CLIP_MAX = 10
 VIDEO_HAS_OPTIONS = ["لا فيديو", "يوجد توثيق"]
 VISION_MODEL_NAMES = (
-    "meta-llama/llama-4-scout",
-    "llama-4-maverick",
+    "meta-llama/llama-4-scout-17b-16e-instruct",
+    "meta-llama/llama-4-maverick-17b-128e-instruct",
 )
 TEXT_MODEL_NAMES = (
     "llama-3.3-70b-versatile",
@@ -4855,38 +4880,27 @@ def _reset_new_accident():
         pass
 
 def _absorb_groq_env():
+    """فحص خفيف لملف .env داخل مجلد التطبيق فقط — بلا مسح جذور السيرفر."""
     if os.getenv("GROQ_API_KEY"):
         return
-    roots = [Path("/agent"), Path("/agent").resolve().parent, Path("/home/ubuntu"), Path("/opt"), Path("/root")]
-    skip = {".git", "node_modules", ".cache", "pkg", "go", ".nvm", "__pycache__", ".local"}
-    seen = set()
-    for root in roots:
-        if not root.exists():
+    env_path = _APP_DIR / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        text = env_path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
             continue
-        for dirpath, dirnames, filenames in os.walk(root):
-            dirnames[:] = [d for d in dirnames if d not in skip and not d.startswith(".")]
-            for name in filenames:
-                if name != ".env" and not name.startswith(".env."):
-                    continue
-                path = Path(dirpath) / name
-                if path in seen:
-                    continue
-                seen.add(path)
-                try:
-                    text = path.read_text(encoding="utf-8", errors="ignore")
-                except OSError:
-                    continue
-                for line in text.splitlines():
-                    line = line.strip()
-                    if not line or line.startswith("#") or "=" not in line:
-                        continue
-                    key, value = line.split("=", 1)
-                    if key.strip() != "GROQ_API_KEY":
-                        continue
-                    value = value.strip().strip('"').strip("'")
-                    if value:
-                        os.environ["GROQ_API_KEY"] = value
-                        return
+        key, value = line.split("=", 1)
+        if key.strip() != "GROQ_API_KEY":
+            continue
+        value = value.strip().strip('"').strip("'")
+        if value:
+            os.environ["GROQ_API_KEY"] = value
+            return
 
 def _arabic_font(size):
     for path in ARABIC_FONT_CANDIDATES:
@@ -5059,12 +5073,17 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
                     break
 
         if isinstance(matched_row, dict):
-            role_v = str(matched_row.get("نوع المشاركة") or matched_row.get("الصفة") or "").strip()
+            role_v = str(
+                matched_row.get("المشاركة")
+                or matched_row.get("نوع المشاركة")
+                or matched_row.get("الصفة")
+                or ""
+            ).strip()
             qual_v = " ".join(
                 str(matched_row.get(k) or "").strip()
-                for k in ("دليل القيادة", "الأهلية", "حالة الرخصة", "رخصة القيادة")
+                for k in ("التأهيل", "دليل القيادة", "الأهلية", "حالة الرخصة", "رخصة القيادة")
             ).strip()
-            if "راكب" in role_v or "لا يُطلب" in qual_v or "لا يطلب" in qual_v:
+            if any(x in role_v for x in ("راكب", "مشاة", "عابر")) or "لا يُطلب" in qual_v or "لا يطلب" in qual_v:
                 return False
             if "غير مؤهل" in qual_v:
                 return True
@@ -5076,7 +5095,14 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
             if isinstance(v_s, dict) and "edited_rows" in v_s and isinstance(v_s["edited_rows"], dict):
                 ed = v_s["edited_rows"].get(int(idx) - 1) or v_s["edited_rows"].get(str(int(idx) - 1))
                 if isinstance(ed, dict):
-                    q_ed = str(ed.get("دليل القيادة") or ed.get("الأهلية") or "").strip()
+                    role_ed = str(
+                        ed.get("المشاركة") or ed.get("نوع المشاركة") or ed.get("الصفة") or ""
+                    ).strip()
+                    if any(x in role_ed for x in ("راكب", "مشاة", "عابر")):
+                        return False
+                    q_ed = str(
+                        ed.get("التأهيل") or ed.get("دليل القيادة") or ed.get("الأهلية") or ""
+                    ).strip()
                     if "غير مؤهل" in q_ed:
                         return True
                     if "مؤهل" in q_ed:
@@ -5168,7 +5194,8 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         cs = cs or list(sel_c)
         out, seen = [], set()
         for c in cs:
-            if c == "32" and not unlic:
+            # لا تحذف المادة 32 إذا اختارها المستخدم صراحة في selected_articles
+            if c == "32" and not unlic and "32" not in sel_c:
                 continue
             tx = _txt(c)
             if c not in seen and tx:
@@ -5239,6 +5266,23 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         )
 
     u1, u2 = _unlic(1, p1_title), _unlic(2, p2_title)
+    # عدد الأطراف الفعليين في جدول الأطراف (اسم أو هوية غير فارغين)
+    _actual_party_rows = []
+    _p_src = st.session_state.get("parties")
+    if isinstance(_p_src, list):
+        _actual_party_rows = [r for r in _p_src if isinstance(r, dict)]
+    elif hasattr(_p_src, "to_dict"):
+        try:
+            _actual_party_rows = [r for r in _p_src.to_dict("records") if isinstance(r, dict)]
+        except Exception:
+            _actual_party_rows = []
+    _actual_party_count = 0
+    for _pr in _actual_party_rows:
+        _nm = str(_pr.get("الاسم") or "").strip()
+        _idv = str(_pr.get("الهوية") or "").strip()
+        if _nm or _idv:
+            _actual_party_count += 1
+    _solo_single_party = (_actual_party_count <= 1) and (p2_ratio == 0)
     # تمهيد ثابت بالمادة (60) فقط — لا تُدرج مواد الإدانة في الديباجة
     preamble = (
         "<div class='liability-heading liability-preamble'>"
@@ -5258,7 +5302,8 @@ def build_liability_section_html(p1_title, p1_ratio, p1_reasons, p2_title, p2_ra
         blocks.append(
             _conv(party_ords[1], safe_p2_title, p2_ratio, _collect(p2_reasons, u2, p2_ratio == 100))
         )
-    else:
+    elif not _solo_single_party:
+        # لا تُضف كتلة إعفاء الطرف الثاني في الحوادث المفردة (طرف واحد فقط)
         blocks.append(_inn(party_ords[1], safe_p2_title, u2))
 
     inner_content = "".join(blocks)
@@ -6056,7 +6101,11 @@ def _render_department_login_gate() -> None:
             )
             submitted = st.form_submit_button("دخول", use_container_width=True)
         if submitted:
-            entered = str(pin_value or "").strip()
+            _pin_digits_map = str.maketrans(
+                "٠١٢٣٤٥٦٧٨٩۰۱۲۳۴۵۶۷۸۹",
+                "01234567890123456789",
+            )
+            entered = str(pin_value or "").strip().translate(_pin_digits_map)
             matched = None
             for dept_id, cfg in DEPARTMENTS_CONFIG.items():
                 expected_pin = str(cfg.get("pin") or "")
@@ -6392,29 +6441,14 @@ def render_device_bootstrap():
     } catch (errStyle) {}
   }
 
-  function watchDocument(doc) {
-    try {
-      if (!doc) return;
-      hideStreamlitCloudBadges(doc);
-      if (!doc.documentElement || doc.documentElement.dataset.bayyinahHideCloudBadges === "1") return;
-      doc.documentElement.dataset.bayyinahHideCloudBadges = "1";
-      try {
-        var obs = new MutationObserver(function () {
-          hideStreamlitCloudBadges(doc);
-        });
-        obs.observe(doc.documentElement, { childList: true, subtree: true });
-      } catch (errObs) {}
-    } catch (errWatch) {}
-  }
-
   try {
     var parentWin = null;
     var topWin = null;
     try { parentWin = window.parent; } catch (eP) { parentWin = null; }
     try { topWin = window.top; } catch (eT) { topWin = null; }
-    if (parentWin && parentWin.document) watchDocument(parentWin.document);
+    if (parentWin && parentWin.document) hideStreamlitCloudBadges(parentWin.document);
     if (topWin && topWin.document && (!parentWin || topWin.document !== parentWin.document)) {
-      watchDocument(topWin.document);
+      hideStreamlitCloudBadges(topWin.document);
     }
   } catch (errDocs) {}
 
@@ -8715,10 +8749,26 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[2]:
                 st.rerun()
     with _proc_head_l:
         st.caption("النص النهائي لـ (الإجراءات المتخذة) — احفظ بعد التعديل اليدوي")
+
+    def _on_procedures_text_change(_widget_key=_proc_widget_key):
+        _write_saved_procedures(
+            st.session_state.get(_widget_key, ""),
+            mark_manual=True,
+            bump_rev=False,
+        )
+        st.session_state["final_actions_html"] = build_final_actions_html(
+            st.session_state.get(SAVED_PROCEDURES_TEXT) or ""
+        )
+        try:
+            sync_permanent_form_data(reason="procedures_onchange")
+        except Exception:
+            pass
+
     actions_taken_raw = st.text_area(
         "النص النهائي لـ (الإجراءات المتخذة) في التقرير — يمكنك التعديل أو إضافة تفاصيل (مثل نوع العهدة أو اسم المستشفى):",
         height=120,
         key=_proc_widget_key,
+        on_change=_on_procedures_text_change,
     )
     # A4 والمعاينة يقرآن saved_procedures_text فقط (بعد حفظ يدوي أو توليد القائمة)
     final_actions_html = build_final_actions_html(
@@ -8764,10 +8814,20 @@ _SKETCH_ATTACH_LABEL = "✅ إرفاق صفحة الكروكي"
 _SKETCH_OMIT_LABEL = "❌ حذف صفحة الكروكي - حادث قديم"
 
 def _on_sketch_choice_tab4():
+    # عند اختيار حذف صفحة الكروكي لحادث قديم: تخطّي بناء sketch_page_html نهائياً
     st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab4") == _SKETCH_ATTACH_LABEL
+    if not st.session_state.include_sketch:
+        st.session_state["_omit_sketch_page"] = True
+    else:
+        st.session_state.pop("_omit_sketch_page", None)
 
 def _on_sketch_choice_tab5():
+    # عند اختيار حذف صفحة الكروكي لحادث قديم: تخطّي بناء sketch_page_html نهائياً
     st.session_state.include_sketch = st.session_state.get("include_sketch_choice_tab5") == _SKETCH_ATTACH_LABEL
+    if not st.session_state.include_sketch:
+        st.session_state["_omit_sketch_page"] = True
+    else:
+        st.session_state.pop("_omit_sketch_page", None)
 
 def _sketch_availability_control(widget_key, on_change):
     """مفتاح الواجهة مستقل عن include_sketch؛ تُحدَّث القيمة الدائمة عبر on_change فقط."""
@@ -9576,7 +9636,8 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
         st.session_state["accident_photos_data"] = list(st.session_state.gallery_photos[:_max_accident_photos])
         st.rerun()
     
-if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
+def build_full_a4_report_html():
+    """يبني HTML التقرير الكامل A4 من أحدث بيانات الجلسة — يُستدعى كل دورة قبل الشريط العلوي."""
     _load_remembered_sketch()
     _load_remembered_aerial()
     sketch_src = str(st.session_state.get("sketch_data_url") or "").strip()
@@ -9830,11 +9891,9 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     )
     # صفحات ديناميكية: 1–6، 7–12، 13–15 مع ترقيم متسلسل حتى 15
     photos_list = list(st.session_state.get("gallery_photos") or [])[:MAX_ACCIDENT_PHOTOS]
-    include_sketch = (
-        (st.session_state.get("include_sketch", True) is True and bool(safe_sketch_src))
-        or (st.session_state.get("include_aerial", True) is True and bool(safe_aerial_src))
-        or bool(safe_sketch_src or safe_aerial_src)
-    )
+    # إذا اختار المستخدم حذف صفحة الكروكي (حادث قديم) تخطَّ الصفحة نهائياً حتى مع وجود كروكي/جوي
+    _omit_sketch_page = st.session_state.get("include_sketch", True) is not True
+    include_sketch = (not _omit_sketch_page) and bool(safe_sketch_src or safe_aerial_src)
     photos_pages_html = ""
     photos_per_page = 6
     annex_first_page = 5 if include_sketch else 4
@@ -10966,12 +11025,19 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
             if (fontPx <= minFont + 0.001) break;
           }}
         }}
-        page.style.setProperty("min-height", "296mm", "important");
+        /* للشاشة فقط — أزل min-height قبل الطباعة حتى لا تتغلب على max-height: 294mm في @media print */
+        page.style.minHeight = "296mm";
         if (footer) footer.style.setProperty("margin-top", "auto", "important");
       }}
       fitReportFrame();
     }}
     function autoFitReportPages() {{ autoBalanceReportPages(); }}
+    function _clearPrintMinHeights() {{
+      var pages = document.querySelectorAll(".page, .a4-page, .report-page");
+      for (var i = 0; i < pages.length; i++) {{
+        pages[i].style.removeProperty("min-height");
+      }}
+    }}
     function _scheduleAutoBalance() {{
       autoBalanceReportPages();
       setTimeout(autoBalanceReportPages, 60);
@@ -10980,7 +11046,10 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     }}
     document.addEventListener("DOMContentLoaded", _scheduleAutoBalance);
     window.addEventListener("load", _scheduleAutoBalance);
-    window.addEventListener("beforeprint", autoBalanceReportPages);
+    window.addEventListener("beforeprint", function() {{
+      autoBalanceReportPages();
+      _clearPrintMinHeights();
+    }});
     window.addEventListener("resize", function() {{
       autoBalanceReportPages();
       fitReportFrame();
@@ -11084,13 +11153,11 @@ if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
     except Exception:
         pass
     st.session_state["_cached_full_report_html"] = full_report_html
-else:
-    full_report_html = st.session_state.get("_cached_full_report_html", "")
-    try:
-        full_report_html = _bayyinah_a4.inject_into_report_html(full_report_html)
-    except Exception:
-        pass
+    return full_report_html
+
+full_report_html = build_full_a4_report_html()
 if st.session_state.active_tab == MAIN_TAB_OPTIONS[3]:
+    _sketch_availability_control("include_sketch_choice_tab5", _on_sketch_choice_tab5)
     render_direct_print_button(
         full_report_html,
         label="🖨️ طباعة التقرير بصيغة A4 / حفظ كـ PDF",
